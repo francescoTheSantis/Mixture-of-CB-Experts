@@ -95,22 +95,20 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names) -> 
     x, c, y = next(iter(train_loader))
     input_size = x.shape[1]
     concept_size = c.shape[1]
-    n_labels = y.shape[1]
+    n_labels = y.shape[1] if y.shape[1] > 1 else 2
     
     with open_dict(cfg):
         cfg.engine.update(
             c_names = c_names,
             y_name = y_names,
         )
-        if cfg.model.metadata != 'blackbox':
+        if cfg.model.metadata.name != 'blackbox':
             cfg.model.params.update(
-                input_size = input_size,
-                output_size = n_labels,
-            )
-        else:
-            cfg.model.params.update(
-                input_size = input_size,
                 n_concepts = concept_size,
-                output_size = n_labels,
             )
+        cfg.model.params.update(
+            input_size = input_size,
+            output_size = n_labels,
+            task = cfg.dataset.metadata.task,
+        )
     return cfg

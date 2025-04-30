@@ -68,16 +68,14 @@ def main(cfg: DictConfig) -> None:
     trainer.train(loaded_train, loaded_val)
 
     # Load the best model
-    model_class = get_class(cfg.model.params._target_)
-    model_kwargs = {k: v for k, v in cfg.model.params.items() if k not in ["_target_"]}
-    model = model_class.load_from_checkpoint(trainer.trainer.checkpoint_callback.best_model_path, **model_kwargs)
+    model.load_best(trainer.trainer.checkpoint_callback.best_model_path)
     trainer.model = model
 
     ###### Test ######
     # Test the model on the test-set
     trainer.test(loaded_test)
 
-    if model.has_concepts:
+    if model.model.has_concepts:
         ###### Perform Intervetions ######
         intervention_df = trainer.interventions(loaded_test)
         log_dir = csv_logger.log_dir

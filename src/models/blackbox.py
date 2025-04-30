@@ -22,10 +22,7 @@ class BlackBox(nn.Module):
         )
 
         if task == 'classification':
-            if output_size > 1:
-                self.task_loss_form = nn.CrossEntropyLoss()
-            if output_size == 1:
-                self.task_loss_form = nn.BCEWithLogitsLoss()
+            self.task_loss_form = nn.CrossEntropyLoss()
         elif task == 'regression':
             self.task_loss_form = nn.MSELoss()
 

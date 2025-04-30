@@ -35,8 +35,8 @@ hydra:
   sweeper:
     params:
       seed: 1
-      dataset: xor
-      model: blackbox 
+      dataset: dot 
+      model: blackbox
 
 wandb:
   project: null #linear_memory_reasoner 

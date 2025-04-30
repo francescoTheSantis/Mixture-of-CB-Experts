@@ -12,7 +12,7 @@ class loader(object):
     def load_data(self):
         # Load the data
         if self.name in ['xor', 'trigonometry', 'dot', 'checkmark']:
-            dataset = ToyDataset('xor', size=1000, random_state=42)
+            dataset = ToyDataset(self.name, size=1000, random_state=42)
             concept_names = dataset.concept_attr_names
             task_names = dataset.task_attr_names
             # split the dataset

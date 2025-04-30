@@ -1,7 +1,9 @@
 from typing import Optional
 from torch import nn
+import torch
 import pytorch_lightning as pl
 from src.metrics import Task_Accuracy, Concept_Accuracy
+from collections import OrderedDict
 
 class Engine(pl.LightningModule):    
     def __init__(self,
@@ -66,6 +68,15 @@ class Engine(pl.LightningModule):
             self.log('val_concept_acc', concept_acc)
         return loss 
 
+    def load_best(self, checkpoint_path):
+        # Load the model from the checkpoint
+        ckpt = torch.load(checkpoint_path, map_location=self.device)["state_dict"]
+        new_state_dict = OrderedDict()
+        for k, v in ckpt.items():
+            new_key = k.replace("model.", "") 
+            new_state_dict[new_key] = v
+        self.model.load_state_dict(new_state_dict, strict=False)
+    
     def configure_optimizers(self):
         return [self.optimizer], [self.scheduler]
  
