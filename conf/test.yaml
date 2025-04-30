@@ -1,0 +1,44 @@
+defaults:
+  - dataset: xor
+  - model: blackbox
+  - engine: engine
+
+## Working directory
+root: /home/fdesantis/projects/Linear-Memory-Reasoner 
+
+## Traninging parameters
+max_epochs: 500
+min_epochs: 40
+patience: 20
+batch_size: 128
+gamma: 0.5
+lr_step: 100
+
+## Model parameters
+task_penalty: 0.1
+
+# Only for concept embedding models
+c_emb_size: 16
+
+
+# backbone parameters
+img_backbone_emb_size: 512
+text_backbone_emb_size: 768
+
+# Shared experimental parameters
+val_size: 0.1
+seed: 1
+gpus: [1]
+
+hydra:
+  mode: MULTIRUN
+  sweeper:
+    params:
+      seed: 1
+      dataset: xor
+      model: blackbox 
+
+wandb:
+  project: null #linear_memory_reasoner 
+  entity: null #francescothesantis 
+note: test

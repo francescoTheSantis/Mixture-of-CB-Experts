@@ -1,0 +1,6 @@
+figs/
+cache/
+_OLD/
+__pycache__/
+datasets/
+multirun/
