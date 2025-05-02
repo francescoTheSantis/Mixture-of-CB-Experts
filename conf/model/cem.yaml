@@ -1,0 +1,10 @@
+params:
+  _target_: "src.models.cem.ConceptEmbeddingModel"
+  activation: ${activation}
+  task_penalty: ${task_penalty}
+  int_prob: ${int_prob}
+  latent_size: 128
+  embedding_size: 16
+
+metadata:
+  name: cem

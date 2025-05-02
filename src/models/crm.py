@@ -2,26 +2,25 @@ import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
 
-class ConceptBottleneckModel(nn.Module):
+class ConceptResidualModel(nn.Module):
     def __init__(self, 
                  input_size, 
                  output_size,
                  c_names,
                  task, 
                  task_penalty,
-                 task_interpretable=True,
                  activation='ReLU',
                  int_prob=0.1,
                  int_idxs=None,
                  noise=None,
-                 latent_size = 128
+                 latent_size = 128,
+                 residual_size = 10
                  ):
         super().__init__()
 
         self.input_size = input_size
         self.output_size = output_size
         self.task = task
-        self.task_interpretable = task_interpretable
         self.latent_size = latent_size
         self.task_penalty = task_penalty
         self.c_names = list(c_names)
@@ -29,27 +28,23 @@ class ConceptBottleneckModel(nn.Module):
         self.int_idxs = int_idxs
         self.has_concepts = True
         self.noise = noise
+        self.residual_size = residual_size
 
         self.encoder = nn.Sequential(
             nn.Linear(input_size, self.latent_size),
             getattr(nn, activation)()
         )
 
-        self.bottleneck = pyc_nn.LinearConceptBottleneck(
+        self.bottleneck = pyc_nn.LinearConceptResidualBottleneck(
             self.latent_size,
             self.c_names,
+            self.residual_size,
         )
-
-        if self.task_interpretable:
-            self.y_predictor = nn.Sequential(
-                nn.Linear(len(c_names), output_size)
-            )
-        else:
-            self.y_predictor = nn.Sequential(
-                nn.Linear(len(c_names), 2 * len(c_names)),
-                getattr(nn, activation)(),
-                nn.Linear(2 * len(c_names), output_size),
-            )
+        self.y_predictor = nn.Sequential(
+            nn.Linear(len(c_names) + residual_size, self.latent_size),
+            nn.LeakyReLU(),
+            nn.Linear(latent_size, output_size),
+        )
 
         if task == 'classification':
             self.task_loss_form = nn.CrossEntropyLoss()
@@ -70,17 +65,18 @@ class ConceptBottleneckModel(nn.Module):
         x = self.encoder(x)
 
         # If the intervention index is not provided, 
-        # all concept can be selected for interventions
+        # all the concept are potential candidates for intervention
         int_idxs = self.int_idxs if self.int_idxs is not None \
             else torch.ones_like(c_true).bool()
         
-        c_pred, _ = self.bottleneck(
+        c_emb, c_dict = self.bottleneck(
             x,
             c_true=c_true,
             intervention_idxs=int_idxs,
             intervention_rate=self.int_prob,
         )
-        y_pred = self.y_predictor(c_pred)
+        c_pred = c_dict['c_int']
+        y_pred = self.y_predictor(c_emb)
         return y_pred, c_pred
     
     def filter_output_for_loss(self, y_output, c_output=None):

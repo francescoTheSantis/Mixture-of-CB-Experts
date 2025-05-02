@@ -71,9 +71,12 @@ class Trainer:
                     y_preds = []
                     y_trues = []
                     for batch in test_dataloader:
-                        x, c, y = batch
-                        output = self.model.forward(x, c, eps, p_int)
-                        y_pred = output[1]
+                        x, c, y = self.model.unpack_batch(batch)
+                        inputs = {'x':x, 'c':c, 'y':y}
+                        self.model.model.int_prob = p_int
+                        self.model.model.noise = eps
+                        output = self.model.forward(inputs)
+                        y_pred = output[0]
                         y_preds.append(y_pred)
                         y_trues.append(y)
                     y = torch.cat(y_trues, dim=0)

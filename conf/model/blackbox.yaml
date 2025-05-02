@@ -1,6 +1,6 @@
 params:
   _target_: "src.models.blackbox.BlackBox"
-  activation: "ReLU"
+  activation: ${activation}
 
 metadata:
   name: blackbox

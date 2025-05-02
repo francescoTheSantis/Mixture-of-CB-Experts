@@ -27,15 +27,15 @@ class Engine(pl.LightningModule):
     def predict(self, input):
         return self.model(input)
 
-    def _unpack_batch(self, batch):
+    def unpack_batch(self, batch):
         x = batch[0]
         c = batch[1]
         y = batch[2]
         return x, c, y
 
     def shared_step(self, batch):
-        x, c, y = self._unpack_batch(batch)
-        inputs = {'x':x, 'c':c}
+        x, c, y = self.unpack_batch(batch)
+        inputs = {'x':x, 'c':c, 'y':y}
         # model forward
         y_output, c_output = self.forward(inputs)
         # Compute loss
@@ -60,16 +60,16 @@ class Engine(pl.LightningModule):
     
     def test_step(self, batch, batch_idx):
         loss, y_output, c_output, y, c = self.shared_step(batch)
-        self.log("val_loss", loss)
+        self.log("test_loss", loss)
         task_acc = self.task_metric(y_output, y)
-        self.log('val_task_acc', task_acc)
+        self.log('test_task_acc', task_acc)
         if self.model.has_concepts:
             concept_acc = self.concept_metric(c_output, c)
-            self.log('val_concept_acc', concept_acc)
+            self.log('test_concept_acc', concept_acc)
         return loss 
 
     def load_best(self, checkpoint_path):
-        # Load the model from the checkpoint
+        # Load the model from the checkpoint path
         ckpt = torch.load(checkpoint_path, map_location=self.device)["state_dict"]
         new_state_dict = OrderedDict()
         for k, v in ckpt.items():

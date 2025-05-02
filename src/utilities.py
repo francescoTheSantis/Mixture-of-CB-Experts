@@ -102,13 +102,14 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names) -> 
             c_names = c_names,
             y_name = y_names,
         )
-        if cfg.model.metadata.name != 'blackbox':
-            cfg.model.params.update(
-                n_concepts = concept_size,
-            )
+        # if cfg.model.metadata.name != 'blackbox':
+        #     cfg.model.params.update(
+        #         n_concepts = concept_size,
+        #     )
         cfg.model.params.update(
             input_size = input_size,
             output_size = n_labels,
+            c_names = c_names,
             task = cfg.dataset.metadata.task,
         )
     return cfg

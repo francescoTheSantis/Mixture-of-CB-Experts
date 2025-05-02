@@ -34,7 +34,7 @@ class BlackBox(nn.Module):
     def filter_output_for_loss(self, y_output, c_output=None):
         return y_output, c_output
     
-    def loss(self, y_hat, y, c_hat_dict=None, c=None):
+    def loss(self, y_hat, y, c_hat=None, c=None):
         y = y.flatten().long()
         # cross entropy
         loss = self.task_loss_form(y_hat.squeeze(), y)

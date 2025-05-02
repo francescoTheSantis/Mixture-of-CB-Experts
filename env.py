@@ -15,5 +15,7 @@ CACHE = Path(
 ).expanduser()
 CACHE.mkdir(exist_ok=True)
 
+HOME = "/home/fdesantis/projects/Linear-Memory-Reasoner" 
+
 env['HYDRA_FULL_ERROR'] = '1'
 

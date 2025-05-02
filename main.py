@@ -5,7 +5,7 @@ from hydra.utils import instantiate, get_class
 from src.utilities import set_seed, set_loggers
 import torch
 import os
-from env import CACHE
+from env import CACHE, HOME
 from src.utilities import update_config_from_data
 
 @hydra.main(config_path="conf", config_name="test")
@@ -37,7 +37,7 @@ def main(cfg: DictConfig) -> None:
             lines = file.readlines()
             c_names = lines[1].strip().split(", ")
             y_names = lines[3].strip().split(", ")
-    # Otherwise, preprocess the data and then store them
+    # Otherwise, preprocess the data and then store the results
     else:
         print('Preprocessing data...')
         loader = instantiate(cfg.dataset.loader)
@@ -80,12 +80,6 @@ def main(cfg: DictConfig) -> None:
         intervention_df = trainer.interventions(loaded_test)
         log_dir = csv_logger.log_dir
         intervention_df.to_csv(f"{log_dir}/interventions.csv", index=False)
-
-        ###### Compute Concept Alignment Score (CAS) ######
-
-
-        ###### Compute CACE ######
-
 
     # Close the wandb logger if it is used
     if wandb_logger is not None:
