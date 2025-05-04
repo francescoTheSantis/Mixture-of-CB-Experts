@@ -1,10 +1,14 @@
+defaults:
+  - common
+  - _self_
+  
 params:
   _target_: "src.models.cbm.ConceptBottleneckModel"
   activation: ${activation}
   task_penalty: ${task_penalty}
   task_interpretable: false
   int_prob: ${int_prob}
-  latent_size: 128
+  latent_size: ${latent_dim}
 
 metadata:
   name: cbm_mlp

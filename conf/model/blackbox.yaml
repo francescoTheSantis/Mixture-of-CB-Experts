@@ -1,6 +1,10 @@
+defaults:
+  - common
+  - _self_
+
 params:
   _target_: "src.models.blackbox.BlackBox"
-  activation: ${activation}
+
 
 metadata:
   name: blackbox

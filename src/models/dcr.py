@@ -2,8 +2,10 @@ import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
 from torch_concepts.semantic import ProductTNorm
+from torch_concepts.nn import functional as CF
+from src.models.base import BaseModel
 
-class DeepConceptReasoner(nn.Module):
+class DeepConceptReasoner(BaseModel):
     def __init__(self, 
                  input_size, 
                  output_size,
@@ -18,12 +20,20 @@ class DeepConceptReasoner(nn.Module):
                  latent_size = 128,
                  semantic = ProductTNorm(),
                  temperature = 100,
+                 dataset=None
                  ):
-        super().__init__()
+        super().__init__(
+            input_size,
+            output_size,
+            task,
+            activation,
+            latent_size,
+            dataset
+        )
 
-        self.input_size = input_size
-        self.output_size = output_size
-        self.task = task
+        self.n_roles = 3
+        self.memory_names = ['Positive', 'Negative', 'Irrelevant']
+        
         self.embedding_size = embedding_size
         self.latent_size = latent_size
         self.task_penalty = task_penalty
@@ -33,46 +43,25 @@ class DeepConceptReasoner(nn.Module):
         self.has_concepts = True
         self.noise = noise
         self.semantic = semantic
-
-        self.encoder = nn.Sequential(
-            nn.Linear(input_size, self.latent_size),
-            getattr(nn, activation)()
-        )
+        self.temperature = temperature
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             latent_size,
             self.c_names,
             embedding_size,
         )
-        self.y_predictor = nn.Sequential(
-            nn.Linear(len(self.c_names) * embedding_size, latent_size),
-            nn.LeakyReLU(),
-            nn.Linear(latent_size, len(c_names)),
+        self.concept_importance_predictor = nn.Sequential(
+            nn.Linear(embedding_size, self.latent_size),
+            getattr(nn, activation)(),
+            nn.Linear(self.latent_size, output_size * self.n_roles),
+            nn.Unflatten(-1, (output_size, self.n_roles)),
         )
-
-        if task == 'classification':
-            self.task_loss_form = nn.CrossEntropyLoss()
-        elif task == 'regression':
-            self.task_loss_form = nn.MSELoss()
 
         self.concept_loss_form = nn.BCELoss()
 
     def forward(self, input):
-        x = input['x']
-        c_true = input['c']
-    
-        # If noise is provided, create a convex combination of the input and noise
-        if self.noise!=None:
-            eps = torch.randn_like(x)
-            x = eps * self.noise + x * (1-self.noise)
-            
-        x = self.encoder(x)
+        x, c_true, int_idxs = self.encode(input)
 
-        # If the intervention index is not provided, 
-        # all concept can be selected for interventions
-        int_idxs = self.int_idxs if self.int_idxs is not None \
-            else torch.ones_like(c_true).bool()
-        
         c_emb, c_dict = self.bottleneck(
             x,
             c_true=c_true,
@@ -80,7 +69,21 @@ class DeepConceptReasoner(nn.Module):
             intervention_rate=self.int_prob,
         )
         c_pred = c_dict['c_int']
-        y_pred = self.y_predictor(c_emb.flatten(-2))
+        c_weights = self.concept_importance_predictor(c_emb)
+        # adding memory dimension
+        c_weights = c_weights.unsqueeze(dim=1)
+        # soft selecting concept relevance (last role) among concepts
+        relevance = CF.soft_select(c_weights[:, :, :, :, -2:-1],
+                                   self.temperature, -3)
+        # softmax over positive/negative roles
+        polarity = c_weights[:, :, :, :, :-1].softmax(-1)
+        # batch_size x memory_size x n_concepts x n_tasks x n_roles
+        c_weights = torch.cat([polarity, 1 - relevance], dim=-1)
+
+        y_pred = CF.logic_rule_eval(c_weights, c_pred,
+                                    semantic=self.semantic)
+        # removing memory dimension
+        y_pred = y_pred[:, :, 0]
         return y_pred, c_pred
     
     def filter_output_for_loss(self, y_output, c_output=None):

@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
+from src.models.base import BaseModel
 
-class ConceptResidualModel(nn.Module):
+class ConceptResidualModel(BaseModel):
     def __init__(self, 
                  input_size, 
                  output_size,
@@ -14,14 +15,19 @@ class ConceptResidualModel(nn.Module):
                  int_idxs=None,
                  noise=None,
                  latent_size = 128,
-                 residual_size = 10
+                 residual_size = 10,
+                 dataset=None
                  ):
-        super().__init__()
-
-        self.input_size = input_size
-        self.output_size = output_size
-        self.task = task
-        self.latent_size = latent_size
+        
+        super().__init__(
+                 input_size, 
+                 output_size,
+                 task,
+                 activation,
+                 latent_size,
+                 dataset
+                 )
+        
         self.task_penalty = task_penalty
         self.c_names = list(c_names)
         self.int_prob = int_prob
@@ -30,11 +36,6 @@ class ConceptResidualModel(nn.Module):
         self.noise = noise
         self.residual_size = residual_size
 
-        self.encoder = nn.Sequential(
-            nn.Linear(input_size, self.latent_size),
-            getattr(nn, activation)()
-        )
-
         self.bottleneck = pyc_nn.LinearConceptResidualBottleneck(
             self.latent_size,
             self.c_names,
@@ -42,27 +43,14 @@ class ConceptResidualModel(nn.Module):
         )
         self.y_predictor = nn.Sequential(
             nn.Linear(len(c_names) + residual_size, self.latent_size),
-            nn.LeakyReLU(),
+            getattr(nn, activation)(),
             nn.Linear(latent_size, output_size),
         )
-
-        if task == 'classification':
-            self.task_loss_form = nn.CrossEntropyLoss()
-        elif task == 'regression':
-            self.task_loss_form = nn.MSELoss()
 
         self.concept_loss_form = nn.BCELoss()
 
     def forward(self, input):
-        x = input['x']
-        c_true = input['c']
-    
-        # If noise is provided, create a convex combination of the input and noise
-        if self.noise!=None:
-            eps = torch.randn_like(x)
-            x = eps * self.noise + x * (1-self.noise)
-            
-        x = self.encoder(x)
+        x, c_true, int_idxs = self.encode(input)
 
         # If the intervention index is not provided, 
         # all the concept are potential candidates for intervention

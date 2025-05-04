@@ -55,20 +55,7 @@ class ConceptBottleneckModel(BaseModel):
         self.concept_loss_form = nn.BCELoss()
 
     def forward(self, input):
-        x = input['x']
-        c_true = input['c']
-    
-        # If noise is provided, create a convex combination of the input and noise
-        if self.noise!=None:
-            eps = torch.randn_like(x)
-            x = eps * self.noise + x * (1-self.noise)
-            
-        x = self.encoder(x)
-
-        # If the intervention index is not provided, 
-        # all concept can be selected for interventions
-        int_idxs = self.int_idxs if self.int_idxs is not None \
-            else torch.ones_like(c_true).bool()
+        x, c_true, int_idxs = self.encode(input)
         
         c_pred, _ = self.bottleneck(
             x,

@@ -28,24 +28,9 @@ def get_intervened_concepts_predictions(predictions, labels, probability, return
         
     # Find mismatched indices if all_entries is False, select all otherwise
     if all_entries:
-        mismatched_mask = (torch.ones_like(hard_predictions))#.nonzero(as_tuple=False)
+        mismatched_mask = (torch.ones_like(hard_predictions))
     else:
-        mismatched_mask = (hard_predictions != labels)#.nonzero(as_tuple=False)
-
-    '''
-    # Randomly select mismatched indices based on the given probability
-    num_mismatches = mismatched_indices.size(0)
-
-    mask = torch.rand(num_mismatches) < probability
-    idxs_mask = mismatched_indices[mask]
-    mask = torch.zeros_like(predictions)
-    for index in idxs_mask:
-        if repeat!=None:
-            mask[index[0], index[1], index[2]] = 1
-        else:
-            mask[index[0], index[1]] = 1
-    intervened = labels * mask + predictions * (1 - mask)
-    '''
+        mismatched_mask = (hard_predictions != labels)
 
     # Generate a probability mask of the same shape
     random_mask = torch.rand_like(predictions, dtype=torch.float)
@@ -65,7 +50,7 @@ def get_intervened_concepts_predictions(predictions, labels, probability, return
 def set_loggers(cfg):
     name = f"seed{cfg.seed}.{int(time())}"
     group_format = (
-        "{dataset}"
+        "{dataset}_"
         "{model}"
     )
     group = group_format.format(**parse_hyperparams(cfg))
@@ -102,10 +87,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names) -> 
             c_names = c_names,
             y_name = y_names,
         )
-        # if cfg.model.metadata.name != 'blackbox':
-        #     cfg.model.params.update(
-        #         n_concepts = concept_size,
-        #     )
+        
         cfg.model.params.update(
             input_size = input_size,
             output_size = n_labels,

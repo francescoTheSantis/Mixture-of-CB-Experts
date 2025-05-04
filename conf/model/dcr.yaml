@@ -1,0 +1,12 @@
+defaults:
+  - common
+  - _self_
+  
+params:
+  _target_: "src.models.dcr.DeepConceptReasoner"
+  task_penalty: ${task_penalty}
+  int_prob: ${int_prob}
+  temperature: 100
+
+metadata:
+  name: dcr
