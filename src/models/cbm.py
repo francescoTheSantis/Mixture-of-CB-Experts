@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
+from src.models.base import BaseModel
 
-class ConceptBottleneckModel(nn.Module):
+class ConceptBottleneckModel(BaseModel):
     def __init__(self, 
                  input_size, 
                  output_size,
@@ -14,26 +15,26 @@ class ConceptBottleneckModel(nn.Module):
                  int_prob=0.1,
                  int_idxs=None,
                  noise=None,
-                 latent_size = 128
+                 latent_size = 128,
+                 dataset=None
                  ):
-        super().__init__()
+        
+        super().__init__(
+                 input_size, 
+                 output_size,
+                 task,
+                 activation,
+                 latent_size,
+                 dataset
+                 )
 
-        self.input_size = input_size
-        self.output_size = output_size
-        self.task = task
         self.task_interpretable = task_interpretable
-        self.latent_size = latent_size
         self.task_penalty = task_penalty
         self.c_names = list(c_names)
         self.int_prob = int_prob
         self.int_idxs = int_idxs
         self.has_concepts = True
         self.noise = noise
-
-        self.encoder = nn.Sequential(
-            nn.Linear(input_size, self.latent_size),
-            getattr(nn, activation)()
-        )
 
         self.bottleneck = pyc_nn.LinearConceptBottleneck(
             self.latent_size,
@@ -50,11 +51,6 @@ class ConceptBottleneckModel(nn.Module):
                 getattr(nn, activation)(),
                 nn.Linear(2 * len(c_names), output_size),
             )
-
-        if task == 'classification':
-            self.task_loss_form = nn.CrossEntropyLoss()
-        elif task == 'regression':
-            self.task_loss_form = nn.MSELoss()
 
         self.concept_loss_form = nn.BCELoss()
 

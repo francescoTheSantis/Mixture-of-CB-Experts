@@ -1,0 +1,13 @@
+defaults:
+  - common
+  - _self_
+
+loader: 
+  name: mnist_addition
+  batch_size: ${batch_size}
+
+# Dataset parameters
+metadata:
+  task: classification
+  lr: 0.005
+  name: mnist_addition

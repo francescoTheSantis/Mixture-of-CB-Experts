@@ -17,5 +17,8 @@ CACHE.mkdir(exist_ok=True)
 
 HOME = "/home/fdesantis/projects/Linear-Memory-Reasoner" 
 
+DATASETS = os.path.join(str(CACHE), 'datasets')
+os.makedirs(DATASETS, exist_ok=True)
+
 env['HYDRA_FULL_ERROR'] = '1'
 

@@ -95,7 +95,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names) -> 
     x, c, y = next(iter(train_loader))
     input_size = x.shape[1]
     concept_size = c.shape[1]
-    n_labels = y.shape[1] if y.shape[1] > 1 else 2
+    n_labels = len(y_names) if len(y_names) > 1 else 2
     
     with open_dict(cfg):
         cfg.engine.update(
@@ -111,5 +111,6 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names) -> 
             output_size = n_labels,
             c_names = c_names,
             task = cfg.dataset.metadata.task,
+            dataset = cfg.dataset.metadata.name
         )
     return cfg

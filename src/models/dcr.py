@@ -16,7 +16,8 @@ class DeepConceptReasoner(nn.Module):
                  noise=None,
                  embedding_size = 16,
                  latent_size = 128,
-                 semantic = ProductTNorm()
+                 semantic = ProductTNorm(),
+                 temperature = 100,
                  ):
         super().__init__()
 
@@ -31,6 +32,7 @@ class DeepConceptReasoner(nn.Module):
         self.int_idxs = int_idxs
         self.has_concepts = True
         self.noise = noise
+        self.semantic = semantic
 
         self.encoder = nn.Sequential(
             nn.Linear(input_size, self.latent_size),

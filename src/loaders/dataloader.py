@@ -1,13 +1,19 @@
 from torch_concepts.data import ToyDataset
 import torch
+from torch import nn
+from torch_concepts.data.mnist import MNISTAddition
+from env import DATASETS
+from torch.utils.data import DataLoader, random_split
 
 class loader(object):
     def __init__(self, 
-                 name: str,
-                 batch_size: int = 32,
+                 name,
+                 batch_size,
+                 num_workers
                  ):
         self.name = name
         self.batch_size = batch_size
+        self.num_workers = num_workers
 
     def load_data(self):
         # Load the data
@@ -20,12 +26,31 @@ class loader(object):
                 dataset, [0.7, 0.1, 0.2],
                 generator=torch.Generator().manual_seed(42)
             )
-        else:
-            pass
+  
+        elif self.name in ['mnist_addition']:
+            train_dataset = MNISTAddition(root=DATASETS, train=True)
+            concept_names = train_dataset.concept_names
+            task_names = train_dataset.task_names
+            test_dataset = MNISTAddition(root=DATASETS, train=False)
+
+            # Split the dataset into train, validation and test sets
+            train_size = int(0.8 * len(train_dataset))
+            val_size = len(train_dataset) - train_size
+            train_dataset, val_dataset = random_split(train_dataset, 
+                                              [train_size, val_size])
 
         # create the dataloaders
-        loaded_train = torch.utils.data.DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
-        loaded_val = torch.utils.data.DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
-        loaded_test = torch.utils.data.DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)    
+        loaded_train = DataLoader(train_dataset, 
+                                  batch_size=self.batch_size, 
+                                  shuffle=True,
+                                  num_workers=self.num_workers)
+        loaded_val = DataLoader(val_dataset, 
+                                batch_size=self.batch_size, 
+                                shuffle=False,
+                                num_workers=self.num_workers)
+        loaded_test = DataLoader(test_dataset, 
+                                 batch_size=self.batch_size, 
+                                 shuffle=False,
+                                 num_workers=self.num_workers)  
 
         return loaded_train, loaded_val, loaded_test, concept_names, task_names
