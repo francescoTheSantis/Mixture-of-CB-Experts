@@ -3,10 +3,13 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.cem.ConceptEmbeddingModel"
+  _target_: "src.models.licem.LinearConceptEmbeddingModel"
   task_penalty: ${task_penalty}
   int_prob: ${int_prob}
   embedding_size: 16
+  use_bias: true
+  weight_reg: 1e-4
+  bias_reg: 1e-4
 
 metadata:
-  name: cem
+  name: licem

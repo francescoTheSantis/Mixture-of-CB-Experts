@@ -20,7 +20,7 @@ class loader(object):
         if self.name in ['xor', 'trigonometry', 'dot', 'checkmark']:
             dataset = ToyDataset(self.name, size=1000, random_state=42)
             concept_names = dataset.concept_attr_names
-            task_names = dataset.task_attr_names
+            task_names = ['0', '1']
             # split the dataset
             train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
                 dataset, [0.7, 0.1, 0.2],

@@ -4,12 +4,14 @@ import torch_concepts.nn as pyc_nn
 from torch_concepts.semantic import ProductTNorm
 from torch_concepts.nn import functional as CF
 from src.models.base import BaseModel
+from torch.nn import functional as F
 
 class DeepConceptReasoner(BaseModel):
     def __init__(self, 
                  input_size, 
                  output_size,
                  c_names,
+                 y_names,
                  task, 
                  task_penalty,
                  activation='ReLU',
@@ -58,6 +60,7 @@ class DeepConceptReasoner(BaseModel):
         )
 
         self.concept_loss_form = nn.BCELoss()
+        self.task_loss_form = nn.BCELoss()
 
     def forward(self, input):
         x, c_true, int_idxs = self.encode(input)
@@ -90,15 +93,10 @@ class DeepConceptReasoner(BaseModel):
         return y_output, c_output
     
     def loss(self, y_hat, y, c_hat=None, c=None):
-        y = y.flatten().long()
-        # task loss
-        task_loss = self.task_loss_form(y_hat.squeeze(), y)
-        # concept loss
-        concept_loss = 0
-        for i in range(c.shape[1]):
-            concept_loss += self.concept_loss_form(c_hat[:,i], c[:,i])
-        # combine the two losses
-        loss = concept_loss + self.task_penalty * task_loss
+        # one hot encode the y variable
+        if self.task == 'classification':
+            y = F.one_hot(y.flatten().long(), num_classes=self.output_size).float()
+        loss = self.concept_based_loss(y_hat, y, c_hat, c)
         return loss
 
 

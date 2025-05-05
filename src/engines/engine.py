@@ -35,11 +35,11 @@ class Engine(pl.LightningModule):
 
     def shared_step(self, batch):
         x, c, y = self.unpack_batch(batch)
-        inputs = {'x':x, 'c':c, 'y':y}
+        inputs = {'x':x, 'c':c, 'y':y.float()}
         # model forward
-        y_output, c_output = self.forward(inputs)
+        model_output = self.forward(inputs)
         # Compute loss
-        y_output, c_output = self.model.filter_output_for_loss(y_output, c_output)
+        y_output, c_output = self.model.filter_output_for_loss(*model_output)
         loss = self.model.loss(y_output, y, c_output, c)
         return loss, y_output, c_output, y, c
 

@@ -3,10 +3,11 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.cbm.ConceptBottleneckModel"
+  _target_: "src.models.cmr.ConceptMemoryReasoner"
   task_penalty: ${task_penalty}
-  task_interpretable: false
   int_prob: ${int_prob}
+  memory_size: 7
+  conc_rec_weight: 1.0
 
 metadata:
-  name: cbm_mlp
+  name: cmr

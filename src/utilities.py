@@ -92,6 +92,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names) -> 
             input_size = input_size,
             output_size = n_labels,
             c_names = c_names,
+            y_names = y_names,
             task = cfg.dataset.metadata.task,
             dataset = cfg.dataset.metadata.name
         )

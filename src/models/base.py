@@ -41,6 +41,9 @@ class BaseModel(nn.Module):
         elif task == 'regression':
             self.task_loss_form = nn.MSELoss()
 
+        self.concept_loss_form = None
+        self.task_penalty = None
+
     def encode(self, input):
         x = input['x']
         c_true = input['c']
@@ -57,3 +60,15 @@ class BaseModel(nn.Module):
         int_idxs = self.int_idxs if self.int_idxs is not None \
             else torch.ones_like(c_true).bool()
         return x, c_true, int_idxs
+    
+    def concept_based_loss(self, y_hat, y, c_hat=None, c=None):
+        # task loss
+        task_loss = self.task_loss_form(y_hat.squeeze(), y)
+        # concept loss
+        concept_loss = 0
+        for i in range(c.shape[1]):
+            concept_loss += self.concept_loss_form(c_hat[:,i], c[:,i])
+        concept_loss /= c.shape[1]
+        # combine the two losses
+        loss = concept_loss + self.task_penalty * task_loss
+        return loss

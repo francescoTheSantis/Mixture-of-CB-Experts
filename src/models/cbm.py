@@ -8,6 +8,7 @@ class ConceptBottleneckModel(BaseModel):
                  input_size, 
                  output_size,
                  c_names,
+                 y_names,
                  task, 
                  task_penalty,
                  task_interpretable=True,
@@ -70,15 +71,9 @@ class ConceptBottleneckModel(BaseModel):
         return y_output, c_output
     
     def loss(self, y_hat, y, c_hat=None, c=None):
-        y = y.flatten().long()
-        # task loss
-        task_loss = self.task_loss_form(y_hat.squeeze(), y)
-        # concept loss
-        concept_loss = 0
-        for i in range(c.shape[1]):
-            concept_loss += self.concept_loss_form(c_hat[:,i], c[:,i])
-        # combine the two losses
-        loss = concept_loss + self.task_penalty * task_loss
+        if self.task == 'classification':
+            y = y.flatten().long()
+        loss = self.concept_based_loss(y_hat, y, c_hat, c)
         return loss
 
 
