@@ -16,6 +16,7 @@ class BaseModel(nn.Module):
         self.task = task
         self.latent_size = latent_size
         self.dataset = dataset
+        self.int_idxs = None
         
         if dataset in ['mnist_addition']:
             self.encoder = nn.Sequential(
@@ -55,10 +56,13 @@ class BaseModel(nn.Module):
             
         x = self.encoder(x)
 
-        # If the intervention index is not provided, 
-        # all concept can be selected for interventions
-        int_idxs = self.int_idxs if self.int_idxs is not None \
-            else torch.ones_like(c_true).bool()
+        if self.training and self.int_idxs is None:
+            int_idxs = torch.ones_like(c_true)
+        elif self.int_idxs is not None:
+            int_idxs = self.int_idxs
+        else:
+            int_idxs = torch.zeros_like(c_true)
+        int_idxs = int_idxs.bool()
         return x, c_true, int_idxs
     
     def concept_based_loss(self, y_hat, y, c_hat=None, c=None):

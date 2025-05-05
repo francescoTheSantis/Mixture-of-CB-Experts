@@ -25,7 +25,7 @@ hydra:
   sweeper:
     params:
       seed: 1
-      dataset: xor, mnist_addition
+      dataset: xor #, mnist_addition
       model: lmr #blackbox, cbm_linear, cbm_mlp, cem, crm, dcr, cmr, licem, lmr
 
 wandb:

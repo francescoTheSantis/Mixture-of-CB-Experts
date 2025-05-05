@@ -104,7 +104,7 @@ tick_font = {'size': 10}
 marker_size = 14
 # Define a dictionary to associate marker, name, and color to each model
 model_styles = {
-    'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:green', 'size': marker_size},
+    'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'cyan', 'size': marker_size},
     'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:purple', 'size': marker_size},
     'cbm_linear': {'marker': 's', 'name': 'CBM+Linear', 'color': 'tab:orange', 'size': marker_size},
     'cbm_mlp': {'marker': '^', 'name': 'CBM+MLP', 'color': 'tab:red', 'size': marker_size},
@@ -112,6 +112,7 @@ model_styles = {
     'crm': {'marker': 'X', 'name': 'CRM', 'color': 'tab:cyan', 'size': marker_size},
     'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:gray', 'size': marker_size},
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:brown', 'size': marker_size},
+    'lmr': {'marker': 'o', 'name': 'LMR (Ours)', 'color': 'tab:green', 'size': marker_size},
 }
 
 # Define the custom order
