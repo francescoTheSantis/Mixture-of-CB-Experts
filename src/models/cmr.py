@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
-from torch_concepts.semantic import ProductTNorm
 from torch_concepts.nn import functional as CF
 from src.models.base import BaseModel
 from torch.nn import functional as F
@@ -75,6 +74,8 @@ class ConceptMemoryReasoner(BaseModel):
         )
 
         self.concept_loss_form = nn.BCELoss()
+        self.task_loss_form = nn.BCELoss()
+
 
     def _conc_recon(self, concept_weights, c_true, y_true):
         # check if y_true is an array (label encoding) or a matrix

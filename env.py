@@ -2,7 +2,8 @@ from os import environ as env
 from pathlib import Path
 import os
 
-PROJECT_NAME = 'linear_memory_reasoner'
+PROJECT_NAME = 'linear_memory_reasoner' # Name of the project
+HOME = "/home/fdesantis/projects/Linear-Memory-Reasoner" # Path to the project
 
 CACHE = Path(
     env.get(
@@ -14,8 +15,6 @@ CACHE = Path(
     )
 ).expanduser()
 CACHE.mkdir(exist_ok=True)
-
-HOME = "/home/fdesantis/projects/Linear-Memory-Reasoner" 
 
 DATASETS = os.path.join(str(CACHE), 'datasets')
 os.makedirs(DATASETS, exist_ok=True)

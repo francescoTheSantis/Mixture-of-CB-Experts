@@ -7,12 +7,11 @@ import torch
 import os
 import yaml
 from matplotlib.ticker import FuncFormatter
-from env import HOME
 
 warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
-path = HOME
+path = "/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-05-05/14-34-28" # the path containing your results
 
 ###### Collect results regarding concept/task performance######
 
@@ -72,6 +71,8 @@ def get_df_name(df):
         return 'CelebA'
     elif df=='mnist_even_odd':
         return 'MNIST-E/O'
+    elif df=='awa2':
+        return 'AWA2'
 
 #df = performance.copy()
 # Filter data for 'task' and 'concept'
@@ -103,16 +104,18 @@ tick_font = {'size': 10}
 marker_size = 14
 # Define a dictionary to associate marker, name, and color to each model
 model_styles = {
-    'v_cem': {'marker': 'D', 'name': 'V-CEM (Ours)', 'color': 'tab:green', 'size': marker_size},
+    'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:green', 'size': marker_size},
     'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:purple', 'size': marker_size},
     'cbm_linear': {'marker': 's', 'name': 'CBM+Linear', 'color': 'tab:orange', 'size': marker_size},
     'cbm_mlp': {'marker': '^', 'name': 'CBM+MLP', 'color': 'tab:red', 'size': marker_size},
     'blackbox': {'marker': 'o', 'name': 'Black-box', 'color': 'tab:blue', 'size': marker_size},
-    'prob_cbm': {'marker': 'X', 'name': 'Prob-CBM', 'color': 'tab:cyan', 'size': marker_size}
+    'crm': {'marker': 'X', 'name': 'CRM', 'color': 'tab:cyan', 'size': marker_size},
+    'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:gray', 'size': marker_size},
+    'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:brown', 'size': marker_size},
 }
 
 # Define the custom order
-custom_order = ['mnist_even_odd', 'mnist_addition' ,'celeba', 'cebab', 'imdb']
+custom_order = ['xor', 'mnist_addition' ,'cub', 'awa2']
 
 merged_stats = merged_stats.sort_values('dataset')
 merged_stats['dataset'] = pd.Categorical(merged_stats['dataset'], categories=custom_order, ordered=True)
@@ -149,7 +152,7 @@ custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', marker
 fig.legend(handles=custom_handles, loc='lower center', ncol=len(custom_handles), fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.1))
 
 plt.tight_layout()#(rect=[0, 0.1, 1, 0.95])
-#plt.savefig('figs/performance.pdf')
+plt.savefig('figs/performance.pdf')
 
 plt.show()
 
@@ -184,6 +187,8 @@ final_table = final_table.reindex(columns=custom_order)
 
 print(final_table)
 
+# store the table in a csv file
+final_table.to_csv('figs/task_accuracy.csv', index=True)
 
 ########## Concept Accuracy Table ##########
 
@@ -213,6 +218,9 @@ for i, row in pivot_table_avg.iterrows():
 final_table = final_table.reindex(columns=custom_order)
 
 print(final_table)
+
+# store the table in a csv file
+final_table.to_csv('figs/concept_accuracy.csv', index=True)
 
 
 ########## collect intervention results ##########

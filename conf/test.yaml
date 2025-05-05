@@ -24,11 +24,11 @@ hydra:
   mode: MULTIRUN
   sweeper:
     params:
-      seed: 1, 2, 3
+      seed: 1
       dataset: xor, mnist_addition
-      model: blackbox, cbm_linear, cbm_mlp, cem, crm, dcr, cmr, licem
+      model: lmr #blackbox, cbm_linear, cbm_mlp, cem, crm, dcr, cmr, licem, lmr
 
 wandb:
-  project: "linear_memory_reasoner"
-  entity: "francescothesantis-politecnico-di-torino" 
+  project: null #"linear_memory_reasoner"
+  entity: null #"francescothesantis-politecnico-di-torino" 
 note: test
