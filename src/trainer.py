@@ -64,17 +64,18 @@ class Trainer:
     def interventions(self, test_dataloader):
         intervention_df = pd.DataFrame(columns=['noise', 'p_int', 'f1', 'accuracy'])
         self.model.eval()
+        self.model.model.test_interventions = True
         with torch.no_grad():
             for eps in self.epss:
                 print('Performing interventions with noise:', eps)
                 for p_int in tqdm(self.p_ints):
                     y_preds = []
                     y_trues = []
+                    self.model.model.noise = eps
                     for batch in test_dataloader:
                         x, c, y = self.model.unpack_batch(batch)
                         inputs = {'x':x, 'c':c, 'y':y}
                         self.model.model.int_prob = p_int
-                        self.model.model.noise = eps
                         output = self.model.forward(inputs)
                         y_pred = output[0]
                         y_preds.append(y_pred)
@@ -86,5 +87,6 @@ class Trainer:
                     task_f1, task_acc = f1_acc_metrics(y, y_preds)
                     intervention_results = {'noise': round(eps,1), 'p_int': round(p_int,1), 'f1': round(task_f1,2), 'accuracy': round(task_acc,2)}
                     intervention_df = pd.concat([intervention_df, pd.DataFrame([intervention_results])], ignore_index=True)
+        self.model.model.test_interventions = False
         return intervention_df
     

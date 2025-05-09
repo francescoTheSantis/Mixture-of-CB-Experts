@@ -4,7 +4,6 @@ defaults:
 
 loader: 
   name: checkmark
-  batch_size: ${batch_size}
 
 # Dataset parameters
 metadata:

@@ -16,8 +16,7 @@ CACHE = Path(
 ).expanduser()
 CACHE.mkdir(exist_ok=True)
 
-DATASETS = os.path.join(str(CACHE), 'datasets')
-os.makedirs(DATASETS, exist_ok=True)
+DATA_PATH = "/home/fdesantis/datasets/" # Path to the datasets
 
 env['HYDRA_FULL_ERROR'] = '1'
 

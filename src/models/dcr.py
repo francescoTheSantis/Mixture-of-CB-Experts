@@ -22,7 +22,7 @@ class DeepConceptReasoner(BaseModel):
                  latent_size = 128,
                  semantic = ProductTNorm(),
                  temperature = 100,
-                 dataset=None
+                 c_groups=None
                  ):
         super().__init__(
             input_size,
@@ -30,7 +30,7 @@ class DeepConceptReasoner(BaseModel):
             task,
             activation,
             latent_size,
-            dataset
+            c_groups
         )
 
         self.n_roles = 3
@@ -69,7 +69,7 @@ class DeepConceptReasoner(BaseModel):
             x,
             c_true=c_true,
             intervention_idxs=int_idxs,
-            intervention_rate=self.int_prob,
+            intervention_rate=1.,
         )
         c_pred = c_dict['c_int']
         c_weights = self.concept_importance_predictor(c_emb)

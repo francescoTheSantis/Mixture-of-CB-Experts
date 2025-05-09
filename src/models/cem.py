@@ -17,7 +17,7 @@ class ConceptEmbeddingModel(BaseModel):
                  noise=None,
                  embedding_size = 16,
                  latent_size = 128,
-                 dataset=None
+                 c_groups=None
                  ):
 
         super().__init__(
@@ -26,7 +26,7 @@ class ConceptEmbeddingModel(BaseModel):
                  task,
                  activation,
                  latent_size,
-                 dataset
+                 c_groups
                  )
 
         self.embedding_size = embedding_size
@@ -57,7 +57,7 @@ class ConceptEmbeddingModel(BaseModel):
             x,
             c_true=c_true,
             intervention_idxs=int_idxs,
-            intervention_rate=self.int_prob,
+            intervention_rate=1.,
         )
         c_pred = c_dict['c_int']
         y_pred = self.y_predictor(c_emb.flatten(-2))

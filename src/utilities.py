@@ -17,36 +17,6 @@ def set_seed(seed: int):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-def get_intervened_concepts_predictions(predictions, labels, probability, return_index=False, all_entries=False, repeat=None):
-    
-    hard_predictions = torch.where(predictions > 0.5, 1, 0)
-
-    if repeat!=None:
-        hard_predictions = hard_predictions.unsqueeze(-1).expand(-1, -1, repeat)  
-        labels = labels.unsqueeze(-1).expand(-1, -1, repeat)   
-        predictions = predictions.unsqueeze(-1).expand(-1, -1, repeat)   
-        
-    # Find mismatched indices if all_entries is False, select all otherwise
-    if all_entries:
-        mismatched_mask = (torch.ones_like(hard_predictions))
-    else:
-        mismatched_mask = (hard_predictions != labels)
-
-    # Generate a probability mask of the same shape
-    random_mask = torch.rand_like(predictions, dtype=torch.float)
-
-    # Apply probability threshold only on mismatched elements
-    mask = (random_mask < probability) & mismatched_mask
-    mask = mask.int()
-
-    # Apply intervention
-    intervened = labels * mask + predictions * (1-mask)
-
-    if return_index:
-        return mask, intervened
-    else:
-        return intervened
-
 def set_loggers(cfg):
     name = f"seed{cfg.seed}.{int(time())}"
     group_format = (
@@ -74,13 +44,16 @@ def parse_hyperparams(cfg: DictConfig):
     }
     return hyperparams
 
-
-def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names) -> DictConfig:
+def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names, c_groups) -> DictConfig:
     """ can be used to update the config based on the data, e.g., set input and output size """
     x, c, y = next(iter(train_loader))
     input_size = x.shape[1]
     concept_size = c.shape[1]
     n_labels = len(y_names) if len(y_names) > 1 else 2
+    if c_groups is None or not isinstance(c_groups, dict):
+        c_groups = c_groups
+    else:
+        c_groups = dict(c_groups)
     
     with open_dict(cfg):
         cfg.engine.update(
@@ -94,6 +67,6 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names) -> 
             c_names = c_names,
             y_names = y_names,
             task = cfg.dataset.metadata.task,
-            dataset = cfg.dataset.metadata.name
+            c_groups = c_groups
         )
     return cfg

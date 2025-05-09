@@ -1,3 +1,5 @@
 loader:
   _target_: src.loaders.dataloader.loader
   num_workers: ${num_workers}
+  batch_size: ${batch_size}
+  device: ${gpus}

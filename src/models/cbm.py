@@ -17,7 +17,7 @@ class ConceptBottleneckModel(BaseModel):
                  int_idxs=None,
                  noise=None,
                  latent_size = 128,
-                 dataset=None
+                 c_groups=None
                  ):
         
         super().__init__(
@@ -26,7 +26,7 @@ class ConceptBottleneckModel(BaseModel):
                  task,
                  activation,
                  latent_size,
-                 dataset
+                 c_groups
                  )
 
         self.task_interpretable = task_interpretable
@@ -62,7 +62,7 @@ class ConceptBottleneckModel(BaseModel):
             x,
             c_true=c_true,
             intervention_idxs=int_idxs,
-            intervention_rate=self.int_prob,
+            intervention_rate=1.,
         )
         y_pred = self.y_predictor(c_pred)
         return y_pred, c_pred

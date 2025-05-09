@@ -7,17 +7,13 @@ import torch
 import os
 from env import CACHE
 from src.utilities import update_config_from_data
+import json
 
-@hydra.main(config_path="conf", config_name="test")
+@hydra.main(config_path="conf", config_name="sweep")
 def main(cfg: DictConfig) -> None:
 
     # Initialize the wandb logger
     wandb_logger, csv_logger = set_loggers(cfg)
-
-    print("Configuration Parameters:")
-    for key, value in cfg.items():
-        print(f"{key}: {value}")
-    print('\n')
 
     # Set the seed
     set_seed(cfg.seed)
@@ -27,34 +23,30 @@ def main(cfg: DictConfig) -> None:
     train_path = f"{data_path}/train.pt"
     val_path = f"{data_path}/val.pt"
     test_path = f"{data_path}/test.pt"
+
+    # Loader instantiation
+    loader = instantiate(cfg.dataset.loader)
+
     # If the data have been preprocessed, load the preprocessed data
     if os.path.exists(train_path) and os.path.exists(val_path) and os.path.exists(test_path):
         print('Loading pre-processed data...')
         loaded_train = torch.load(f"{data_path}/train.pt")
         loaded_val = torch.load(f"{data_path}/val.pt")
         loaded_test = torch.load(f"{data_path}/test.pt")
-        with open(os.path.join(data_path, "lists.txt"), "r") as file:
-            lines = file.readlines()
-            c_names = lines[1].strip().split(", ")
-            y_names = lines[3].strip().split(", ")
     # Otherwise, preprocess the data and then store the results
     else:
         print('Preprocessing data...')
-        loader = instantiate(cfg.dataset.loader)
-        loaded_train, loaded_val, loaded_test, c_names, y_names = loader.load_data()
+        loaded_train, loaded_val, loaded_test = loader.load_data()
         os.makedirs(data_path, exist_ok=True)
         torch.save(loaded_train, train_path)
         torch.save(loaded_val, val_path)
         torch.save(loaded_test, test_path)
 
-        with open(os.path.join(data_path, "lists.txt"), "w") as file:
-            file.write("c_names 1:\n")
-            file.write(", ".join(map(str, c_names)) + "\n")
-            file.write("y_names:\n")
-            file.write(", ".join(y_names) + "\n") 
+    # Load the concept names and groups
+    c_names, y_names, c_groups = loader.get_names()
 
     # Set the c_names and y_names in the config
-    cfg = update_config_from_data(cfg, loaded_train, c_names, y_names)
+    cfg = update_config_from_data(cfg, loaded_train, c_names, y_names, c_groups)
 
     ###### Instantiate the model ######
     model = instantiate(cfg.engine)

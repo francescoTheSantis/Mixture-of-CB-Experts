@@ -21,7 +21,7 @@ class LinearMemoryReasoner(BaseModel):
                  noise=None,
                  embedding_size = 16,
                  latent_size = 128,
-                 dataset=None,
+                 c_groups=None,
                  memory_size=7
                  ):
         super().__init__(
@@ -30,7 +30,7 @@ class LinearMemoryReasoner(BaseModel):
             task,
             activation,
             latent_size,
-            dataset
+            c_groups
         )
 
         self.embedding_size = embedding_size

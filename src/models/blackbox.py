@@ -11,7 +11,7 @@ class BlackBox(BaseModel):
                  activation='ReLU',
                  task = 'classification',
                  latent_size = 128,
-                 dataset = None
+                 c_groups = None
                  ):
         super().__init__(
                  input_size, 
@@ -19,7 +19,7 @@ class BlackBox(BaseModel):
                  task,
                  activation,
                  latent_size,
-                 dataset
+                 c_groups
                  )
                 
         self.has_concepts = False

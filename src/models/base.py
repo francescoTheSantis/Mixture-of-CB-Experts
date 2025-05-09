@@ -7,7 +7,7 @@ class BaseModel(nn.Module):
                  task='classification',
                  activation='ReLU',
                  latent_size=64,
-                 dataset=None
+                 c_groups=None,
                  ):
         super().__init__()
         
@@ -15,27 +15,14 @@ class BaseModel(nn.Module):
         self.output_size = output_size
         self.task = task
         self.latent_size = latent_size
-        self.dataset = dataset
         self.int_idxs = None
-        
-        if dataset in ['mnist_addition']:
-            self.encoder = nn.Sequential(
-                nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1), 
-                nn.ReLU(),
-                nn.MaxPool2d(kernel_size=2, stride=2),
-                nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),  
-                nn.ReLU(),
-                nn.MaxPool2d(kernel_size=2, stride=2),
-                nn.AdaptiveAvgPool2d((1, 1)),  
-                nn.Flatten(),
-                nn.Linear(32, latent_size), 
-                getattr(nn, activation)()
-            )
-        elif dataset in ['checkmark', 'xor', 'dot', 'trigonometry']:
-            self.encoder = nn.Sequential(
-                nn.Linear(input_size, latent_size),
-                getattr(nn, activation)()
-            )
+        self.test_interventions = False
+        self.c_groups = c_groups
+
+        self.encoder = nn.Sequential(
+            nn.Linear(input_size, latent_size),
+            getattr(nn, activation)()
+        )
 
         if task == 'classification':
             self.task_loss_form = nn.CrossEntropyLoss()
@@ -56,13 +43,18 @@ class BaseModel(nn.Module):
             
         x = self.encoder(x)
 
-        if self.training and self.int_idxs is None:
-            int_idxs = torch.ones_like(c_true)
+        if (self.training or self.test_interventions) and self.int_idxs is None:
+            # intervene on the concepts according to the int_prob
+            int_idxs = self.get_intervened_concepts_predictions(
+                c_true,
+                groups=self.c_groups
+            )
         elif self.int_idxs is not None:
             int_idxs = self.int_idxs
         else:
             int_idxs = torch.zeros_like(c_true)
         int_idxs = int_idxs.bool()
+        
         return x, c_true, int_idxs
     
     def concept_based_loss(self, y_hat, y, c_hat=None, c=None):
@@ -76,3 +68,60 @@ class BaseModel(nn.Module):
         # combine the two losses
         loss = concept_loss + self.task_penalty * task_loss
         return loss
+        
+
+    def get_intervened_concepts_predictions(self, labels, groups=None):
+        '''
+        Function to generate a mask for the intervention process.
+        The mask is generated based on the probability of intervention 
+        and the mismatch between predictions and labels.
+        '''
+
+        if groups is not None:
+            n_groups = len(groups)
+            # Generate a mask of shape Batch x n_groups
+            random_mask = torch.rand((labels.shape[0],n_groups), 
+                                     dtype=torch.float,
+                                     device=labels.device)
+            mask = (random_mask < self.int_prob)
+            mask = mask.int()
+            # Apply group-based intervention
+            group_mask = torch.zeros_like(labels, dtype=torch.int, device=labels.device)
+            for idx, (_, group) in enumerate(groups.items()):
+                group_mask[:, group] = mask[:, idx].unsqueeze(1).expand(-1, len(group))
+            mask = group_mask.int()
+        else:
+            # Generate a probability mask of the same shape
+            random_mask = torch.rand_like(labels, dtype=torch.float)
+            # Apply probability threshold only on mismatched elements
+            mask = (random_mask < self.int_prob)
+            mask = mask.int()
+        return mask
+
+    '''
+    def get_intervened_concepts_predictions_to_refine(predictions, labels, probability, all_entries=False, groups=None):
+
+        hard_predictions = torch.where(predictions > 0.5, 1, 0) 
+            
+        # Find mismatched indices if all_entries is False, select all otherwise
+        if all_entries:
+            mismatched_mask = (torch.ones_like(hard_predictions))#.nonzero(as_tuple=False)
+        else:
+            mismatched_mask = (hard_predictions != labels)#.nonzero(as_tuple=False)
+
+        # Generate a probability mask of the same shape
+        random_mask = torch.rand_like(predictions, dtype=torch.float)
+
+        # Apply probability threshold only on mismatched elements
+        mask = (random_mask < probability) & mismatched_mask
+        mask = mask.int()
+
+        if groups is not None:
+            # Apply group-based intervention
+            for name, group in groups.items():
+                group_mask = torch.zeros_like(predictions, dtype=torch.int)
+                group_mask[:, group] = mask[:, group]
+                mask = torch.max(mask, group_mask)
+
+        return mask
+    '''

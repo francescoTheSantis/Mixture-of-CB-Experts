@@ -4,13 +4,13 @@ defaults:
   - engine: engine
 
 ## Common parameters
-max_epochs: 200
-min_epochs: 40
+max_epochs: 500
+min_epochs: 50
 patience: 20
 batch_size: 256
 gamma: 0.5
 lr_step: 100
-gpus: [0]
+gpus: [1]
 seed: 1
 activation: LeakyReLU
 num_workers: 0
@@ -24,11 +24,11 @@ hydra:
   mode: MULTIRUN
   sweeper:
     params:
-      seed: 1
-      dataset: cub
-      model: lmr
+      seed: 1, 2
+      dataset: cub, xor, trigonometry, checkmark, dot, mnist_addition
+      model: blackbox, cbm_linear, cbm_mlp, cem, crm, dcr, cmr, licem, lmr
 
 wandb:
-  project: null 
-  entity: null
+  project: "linear_memory_reasoner"
+  entity: "francescothesantis-politecnico-di-torino" 
 note: test

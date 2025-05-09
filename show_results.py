@@ -11,7 +11,7 @@ from matplotlib.ticker import FuncFormatter
 warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
-path = "/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-05-05/14-34-28" # the path containing your results
+path = "/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-05-05/23-54-00" # the path containing your results
 
 ###### Collect results regarding concept/task performance######
 
@@ -73,6 +73,8 @@ def get_df_name(df):
         return 'MNIST-E/O'
     elif df=='awa2':
         return 'AWA2'
+    elif df=='checkmark':
+        return 'Checkmark'
 
 #df = performance.copy()
 # Filter data for 'task' and 'concept'
@@ -116,7 +118,7 @@ model_styles = {
 }
 
 # Define the custom order
-custom_order = ['xor', 'mnist_addition' ,'cub', 'awa2']
+custom_order = ['xor', 'dot', 'checkmark', 'trigonometry', 'mnist_addition' ,'cub', 'awa2']
 
 merged_stats = merged_stats.sort_values('dataset')
 merged_stats['dataset'] = pd.Categorical(merged_stats['dataset'], categories=custom_order, ordered=True)
@@ -186,6 +188,8 @@ for i, row in pivot_table_avg.iterrows():
 # Reindex the columns of final_table according to the custom order
 final_table = final_table.reindex(columns=custom_order)
 
+print('\n\nTask Accuracy Table:')
+print('-------------------')
 print(final_table)
 
 # store the table in a csv file
@@ -218,6 +222,8 @@ for i, row in pivot_table_avg.iterrows():
 # Reindex the columns of final_table according to the custom order
 final_table = final_table.reindex(columns=custom_order)
 
+print('\n\nConcept Accuracy Table:')
+print('-------------------')
 print(final_table)
 
 # store the table in a csv file
