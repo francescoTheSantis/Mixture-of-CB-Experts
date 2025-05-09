@@ -65,3 +65,56 @@ class EmbeddingExtractor:
         test_loader = self._create_loader(test_embeddings, test_concepts, test_labels, batch_size)
 
         return train_loader, val_loader, test_loader
+
+
+'''
+class EmbeddingExtractor_text:
+    def __init__(self, train_loader, val_loader, test_loader, batch_size, model_name, device='cuda'):
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+        self.test_loader = test_loader
+        self.device = device
+        self.batch_size = batch_size
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        self.model = SentenceTransformer(model_name).to(device)
+
+    def _extract_embeddings(self, loader):
+        """Helper function to extract embeddings for a given DataLoader."""
+        embeddings = []
+        concepts_list = []
+        labels = []
+
+        with torch.no_grad():
+            for review, concepts, targets in tqdm(loader):
+                # decode the reviews
+                ids = review['input_ids']
+                review = self.tokenizer.decode(ids, skip_special_tokens=True) 
+                embs = self.model.encode(review, convert_to_tensor=True, show_progress_bar=False)
+                embs = embs.unsqueeze(0)
+                concepts = concepts.unsqueeze(0)
+                targets = targets.unsqueeze(0)
+                embeddings.append(embs.cpu())
+                concepts_list.append(concepts.cpu())
+                labels.append(targets.cpu())
+
+        # Concatenate all embeddings and labels
+        embeddings = torch.cat(embeddings, dim=0)
+        concepts = torch.cat(concepts_list, dim=0)
+        labels = torch.cat(labels, dim=0)
+        return embeddings, concepts.float(), labels.long()
+
+    def _create_loader(self, embeddings, concepts, labels, batch_size):
+        """Helper function to create a DataLoader from embeddings and labels."""
+        dataset = TensorDataset(embeddings, concepts, labels)
+        return DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    def produce_loaders(self):
+        """Produces new DataLoaders with embeddings instead of raw images."""
+        train_embeddings, train_concepts, train_labels = self._extract_embeddings(self.train_loader)
+        val_embeddings, val_concepts, val_labels = self._extract_embeddings(self.val_loader)
+        test_embeddings, test_concepts, test_labels = self._extract_embeddings(self.test_loader)
+        train_loader = self._create_loader(train_embeddings, train_concepts, train_labels, self.batch_size)
+        val_loader = self._create_loader(val_embeddings, val_concepts, val_labels, self.batch_size)
+        test_loader = self._create_loader(test_embeddings, test_concepts, test_labels, self.batch_size)
+        return train_loader, val_loader, test_loader
+'''

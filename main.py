@@ -7,9 +7,8 @@ import torch
 import os
 from env import CACHE
 from src.utilities import update_config_from_data
-import json
 
-@hydra.main(config_path="conf", config_name="sweep")
+@hydra.main(config_path="conf", config_name="test")
 def main(cfg: DictConfig) -> None:
 
     # Initialize the wandb logger

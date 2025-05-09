@@ -26,7 +26,7 @@ hydra:
     params:
       seed: 1, 2
       dataset: cub, xor, trigonometry, checkmark, dot, mnist_addition
-      model: blackbox, cbm_linear, cbm_mlp, cem, crm, dcr, cmr, licem, lmr
+      model: blackbox, cbm_linear, cbm_mlp, cem, crm, dcr, cmr, licem, lmr, v_cem
 
 wandb:
   project: "linear_memory_reasoner"

@@ -11,7 +11,7 @@ from matplotlib.ticker import FuncFormatter
 warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
-path = "/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-05-05/23-54-00" # the path containing your results
+path = "/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-05-09/19-24-15" # the path containing your results
 
 ###### Collect results regarding concept/task performance######
 
@@ -75,6 +75,8 @@ def get_df_name(df):
         return 'AWA2'
     elif df=='checkmark':
         return 'Checkmark'
+    elif df=='celeba':
+        return 'CelebA'
 
 #df = performance.copy()
 # Filter data for 'task' and 'concept'
@@ -114,11 +116,13 @@ model_styles = {
     'crm': {'marker': 'X', 'name': 'CRM', 'color': 'tab:cyan', 'size': marker_size},
     'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:gray', 'size': marker_size},
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:brown', 'size': marker_size},
-    'lmr': {'marker': 'o', 'name': 'LMR (Ours)', 'color': 'tab:green', 'size': marker_size},
+    'm_licem': {'marker': 'o', 'name': 'M-LICEM (Ours)', 'color': 'tab:green', 'size': marker_size},
+    'v_cem': {'marker': 'o', 'name': 'V-CEM', 'color': 'brown', 'size': marker_size},
 }
 
 # Define the custom order
-custom_order = ['xor', 'dot', 'checkmark', 'trigonometry', 'mnist_addition' ,'cub', 'awa2']
+custom_order = ['xor', 'dot', 'checkmark', 'trigonometry', 'mnist_addition' ,'cub', 'awa2', \
+                'celeba']
 
 merged_stats = merged_stats.sort_values('dataset')
 merged_stats['dataset'] = pd.Categorical(merged_stats['dataset'], categories=custom_order, ordered=True)

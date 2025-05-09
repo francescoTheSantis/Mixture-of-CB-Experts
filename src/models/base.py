@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+
 class BaseModel(nn.Module):
     def __init__(self, 
                  input_size, 
@@ -43,14 +44,12 @@ class BaseModel(nn.Module):
             
         x = self.encoder(x)
 
-        if (self.training or self.test_interventions) and self.int_idxs is None:
+        if self.training or self.test_interventions:
             # intervene on the concepts according to the int_prob
             int_idxs = self.get_intervened_concepts_predictions(
                 c_true,
                 groups=self.c_groups
             )
-        elif self.int_idxs is not None:
-            int_idxs = self.int_idxs
         else:
             int_idxs = torch.zeros_like(c_true)
         int_idxs = int_idxs.bool()
@@ -69,14 +68,14 @@ class BaseModel(nn.Module):
         loss = concept_loss + self.task_penalty * task_loss
         return loss
         
-
-    def get_intervened_concepts_predictions(self, labels, groups=None):
+    def get_intervened_concepts_predictions(self, 
+                                            labels, 
+                                            groups=None):
         '''
         Function to generate a mask for the intervention process.
         The mask is generated based on the probability of intervention 
         and the mismatch between predictions and labels.
         '''
-
         if groups is not None:
             n_groups = len(groups)
             # Generate a mask of shape Batch x n_groups
@@ -96,6 +95,7 @@ class BaseModel(nn.Module):
             # Apply probability threshold only on mismatched elements
             mask = (random_mask < self.int_prob)
             mask = mask.int()
+
         return mask
 
     '''
