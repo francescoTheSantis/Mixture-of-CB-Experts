@@ -44,6 +44,7 @@ class Engine(pl.LightningModule):
         return loss, y_output, c_output, y, c
 
     def training_step(self, batch, batch_idx):
+        self.model.current_epoch = self.current_epoch
         loss, _, _, _, _ = self.shared_step(batch)
         self.log("train_loss", loss)
         return loss      

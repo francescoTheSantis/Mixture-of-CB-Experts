@@ -24,9 +24,9 @@ hydra:
   mode: MULTIRUN
   sweeper:
     params:
-      seed: 1
-      dataset: xor, trigonometry
-      model: blackbox, cbm_linear, cbm_mlp, v_cem
+      seed: 1, 2
+      dataset: cub, mnist_addition, xor #, trigonometry, checkmark, dot
+      model: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, cmr, m_licem, v_cem, m_licem_pyc 
 
 wandb:
   project: null 

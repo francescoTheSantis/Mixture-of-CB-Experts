@@ -3,11 +3,14 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.m_licem.LinearMemoryReasoner"
+  _target_: "src.models.mv_licem.LinearMemoryReasoner"
   task_penalty: ${task_penalty}
   int_prob: ${int_prob}
+  embedding_size: 16
+  kl_penalty: 5e-2
+  randint_epoch_start: 3
   memory_size: 7
   weight_reg: 1e-4
 
 metadata:
-  name: m_licem
+  name: mv_licem

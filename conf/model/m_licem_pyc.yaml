@@ -3,11 +3,12 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.m_licem.LinearMemoryReasoner"
+  _target_: "src.models.m_licem_pyc.LinearMemoryReasoner"
   task_penalty: ${task_penalty}
   int_prob: ${int_prob}
   memory_size: 7
+  negative_concepts: True
   weight_reg: 1e-4
 
 metadata:
-  name: m_licem
+  name: m_licem_pyc

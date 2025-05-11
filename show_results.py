@@ -11,7 +11,7 @@ from matplotlib.ticker import FuncFormatter
 warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
-path = "/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-05-09/19-24-15" # the path containing your results
+path = "/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-05-10/14-59-12" # the path containing your results
 
 ###### Collect results regarding concept/task performance######
 
@@ -108,16 +108,18 @@ tick_font = {'size': 10}
 marker_size = 14
 # Define a dictionary to associate marker, name, and color to each model
 model_styles = {
-    'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'cyan', 'size': marker_size},
-    'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:purple', 'size': marker_size},
-    'cbm_linear': {'marker': 's', 'name': 'CBM+Linear', 'color': 'tab:orange', 'size': marker_size},
+    'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:blue', 'size': marker_size},
+    'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:orange', 'size': marker_size},
+    'cbm_linear': {'marker': 's', 'name': 'CBM+Linear', 'color': 'tab:green', 'size': marker_size},
     'cbm_mlp': {'marker': '^', 'name': 'CBM+MLP', 'color': 'tab:red', 'size': marker_size},
-    'blackbox': {'marker': 'o', 'name': 'Black-box', 'color': 'tab:blue', 'size': marker_size},
-    'crm': {'marker': 'X', 'name': 'CRM', 'color': 'tab:cyan', 'size': marker_size},
-    'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:gray', 'size': marker_size},
-    'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:brown', 'size': marker_size},
-    'm_licem': {'marker': 'o', 'name': 'M-LICEM (Ours)', 'color': 'tab:green', 'size': marker_size},
-    'v_cem': {'marker': 'o', 'name': 'V-CEM', 'color': 'brown', 'size': marker_size},
+    'blackbox': {'marker': 'o', 'name': 'Black-box', 'color': 'tab:purple', 'size': marker_size},
+    'crm': {'marker': 'X', 'name': 'CRM', 'color': 'tab:brown', 'size': marker_size},
+    'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
+    'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:gray', 'size': marker_size},
+    'm_licem': {'marker': '*', 'name': 'M-LICEM', 'color': 'tab:olive', 'size': marker_size},
+    'v_cem': {'marker': 'd', 'name': 'V-CEM', 'color': 'tab:cyan', 'size': marker_size},
+    'mv_licem': {'marker': '<', 'name': 'MV-LICEM', 'color': 'tab:pink', 'size': marker_size},
+    'm_licem_pyc': {'marker': '>', 'name': 'M-LICEM-PYC', 'color': 'tab:gray', 'size': marker_size},
 }
 
 # Define the custom order

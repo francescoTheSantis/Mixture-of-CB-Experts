@@ -125,7 +125,7 @@ class VariationalConceptEmbeddingModel(BaseModel):
             else:
                 c_emb = mu
             #if self.int_prob!=None and self.current_epoch>self.randint_epoch_start:
-            if int_idxs is not None:
+            if self.current_epoch>self.randint_epoch_start or not self.training:
                 c_pred = self.apply_intervention_concept(c[:,i], int_idxs[:,i], c_pred)
                 c_emb = self.apply_intervention_embedding(c_pred, int_idxs[:,i], c_emb, i)
             c_emb_list.append(c_emb.unsqueeze(1))
@@ -155,7 +155,7 @@ class VariationalConceptEmbeddingModel(BaseModel):
     def filter_output_for_loss(self, y_output, c_output=None):
         return y_output, c_output
 
-    def loss(self, y_pred, y, c_pred, c):
+    def v_loss(self, y_pred, y, c_pred, c):
         # Concept + Task loss
         if self.task == 'classification':
             y = y.flatten().long()
@@ -168,3 +168,6 @@ class VariationalConceptEmbeddingModel(BaseModel):
 
         loss = concept_task_loss + self.kl_penalty * D_kl
         return loss
+    
+    def loss(self, y_pred, y, c_pred, c):
+        return self.v_loss(y_pred, y, c_pred, c)

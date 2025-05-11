@@ -13,6 +13,8 @@ dependencies:
   - scipy
   - scikit-learn
   - lightning
+  - matplotlib
+  - opencv
   - pip
   - pip:
     - wandb
@@ -23,6 +25,4 @@ dependencies:
     - scikit-learn-extra
     - numpy==1.26.4
     - pandas
-    - matplotlib
-    - opencv-python
     - git+https://github.com/pyc-team/pytorch_concepts.git@models

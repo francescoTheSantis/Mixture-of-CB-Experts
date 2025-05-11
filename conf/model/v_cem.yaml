@@ -8,8 +8,7 @@ params:
   int_prob: ${int_prob}
   embedding_size: 16
   kl_penalty: 5e-2
-  randint_epoch_start: 20
-
+  randint_epoch_start: 3
 
 metadata:
   name: v_cem

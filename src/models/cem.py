@@ -45,7 +45,7 @@ class ConceptEmbeddingModel(BaseModel):
         self.y_predictor = nn.Sequential(
             nn.Linear(len(self.c_names) * embedding_size, latent_size),
             nn.LeakyReLU(),
-            nn.Linear(latent_size, len(c_names)),
+            nn.Linear(latent_size, output_size),
         )
 
         self.concept_loss_form = nn.BCELoss()

@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
-from src.models.base import BaseModel
+from src.models.v_cem import VariationalConceptEmbeddingModel
+import torch.nn.functional as F
 from src.models.modules import LinearMemoryClassifier
-import torch_concepts.nn as pyc_nn
 
-class LinearMemoryReasoner(BaseModel):
+class LinearMemoryReasoner(VariationalConceptEmbeddingModel):
     def __init__(self, 
                  input_size, 
                  output_size,
@@ -19,6 +19,8 @@ class LinearMemoryReasoner(BaseModel):
                  embedding_size = 16,
                  latent_size = 64,
                  c_groups=None,
+                 kl_penalty=5e-2,
+                 randint_epoch_start=5,
                  memory_size=7,
                  weight_reg=1e-4
                  ):
@@ -26,28 +28,21 @@ class LinearMemoryReasoner(BaseModel):
         super().__init__(
                  input_size, 
                  output_size,
-                 task,
+                 c_names,
+                 y_names,
+                 task, 
+                 task_penalty,
                  activation,
+                 int_prob,
+                 int_idxs,
+                 noise,
+                 embedding_size,
                  latent_size,
-                 c_groups
+                 c_groups,
+                 kl_penalty,
+                 randint_epoch_start,
                  )
-
-        # Parameters in common with the other Concept Embedding
-        # based models.
-        self.embedding_size = embedding_size
-        self.task_penalty = task_penalty
-        self.c_names = list(c_names)
-        self.int_prob = int_prob
-        self.int_idxs = int_idxs
-        self.has_concepts = True
-        self.noise = noise
-        self.concept_loss_form = nn.BCELoss()
-
-        self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
-            latent_size,
-            self.c_names,
-            embedding_size,
-        )
+        
         
         self.classifier = LinearMemoryClassifier(
             output_size,
@@ -63,25 +58,18 @@ class LinearMemoryReasoner(BaseModel):
     
     def forward(self, input):  
         x, c_true, int_idxs = self.encode(input)
+        c_emb, c_pred, mu, logvar = self.get_concept_latent(x, c_true, int_idxs)
+        # Store the mu and logvar for the loss computation
+        self.mu = mu
+        self.logvar = logvar
         
-        c_emb, c_dict = self.bottleneck(
-            x,
-            c_true=c_true,
-            intervention_idxs=int_idxs,
-            intervention_rate=1.,
-        )
-        c_pred = c_dict['c_int']
-
         y_pred = self.classifier(c_emb, c_pred, self.current_epoch)
         return y_pred, c_pred
 
     def filter_output_for_loss(self, y_output, c_output=None):
         return y_output, c_output
     
-    def loss(self, y_hat, y, c_hat=None, c=None):
-        if self.task == 'classification':
-            y = y.flatten().long()
-        loss = self.concept_based_loss(y_hat, y, c_hat, c)
+    def loss(self, y_pred, y, c_pred, c):
+        loss = self.v_loss(y_pred, y, c_pred, c)
         loss += self.classifier.sparsity_loss()
         return loss
-    

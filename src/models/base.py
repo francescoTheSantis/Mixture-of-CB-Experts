@@ -19,6 +19,7 @@ class BaseModel(nn.Module):
         self.int_idxs = None
         self.test_interventions = False
         self.c_groups = c_groups
+        self.current_epoch = 0
 
         self.encoder = nn.Sequential(
             nn.Linear(input_size, latent_size),
