@@ -3,3 +3,5 @@ loader:
   num_workers: ${num_workers}
   batch_size: ${batch_size}
   device: ${gpus}
+
+latent_size: ${latent_size}

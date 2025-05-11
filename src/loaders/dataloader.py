@@ -112,11 +112,12 @@ class loader(object):
                                  num_workers=self.num_workers)  
         
         if self.name in ['cub', 'mnist_addition', 'celeba']:
+            celeba_flag = True if self.name == 'celeba' else False
             E_extr = EmbeddingExtractor(loaded_train, 
                                         loaded_val, 
                                         loaded_test, 
                                         self.device,
-                                        True,
+                                        celeba_flag,
                                         self.selected_concepts,
                                         self.task_names,
                                         )

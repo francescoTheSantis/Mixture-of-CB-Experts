@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 from torch import nn
 from transformers import ViTModel
-from torchvision.models import resnet34
+#from torchvision.models import resnet34
 from tqdm import tqdm
 import torch.nn.functional as F
 
@@ -25,10 +25,10 @@ class EmbeddingExtractor:
         self.task_names = task_names
 
         # Load ViT model pre-trained on ImageNet
-        #self.model = ViTModel.from_pretrained('google/vit-base-patch32-224-in21k')
+        self.model = ViTModel.from_pretrained('google/vit-base-patch32-224-in21k')
         # Load ResNet34 model pre-trained on ImageNet
-        self.model = resnet34(pretrained=True)
-        self.model = nn.Sequential(*list(self.model.children())[:-1])
+        #self.model = resnet34(pretrained=True)
+        #self.model = nn.Sequential(*list(self.model.children())[:-1])
         self.model = self.model.to(self.device)
         self.model.eval()
 
@@ -55,7 +55,7 @@ class EmbeddingExtractor:
                 # Extract embeddings
                 outputs = self.model(images)
                 # Get the [CLS] token representation
-                #outputs = outputs.last_hidden_state[:, 0, :]
+                outputs = outputs.last_hidden_state[:, 0, :]
                 outputs = outputs.flatten(start_dim=1)
                 embeddings.append(outputs.cpu())
                 if self.celeba:

@@ -28,8 +28,6 @@ class BlackBox(BaseModel):
         self.predictor = nn.Sequential(
             nn.Linear(latent_size, hidden_size),
             getattr(nn, activation)(),
-            nn.Linear(hidden_size, hidden_size),
-            getattr(nn, activation)(),
             nn.Linear(hidden_size, output_size)
         )
 

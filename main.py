@@ -8,7 +8,7 @@ import os
 from env import CACHE
 from src.utilities import update_config_from_data
 
-@hydra.main(config_path="conf", config_name="test")
+@hydra.main(config_path="conf", config_name="sweep")
 def main(cfg: DictConfig) -> None:
 
     # Initialize the wandb logger

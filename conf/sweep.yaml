@@ -10,10 +10,11 @@ patience: 20
 batch_size: 256
 gamma: 0.5
 lr_step: 100
-gpus: [1]
+gpus: [0]
 seed: 1
 activation: LeakyReLU
 num_workers: 0
+# this parameter is overridden in the dataset config
 latent_size: 64
 
 ## Concept-based model parameters
@@ -25,8 +26,8 @@ hydra:
   sweeper:
     params:
       seed: 1, 2
-      dataset: cub, xor, trigonometry, checkmark, dot, mnist_addition
-      model: blackbox, cbm_linear, cbm_mlp, cem, crm, dcr, cmr, licem, lmr, v_cem
+      dataset: xor, cub, mnist_addition
+      model: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, cmr, m_licem, v_cem, m_licem_pyc 
 
 wandb:
   project: "linear_memory_reasoner"
