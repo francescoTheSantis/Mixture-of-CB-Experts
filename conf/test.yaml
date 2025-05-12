@@ -24,9 +24,9 @@ hydra:
   mode: MULTIRUN
   sweeper:
     params:
-      seed: 1, 2
-      dataset: cub, mnist_addition, xor #, trigonometry, checkmark, dot
-      model: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, cmr, m_licem, v_cem, m_licem_pyc 
+      seed: 1 #, 2
+      dataset: celeba #cub, mnist_addition, xor #, trigonometry, checkmark, dot
+      model: cbm_linear #blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, cmr, m_licem, v_cem, m_licem_pyc 
 
 wandb:
   project: null 

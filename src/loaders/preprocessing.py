@@ -13,7 +13,6 @@ class EmbeddingExtractor:
                  test_loader, 
                  device='cuda', 
                  celeba=False, 
-                 selected_concepts=None,
                  task_names=None):
         
         self.train_loader = train_loader
@@ -21,7 +20,6 @@ class EmbeddingExtractor:
         self.test_loader = test_loader
         self.device = device
         self.celeba = celeba
-        self.selected_concepts = selected_concepts
         self.task_names = task_names
 
         # Load ViT model pre-trained on ImageNet
@@ -59,24 +57,11 @@ class EmbeddingExtractor:
                 outputs = outputs.flatten(start_dim=1)
                 embeddings.append(outputs.cpu())
                 if self.celeba:
-                    targets = self.batch_binary_to_decimal_torch(torch.stack([targets[:,i] \
-                                                                              for i in range(len(self.task_names))], dim=1))
-                    labels.append(targets.cpu())
-                else:
-                    labels.append(targets.cpu())
+                    targets = self.batch_binary_to_decimal_torch(
+                        torch.stack([targets[:,i] for i in range(len(self.task_names))], dim=1)
+                    )
+                labels.append(targets.cpu())
                 concepts_list.append(concepts.cpu())
-
-            # else:
-            #     for images, concepts, targets in tqdm(loader):
-            #         images = images.to(self.device)
-            #         # Extract embeddings
-            #         outputs = self.model(images)
-            #         # Get the [CLS] token representation
-            #         #outputs = outputs.last_hidden_state[:, 0, :]
-            #         outputs = outputs.flatten(start_dim=1)
-            #         embeddings.append(outputs)
-            #         concepts_list.append(concepts)
-            #         labels.append(targets)
                 
         # Concatenate all embeddings and labels
         embeddings = torch.cat(embeddings, dim=0)

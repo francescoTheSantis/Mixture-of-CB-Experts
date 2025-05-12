@@ -5,14 +5,16 @@ defaults:
 loader:
   name: celeba
   batch_size: 128  
-  selected_concepts: ["No_Beard", "Young", "Attractive", "Mouth_Slightly_Open", "Smiling", "Wearing_Lipstick", "High_Cheekbones"]
-  class_attributes: ["Wavy_Hair", "Black_Hair", "Male"] #, "Heavy_Makeup", "Pointy_Nose", "Arched_Eyebrows"]
+  # We selected the 8 attributes whose distribution is closer to a random uniform binary distribution
+  class_attributes: ["Young","Attractive","Mouth_Slightly_Open","Smiling","Wearing_Lipstick","High_Cheekbones","Male","Heavy_Makeup"]
 
 # Dataset parameters
 metadata:
   task: classification
   lr: 0.001
   name: celeba
+
+# List of attributes of the CelebA dataset and their balance
 
 #ID:           Attribute:  Balance:
 #24             No_Beard  0.834940

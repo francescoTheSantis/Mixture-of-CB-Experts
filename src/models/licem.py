@@ -111,11 +111,11 @@ class LinearConceptEmbeddingModel(BaseModel):
             y = y.flatten().long()
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         # adding l1 regularization to the weights
-        w_loss = self.weight_reg * self.__predicted_weights.norm(p=1)
+        w_loss = self.weight_reg * self.__predicted_weights.norm(p=2)
         loss += w_loss
         # adding l2 regularization to the biases if used
         if self.use_bias:
-            b_loss = self.bias_reg * self.__predicted_bias.norm(p=2)
+            b_loss = self.bias_reg * self.__predicted_bias.norm(p=1)
             loss += b_loss
         return loss
 

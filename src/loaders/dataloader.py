@@ -82,7 +82,11 @@ class loader(object):
         elif self.name == 'celeba':
             celeba_transform = transforms.Compose([
                 transforms.Resize((224, 224)),
-                transforms.ToTensor()
+                transforms.ToTensor(),
+                transforms.Normalize(             # Normalize using ImageNet stats
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225]
+                )
             ])
             train_dataset = CelebADataset(root=DATA_PATH, split='train', 
                                           class_attributes=self.task_names,
@@ -94,6 +98,7 @@ class loader(object):
             val_size = len(train_dataset) - train_size
             train_dataset, val_dataset = random_split(train_dataset, 
                                               [train_size, val_size])
+            self.selected_concepts = test_dataset.concept_attr_names
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
 
@@ -118,7 +123,6 @@ class loader(object):
                                         loaded_test, 
                                         self.device,
                                         celeba_flag,
-                                        self.selected_concepts,
                                         self.task_names,
                                         )
             loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()

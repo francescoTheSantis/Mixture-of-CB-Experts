@@ -11,7 +11,7 @@ from matplotlib.ticker import FuncFormatter
 warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
-path = "/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-05-10/14-59-12" # the path containing your results
+path = "/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-05-11/22-44-18" # the path containing your results
 
 ###### Collect results regarding concept/task performance######
 
