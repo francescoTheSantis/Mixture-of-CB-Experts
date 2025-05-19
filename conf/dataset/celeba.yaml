@@ -11,7 +11,7 @@ loader:
 # Dataset parameters
 metadata:
   task: classification
-  lr: 0.001
+  lr: 0.0005
   name: celeba
 
 # List of attributes of the CelebA dataset and their balance

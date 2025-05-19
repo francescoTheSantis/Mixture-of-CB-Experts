@@ -26,6 +26,9 @@ class BaseModel(nn.Module):
             getattr(nn, activation)()
         )
 
+        # Implement MLP as encoder for mnist_addition
+        # Flatten the first dimension of x in the forward pass
+
         if task == 'classification':
             self.task_loss_form = nn.CrossEntropyLoss()
         elif task == 'regression':
@@ -42,7 +45,8 @@ class BaseModel(nn.Module):
         if self.noise!=None:
             eps = torch.randn_like(x)
             x = eps * self.noise + x * (1-self.noise)
-            
+         
+        # Pass the input through the encoder
         x = self.encoder(x)
 
         if self.training or self.test_interventions:

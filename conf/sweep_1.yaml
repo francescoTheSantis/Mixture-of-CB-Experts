@@ -5,8 +5,8 @@ defaults:
 
 ## Common parameters
 max_epochs: 500
-min_epochs: 50
-patience: 20
+min_epochs: 1
+patience: 30
 batch_size: 256
 gamma: 0.5
 lr_step: 100
@@ -25,11 +25,11 @@ hydra:
   mode: MULTIRUN
   sweeper:
     params:
-      seed: 1, 2
       # implemented datasets: xor, dot, trigometry, checkmark, mnist_addition, cub, celeba, (awa2), (cebab)
-      dataset: mnist_addition, xor, cub, celeba
+      dataset: awa2, celeba, mnist_addition, xor, cub
       # implemented models: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, cmr, m_licem, v_cem, mv_cem, m_licem_pyc
       model: blackbox, cbm_mlp, cem, dcr, cmr, m_licem, m_licem_pyc 
+      seed: 1
 
 wandb:
   project: "linear_memory_reasoner"

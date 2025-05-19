@@ -57,7 +57,7 @@ class LinearMemoryClassifier(nn.Module):
 
         # Sample and reshape
         selection = F.softmax(selection, dim=-1)
-        #selection = F.gumbel_softmax(selection, tau=current_tau, hard=True)
+        #selection = F.gumbel_softmax(selection, tau=current_tau, hard=False)
         selection = selection.unsqueeze(-1).repeat(1, 1, 1, memory_bank.shape[-1])
         selection = selection.permute(0, 1, 3, 2)
 

@@ -6,13 +6,18 @@ from torch_concepts.data.cub import CUBDataset
 from torch_concepts.data.cub import SELECTED_CONCEPTS as cub_selected_concepts
 from torch_concepts.data.cub import CONCEPT_SEMANTICS as cub_concept_semantics
 from torch_concepts.data.cub import CLASS_NAMES as cub_class_names
-from torch_concepts.data.cub import CONCEPT_GROUP_MAP
+from torch_concepts.data.cub import CONCEPT_GROUP_MAP as cub_concept_groups
+from torch_concepts.data.awa2 import AwA2Dataset
+from torch_concepts.data.awa2 import CONCEPT_SEMANTICS as awa2_concept_semantics
+from torch_concepts.data.awa2 import CLASS_NAMES as awa2_class_names
+from torch_concepts.data.awa2 import CONCEPT_GROUPS as awa2_concept_groups
 from torch_concepts.data.celeba import CelebADataset
 from torch.utils.data import DataLoader, random_split
 from env import DATA_PATH
 from src.loaders.preprocessing import EmbeddingExtractor
 import omegaconf
 from torchvision import transforms
+import os
 
 CUB_CONCEPT_NAMES = [x for i, x in enumerate(cub_concept_semantics) if i in cub_selected_concepts]
 
@@ -33,6 +38,15 @@ class loader(object):
         self.task_names = class_attributes
         self.concept_groups = None
 
+        self.transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(             # Normalize using ImageNet stats
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225]
+                )
+            ])
+        
     def get_names(self):
         # Get the concept names and task names
         if self.name in ['xor', 'trigonometry', 'dot', 'checkmark']:
@@ -48,11 +62,20 @@ class loader(object):
         elif self.name == 'cub':
             concept_names = CUB_CONCEPT_NAMES
             task_names = cub_class_names
-            concept_groups = CONCEPT_GROUP_MAP
+            concept_groups = cub_concept_groups
         elif self.name == 'celeba':
-            concept_names = self.selected_concepts
+            test_dataset = CelebADataset(root=DATA_PATH, split='test', 
+                                         class_attributes=self.task_names,
+                                         transform=self.transform)
+            concept_names = test_dataset.concept_attr_names
+            # delete test_dataset
+            del test_dataset
             task_names = ["class_"+str(x) for x in range(2**len(self.task_names))]
             concept_groups = None
+        elif self.name == 'awa2':
+            concept_names = awa2_concept_semantics
+            task_names = awa2_class_names
+            concept_groups = awa2_concept_groups
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
         
@@ -64,8 +87,7 @@ class loader(object):
             dataset = ToyDataset(self.name, size=1000, random_state=42)
             # split the dataset
             train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
-                dataset, [0.7, 0.1, 0.2],
-                generator=torch.Generator().manual_seed(42)
+                dataset, [0.7, 0.1, 0.2]
             )
         elif self.name == 'mnist_addition':
             train_dataset = MNISTAddition(root=DATA_PATH, train=True)
@@ -80,25 +102,21 @@ class loader(object):
             val_dataset = CUBDataset(root=DATA_PATH, split='val')
             test_dataset = CUBDataset(root=DATA_PATH, split='test')
         elif self.name == 'celeba':
-            celeba_transform = transforms.Compose([
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(             # Normalize using ImageNet stats
-                    mean=[0.485, 0.456, 0.406],
-                    std=[0.229, 0.224, 0.225]
-                )
-            ])
             train_dataset = CelebADataset(root=DATA_PATH, split='train', 
                                           class_attributes=self.task_names,
-                                          transform=celeba_transform)
+                                          transform=self.transform)
             test_dataset = CelebADataset(root=DATA_PATH, split='test', 
                                          class_attributes=self.task_names,
-                                         transform=celeba_transform)
+                                         transform=self.transform)
             train_size = int(0.9 * len(train_dataset))
             val_size = len(train_dataset) - train_size
             train_dataset, val_dataset = random_split(train_dataset, 
                                               [train_size, val_size])
-            self.selected_concepts = test_dataset.concept_attr_names
+        elif self.name == 'awa2':
+            path = os.path.join(DATA_PATH, 'Animals_with_Attributes2')
+            train_dataset = AwA2Dataset(root_dir=path, split='train')
+            val_dataset = AwA2Dataset(root_dir=path, split='val')
+            test_dataset = AwA2Dataset(root_dir=path, split='test')
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
 
@@ -116,15 +134,14 @@ class loader(object):
                                  shuffle=False,
                                  num_workers=self.num_workers)  
         
-        if self.name in ['cub', 'mnist_addition', 'celeba']:
+        if self.name in ['cub', 'mnist_addition', 'celeba', 'awa2']:
             celeba_flag = True if self.name == 'celeba' else False
             E_extr = EmbeddingExtractor(loaded_train, 
                                         loaded_val, 
                                         loaded_test, 
                                         self.device,
                                         celeba_flag,
-                                        self.task_names,
-                                        )
+                                        self.task_names)
             loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
 
         return loaded_train, loaded_val, loaded_test
