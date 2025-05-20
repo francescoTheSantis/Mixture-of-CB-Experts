@@ -1,7 +1,7 @@
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, LearningRateMonitor
 import torch
-from torch.optim import Adam
+from torch.optim import AdamW
 import numpy as np
 import pandas as pd
 from src.metrics import f1_acc_metrics
@@ -46,7 +46,7 @@ class Trainer:
         )
 
         # Optimizer
-        self.optimizer = Adam(self.model.parameters(), lr=self.cfg.dataset.metadata.lr)
+        self.optimizer = AdamW(self.model.parameters(), lr=self.cfg.dataset.metadata.lr)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=self.cfg.lr_step, gamma=self.cfg.gamma, verbose=True)
 
         # Set the optimizer in the repsective model
@@ -59,10 +59,13 @@ class Trainer:
                          val_dataloader)
     
     def test(self, test_dataloader):
-        self.trainer.test(self.model, test_dataloader)
+        # Load the best model and test
+        self.trainer.test(self.model, test_dataloader, ckpt_path=self.trainer.checkpoint_callback.best_model_path)
 
     def interventions(self, test_dataloader):
         intervention_df = pd.DataFrame(columns=['noise', 'p_int', 'f1', 'accuracy'])
+        # Set the model on the right device
+        self.model = self.model.to(self.cfg.gpus[0])
         self.model.eval()
         self.model.model.test_interventions = True
         with torch.no_grad():
@@ -74,6 +77,10 @@ class Trainer:
                     self.model.model.noise = eps
                     for batch in test_dataloader:
                         x, c, y = self.model.unpack_batch(batch)
+                        # Move the data to the GPU
+                        x = x.to(self.cfg.gpus[0])
+                        c = c.to(self.cfg.gpus[0])
+                        y = y.to(self.cfg.gpus[0])
                         inputs = {'x':x, 'c':c, 'y':y}
                         self.model.model.int_prob = p_int
                         output = self.model.forward(inputs)
@@ -89,4 +96,3 @@ class Trainer:
                     intervention_df = pd.concat([intervention_df, pd.DataFrame([intervention_results])], ignore_index=True)
         self.model.model.test_interventions = False
         return intervention_df
-    

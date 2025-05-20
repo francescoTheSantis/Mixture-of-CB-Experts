@@ -69,15 +69,6 @@ class Engine(pl.LightningModule):
             self.log('test_concept_acc', concept_acc)
         return loss 
 
-    def load_best(self, checkpoint_path):
-        # Load the model from the checkpoint path
-        ckpt = torch.load(checkpoint_path, map_location=self.device)["state_dict"]
-        new_state_dict = OrderedDict()
-        for k, v in ckpt.items():
-            new_key = k.replace("model.", "") 
-            new_state_dict[new_key] = v
-        self.model.load_state_dict(new_state_dict, strict=False)
-    
     def configure_optimizers(self):
         return [self.optimizer], [self.scheduler]
  

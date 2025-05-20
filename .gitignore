@@ -4,3 +4,4 @@ _OLD/
 __pycache__/
 datasets/
 multirun/
+stored_results/

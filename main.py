@@ -8,7 +8,7 @@ import os
 from env import CACHE
 from src.utilities import update_config_from_data
 
-@hydra.main(config_path="conf", config_name="sweep")
+@hydra.main(config_path="conf", config_name="test")
 def main(cfg: DictConfig) -> None:
 
     # Initialize the wandb logger
@@ -57,10 +57,6 @@ def main(cfg: DictConfig) -> None:
 
     # Train the model
     trainer.train(loaded_train, loaded_val)
-
-    # Load the best model
-    model.load_best(trainer.trainer.checkpoint_callback.best_model_path)
-    trainer.model = model
 
     ###### Test ######
     # Test the model on the test-set
