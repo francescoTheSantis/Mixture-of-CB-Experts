@@ -114,9 +114,9 @@ class loader(object):
                                               [train_size, val_size])
         elif self.name == 'awa2':
             path = os.path.join(DATA_PATH, 'Animals_with_Attributes2')
-            train_dataset = AwA2Dataset(root_dir=path, split='train')
-            val_dataset = AwA2Dataset(root_dir=path, split='val')
-            test_dataset = AwA2Dataset(root_dir=path, split='test')
+            train_dataset = AwA2Dataset(root=path, split='train')
+            val_dataset = AwA2Dataset(root=path, split='val')
+            test_dataset = AwA2Dataset(root=path, split='test')
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
 

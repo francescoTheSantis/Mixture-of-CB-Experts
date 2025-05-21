@@ -102,31 +102,3 @@ class BaseModel(nn.Module):
             mask = mask.int()
 
         return mask
-
-    '''
-    def get_intervened_concepts_predictions_to_refine(predictions, labels, probability, all_entries=False, groups=None):
-
-        hard_predictions = torch.where(predictions > 0.5, 1, 0) 
-            
-        # Find mismatched indices if all_entries is False, select all otherwise
-        if all_entries:
-            mismatched_mask = (torch.ones_like(hard_predictions))#.nonzero(as_tuple=False)
-        else:
-            mismatched_mask = (hard_predictions != labels)#.nonzero(as_tuple=False)
-
-        # Generate a probability mask of the same shape
-        random_mask = torch.rand_like(predictions, dtype=torch.float)
-
-        # Apply probability threshold only on mismatched elements
-        mask = (random_mask < probability) & mismatched_mask
-        mask = mask.int()
-
-        if groups is not None:
-            # Apply group-based intervention
-            for name, group in groups.items():
-                group_mask = torch.zeros_like(predictions, dtype=torch.int)
-                group_mask[:, group] = mask[:, group]
-                mask = torch.max(mask, group_mask)
-
-        return mask
-    '''

@@ -3,20 +3,25 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scienceplots
 import warnings
-import torch
 import os
 import yaml
 from matplotlib.ticker import FuncFormatter
 
+# I used scienceplots for the style of the plots,
+# but you can use any other style you want.
 warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
-path = "/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-05-11/22-44-18" # the path containing your results
+# List the paths containing the results
+paths = ["/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-05-19/16-55-28"]
 
-###### Collect results regarding concept/task performance######
 
-exps = os.listdir(path)
-exps_path = [os.path.join(path, exp) for exp in exps if 'multirun' not in exp]
+###### Collect results regarding concept/task performance ######
+
+exps_path = []
+for path in paths:
+    exps = os.listdir(path)
+    exps_path += [os.path.join(path, exp) for exp in exps if 'multirun' not in exp]
 
 performance = pd.DataFrame()
 
@@ -24,7 +29,6 @@ for exp in exps_path:
     d = {}
     conf_file = os.path.join(exp, '.hydra/config.yaml')
     result_file = os.path.join(exp, 'logs/experiment_metrics/version_0/metrics.csv')  
-    print(exp)
     if os.path.exists(conf_file) and os.path.exists(result_file):
         try:
             with open(conf_file, 'r') as file:
@@ -37,8 +41,12 @@ for exp in exps_path:
                 result = pd.read_csv(file, header=0)
 
             d['task'] = result['test_task_acc'].iloc[-1]
-            d['concept'] = result['test_concept_acc'].iloc[-1]
+            if conf['model']['metadata']['name']=='blackbox':
+                d['concept'] = 0
+            else:
+                d['concept'] = result['test_concept_acc'].iloc[-1]
 
+            print(d)
             performance = pd.concat([performance, pd.DataFrame([d])], ignore_index=True)
         except:
             pass
@@ -106,25 +114,34 @@ label_font = {'size': 24}
 tick_font = {'size': 10}
 
 marker_size = 14
-# Define a dictionary to associate marker, name, and color to each model
+
+# Define a dictionary to associate marker, name, and color to each model.
+# If the experiment you run does not contain a model, just remove it from the dictionary.
+# If you want to add a new model, just add it to the dictionary.
 model_styles = {
-    'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:blue', 'size': marker_size},
+    #'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:blue', 'size': marker_size},
     'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:orange', 'size': marker_size},
     'cbm_linear': {'marker': 's', 'name': 'CBM+Linear', 'color': 'tab:green', 'size': marker_size},
     'cbm_mlp': {'marker': '^', 'name': 'CBM+MLP', 'color': 'tab:red', 'size': marker_size},
     'blackbox': {'marker': 'o', 'name': 'Black-box', 'color': 'tab:purple', 'size': marker_size},
-    'crm': {'marker': 'X', 'name': 'CRM', 'color': 'tab:brown', 'size': marker_size},
+    #'crm': {'marker': 'X', 'name': 'CRM', 'color': 'tab:brown', 'size': marker_size},
     'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:gray', 'size': marker_size},
     'm_licem': {'marker': '*', 'name': 'M-LICEM', 'color': 'tab:olive', 'size': marker_size},
-    'v_cem': {'marker': 'd', 'name': 'V-CEM', 'color': 'tab:cyan', 'size': marker_size},
-    'mv_licem': {'marker': '<', 'name': 'MV-LICEM', 'color': 'tab:pink', 'size': marker_size},
+    #'v_cem': {'marker': 'd', 'name': 'V-CEM', 'color': 'tab:cyan', 'size': marker_size},
+    #'mv_licem': {'marker': '<', 'name': 'MV-LICEM', 'color': 'tab:pink', 'size': marker_size},
     'm_licem_pyc': {'marker': '>', 'name': 'M-LICEM-PYC', 'color': 'tab:gray', 'size': marker_size},
 }
 
 # Define the custom order
-custom_order = ['xor', 'dot', 'checkmark', 'trigonometry', 'mnist_addition' ,'cub', 'awa2', \
-                'celeba']
+# If the experiment you run does not contain a dataset, just remove it from the list.
+custom_order = ['xor', \
+                #'dot', \
+                #'checkmark', \
+                #'trigonometry', \
+                'mnist_addition', \
+                'cub', \
+                'awa2']
 
 merged_stats = merged_stats.sort_values('dataset')
 merged_stats['dataset'] = pd.Categorical(merged_stats['dataset'], categories=custom_order, ordered=True)
@@ -145,11 +162,6 @@ for idx, dataset in enumerate(merged_stats['dataset'].unique()):
     ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
     ax.minorticks_off()
     ax.grid(True, zorder=0)
-    #values_range = np.arange(0, 1.1, 0.1)
-    #ax.set_yticks(values_range)  # Set y ticks from 0 to 1
-    #ax.set_yticklabels([f'{x:.1f}' for x in values_range])  # Set y tick labels from 0 to 1
-    #ax.set_xticks(values_range)  # Set x ticks from 0 to 1
-    #ax.set_xticklabels([f'{x:.1f}' for x in values_range])  # Set x tick labels from 0 to 1
     if idx == 0:
         ax.set_ylabel('Task Acc', fontdict=label_font)
     ax.set_xlabel('Concept Acc', fontdict=label_font)
@@ -160,7 +172,7 @@ custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', marker
 # Create a single legend below the plots
 fig.legend(handles=custom_handles, loc='lower center', ncol=len(custom_handles), fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.1))
 
-plt.tight_layout()#(rect=[0, 0.1, 1, 0.95])
+plt.tight_layout()
 plt.savefig('figs/performance.pdf')
 
 plt.show()
@@ -201,6 +213,7 @@ print(final_table)
 # store the table in a csv file
 final_table.to_csv('figs/task_accuracy.csv', index=True)
 
+
 ########## Concept Accuracy Table ##########
 
 task_avg = concept_stats[['model', 'dataset', 'avg_accuracy_concept']]
@@ -236,7 +249,7 @@ print(final_table)
 final_table.to_csv('figs/concept_accuracy.csv', index=True)
 
 
-########## collect intervention results ##########
+########## Collect intervention results ##########
 
 performance = pd.DataFrame()
 
@@ -276,8 +289,6 @@ def plot_intervention_results(df, metric='accuracy', title_font=None, label_font
             for model in grouped_data['model'].unique():
                 model_data = grouped_data[grouped_data['model'] == model]
                 style = model_styles.get(model, {'marker': 'o', 'color': 'black', 'size': 10, 'name': model})
-                #ax.errorbar(model_data['p_int'], model_data['mean_metric'], yerr=model_data['std_metric'],
-                #            fmt=style['marker'], color=style['color'], markersize=style['size'], label=style['name'])
                 ax.plot(model_data['p_int'], model_data['mean_metric'], color=style['color'], linestyle='-', alpha=0.5)
                 ax.scatter(model_data['p_int'], model_data['mean_metric'], marker=style['marker'], color=style['color'], s=style['size']**2, label=style['name'], edgecolor='black', alpha=0.5)
                 ax.fill_between(model_data['p_int'], model_data['mean_metric'] - model_data['std_metric'], model_data['mean_metric'] + model_data['std_metric'], color=style['color'], alpha=0.2)
@@ -341,8 +352,6 @@ def plot_intervention_results(df, metric='accuracy', title_font=None, label_font
             for model in grouped_data['model'].unique():
                 model_data = grouped_data[grouped_data['model'] == model]
                 style = model_styles.get(model, {'marker': 'o', 'color': 'black', 'size': 10, 'name': model})
-                #ax.errorbar(model_data['p_int'], model_data['mean_metric'], yerr=model_data['std_metric'],
-                #            fmt=style['marker'], color=style['color'], markersize=style['size'], label=style['name'])
                 ax.plot(model_data['p_int'], model_data['mean_metric'], color=style['color'], linestyle='-', alpha=0.5)
                 ax.scatter(model_data['p_int'], model_data['mean_metric'], marker=style['marker'], color=style['color'], s=style['size']**2, label=style['name'], edgecolor='black', alpha=0.5)
                 ax.fill_between(model_data['p_int'], model_data['mean_metric'] - model_data['std_metric'], model_data['mean_metric'] + model_data['std_metric'], color=style['color'], alpha=0.2)

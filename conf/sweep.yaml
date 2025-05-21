@@ -1,0 +1,39 @@
+defaults:
+  - dataset: xor
+  - model: blackbox
+  - engine: engine
+
+## Common parameters
+max_epochs: 500
+min_epochs: 30
+patience: 30
+gamma: 0.5
+lr_step: 100
+gpus: [0]
+seed: 1
+activation: LeakyReLU
+num_workers: 0
+
+# these parameters can be overridden by the dataset config
+latent_size: 64
+batch_size: 256
+
+## Concept-based model parameters
+task_penalty: 0.1
+int_prob: 0.25
+
+hydra:
+  mode: MULTIRUN
+  sweeper:
+    params:
+      # implemented datasets: xor, dot, trigometry, checkmark, mnist_addition, cub, celeba, awa2, (cebab)
+      dataset: xor, cub, awa2, mnist_addition
+      # implemented models: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, 
+      #                     cmr, m_licem, v_cem, mv_cem, m_licem_pyc
+      model: blackbox, cbm_linear, cbm_mlp, cem, dcr, cmr, m_licem, m_licem_pyc 
+      seed: 1, 2, 3
+
+wandb:
+  project: "linear_memory_reasoner"
+  entity: "francescothesantis-politecnico-di-torino" 
+note: null
