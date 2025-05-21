@@ -22,6 +22,38 @@ import os
 CUB_CONCEPT_NAMES = [x for i, x in enumerate(cub_concept_semantics) if i in cub_selected_concepts]
 
 class loader(object):
+    """
+    Data loader class to manage loading, preprocessing, and batching of various datasets from PyC.
+
+    Args:
+        name (str): Name of the dataset to load.
+        batch_size (int): Number of samples per batch in DataLoader.
+        num_workers (int): Number of worker threads for loading data.
+        device (str or ListConfig): Device identifier (e.g. 'cuda', 'cpu') or omegaconf ListConfig.
+        selected_concepts (list, optional): Subset of concept names to use, if applicable.
+        class_attributes (list, optional): List of class attribute names used for tasks (especially for CelebA).
+
+    Attributes:
+        name (str): Dataset name.
+        batch_size (int): Batch size for DataLoaders.
+        num_workers (int): Number of workers for DataLoader.
+        device (str): Device to run on.
+        selected_concepts (list): Selected concept names.
+        task_names (list): Class attribute names used for task labels.
+        concept_groups (dict or None): Mapping of concepts to groups, if available.
+        transform (torchvision.transforms.Compose): Image preprocessing transformations.
+
+    Methods:
+        get_names():
+            Returns concept names, task names, and concept groups corresponding to the dataset.
+            Raises ValueError if dataset name is not recognized.
+
+        load_data():
+            Loads the dataset splits (train, validation, test) and returns DataLoaders.
+            Applies transformations, splits data as needed, and optionally applies embedding extraction
+            for certain datasets.
+            Raises ValueError if dataset name is not recognized.
+    """
     def __init__(self, 
                  name,
                  batch_size,
@@ -41,7 +73,7 @@ class loader(object):
         self.transform = transforms.Compose([
                 transforms.Resize((224, 224)),
                 transforms.ToTensor(),
-                transforms.Normalize(             # Normalize using ImageNet stats
+                transforms.Normalize(            # Normalize using ImageNet stats
                     mean=[0.485, 0.456, 0.406],
                     std=[0.229, 0.224, 0.225]
                 )

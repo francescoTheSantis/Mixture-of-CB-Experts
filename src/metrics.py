@@ -3,6 +3,9 @@ from torchmetrics import Metric
 from sklearn.metrics import f1_score, accuracy_score
 
 class Task_Accuracy(Metric):
+    """
+    Task accuracy metric of the pytorch_lightning model.
+    """
     def __init__(self, dist_sync_on_step=False):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
@@ -20,6 +23,9 @@ class Task_Accuracy(Metric):
     
 
 class Concept_Accuracy(Metric):
+    """
+    Concept accuracy metric of the pytorch_lightning model.
+    """
     def __init__(self, dist_sync_on_step=False):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
@@ -36,6 +42,9 @@ class Concept_Accuracy(Metric):
     
 
 def f1_acc_metrics(y_true, y_pred):
+    """
+    Calculate the F1 score and accuracy for the given true and predicted labels.
+    """
     # Convert PyTorch tensors to lists if necessary
     if isinstance(y_true, torch.Tensor):
         y_true = y_true.cpu().numpy().tolist()

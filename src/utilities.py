@@ -57,7 +57,9 @@ def parse_hyperparams(cfg: DictConfig):
     return hyperparams
 
 def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names, c_groups) -> DictConfig:
-    """ can be used to update the config based on the data, e.g., set input and output size """
+    """
+    Update the config with the input size, output size, and concept names.
+    """
     x, c, y = next(iter(train_loader))
     input_size = x.shape[1]
     concept_size = c.shape[1]

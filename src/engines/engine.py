@@ -5,7 +5,32 @@ import pytorch_lightning as pl
 from src.metrics import Task_Accuracy, Concept_Accuracy
 from collections import OrderedDict
 
-class Engine(pl.LightningModule):    
+class Engine(pl.LightningModule):  
+    """
+    PyTorch Lightning module wrapper.
+
+    Args:
+        model (Optional[nn.Module]): The pytorch model to train.
+        c_names (Optional[list]): List of concept names.
+        y_name (Optional[str]): Target variable name.
+
+    Attributes:
+        model (nn.Module): The wrapped model.
+        c_names (list): List of concept names.
+        y_name (str): Target variable name.
+        task_metric (Task_Accuracy): Metric to evaluate task prediction accuracy.
+        concept_metric (Concept_Accuracy): Metric to evaluate concept prediction accuracy.
+
+    Methods:
+        forward(input): Forward pass through the model.
+        predict(input): Alias for forward.
+        unpack_batch(batch): Extracts inputs, concepts, and targets from a batch.
+        shared_step(batch): Performs a forward pass, computes loss, and returns outputs and labels.
+        training_step(batch, batch_idx): Executes one training step and logs training loss.
+        validation_step(batch, batch_idx): Executes one validation step, computes and logs loss and accuracies.
+        test_step(batch, batch_idx): Executes one test step, computes and logs loss and accuracies.
+        configure_optimizers(): Returns the optimizer and learning rate scheduler.
+    """
     def __init__(self,
                 model: Optional[nn.Module] = None,
                 c_names: Optional[list] = None,

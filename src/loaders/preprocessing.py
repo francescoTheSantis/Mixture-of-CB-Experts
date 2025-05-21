@@ -7,6 +7,30 @@ from tqdm import tqdm
 import torch.nn.functional as F
 
 class EmbeddingExtractor:
+    """
+    Extracts image embeddings using a pre-trained backbone (Vision Transformer) and 
+    produces DataLoaders containing the respective embeddings instead of the original image.
+
+    Args:
+        train_loader (DataLoader): DataLoader for the training set, yielding (images, concepts, targets).
+        val_loader (DataLoader): DataLoader for the validation set.
+        test_loader (DataLoader): DataLoader for the test set.
+        device (str, optional): Device to run the model.
+        celeba (bool, optional): If True, it means the dataset that has been preprocessed is CelebA and applies special label processing.
+        task_names (list, optional): List of task names for multi-task settings (used with CelebA). Default is None.
+
+    Methods:
+        produce_loaders(selected_concepts=None, task_names=None):
+            Processes all splits and returns new DataLoaders with embeddings (instead of images), concepts, and labels.
+
+    Private Methods:
+        _extract_embeddings(loader):
+            Extracts embeddings, concepts, and labels from a given DataLoader.
+        _create_loader(embeddings, concepts, labels, batch_size):
+            Creates a DataLoader from embeddings, concepts, and labels.
+        _batch_binary_to_decimal_torch(binary_matrix):
+            Converts a batch of binary label vectors to decimal values (for CelebA multi-label tasks).
+    """
     def __init__(self, 
                  train_loader, 
                  val_loader, 
@@ -24,6 +48,7 @@ class EmbeddingExtractor:
 
         # Load ViT model pre-trained on ImageNet
         self.model = ViTModel.from_pretrained('google/vit-base-patch32-224-in21k')
+
         # Load ResNet34 model pre-trained on ImageNet
         #self.model = resnet34(pretrained=True)
         #self.model = nn.Sequential(*list(self.model.children())[:-1])
@@ -57,7 +82,7 @@ class EmbeddingExtractor:
                 outputs = outputs.flatten(start_dim=1)
                 embeddings.append(outputs.cpu())
                 if self.celeba:
-                    targets = self.batch_binary_to_decimal_torch(
+                    targets = self._batch_binary_to_decimal_torch(
                         torch.stack([targets[:,i] for i in range(len(self.task_names))], dim=1)
                     )
                 labels.append(targets.cpu())
@@ -78,7 +103,7 @@ class EmbeddingExtractor:
         dataset = TensorDataset(embeddings, concepts, labels)
         return DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
-    def batch_binary_to_decimal_torch(self, binary_matrix):
+    def _batch_binary_to_decimal_torch(self, binary_matrix):
         # Ensure binary_matrix is 2D (even if it has only one row)
         if binary_matrix.dim() == 1:
             binary_matrix = binary_matrix.unsqueeze(0)  # Add batch dimension

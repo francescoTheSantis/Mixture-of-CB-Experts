@@ -8,6 +8,9 @@ from src.metrics import f1_acc_metrics
 from tqdm import tqdm
 
 class Trainer:
+    """
+    Trainer class for the pytorch_lightning model.
+    """
     def __init__(self, model, cfg, wandb_logger, csv_logger):
         self.cfg = cfg
         self.wandb_logger = wandb_logger
@@ -63,6 +66,10 @@ class Trainer:
         self.trainer.test(self.model, test_dataloader, ckpt_path=self.trainer.checkpoint_callback.best_model_path)
 
     def interventions(self, test_dataloader):
+        """
+        Perform interventions on the test set and return the dataframe containing the results.
+        Interventional accuracy is computed for different levels of noise and intervention probability.
+        """
         intervention_df = pd.DataFrame(columns=['noise', 'p_int', 'f1', 'accuracy'])
         # Set the model on the right device
         self.model = self.model.to(self.cfg.gpus[0])

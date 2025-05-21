@@ -2,6 +2,36 @@ import torch.nn as nn
 import torch
 
 class BaseModel(nn.Module):
+    """
+    Base class for concept models (and blackbox).
+
+    Args:
+        input_size (int): Number of input features.
+        output_size (int): Number of output targets.
+        task (str): Task type, either 'classification' or 'regression'. Default is 'classification'.
+        activation (str): Name of the activation function to use in the encoder (e.g., 'ReLU').
+        latent_size (int): Size of the latent representation in the encoder. Default is 64.
+        c_groups (dict, optional): Dictionary defining concept groups for interventions.
+
+    Attributes:
+        encoder (nn.Sequential): Encoder mapping input to latent space.
+        task_loss_form (nn.Module): Loss function for the task.
+        concept_loss_form (nn.Module): Loss function for concepts.
+        task_penalty (float): Weighting factor for the task loss.
+        int_idxs (Tensor): Indices of intervened concepts (Default None).
+        test_interventions (bool): Whether to apply interventions during testing.
+        c_groups (dict): Concept groups for interventions.
+        current_epoch (int): Current training epoch.
+
+    Methods:
+        encode(input):
+            Encodes input data, computes indxes for applying concept interventions and add noise
+            to the latent embedding (if specified).
+        concept_based_loss(y_hat, y, c_hat=None, c=None):
+            Computes the following loss: L_{task}*task_penalty + L_{concepts} .
+        get_intervened_concepts_predictions(labels, groups=None):
+            Generates a mask for concept interventions based on intervention probability and groups.
+    """
     def __init__(self, 
                  input_size, 
                  output_size,
