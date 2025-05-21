@@ -12,12 +12,14 @@ class ConceptBottleneckModel(BaseModel):
                  task, 
                  task_penalty,
                  task_interpretable=True,
+                 neg_weights=False,
+                 bias=True,
                  activation='ReLU',
                  int_prob=0.1,
                  int_idxs=None,
                  noise=None,
                  latent_size = 128,
-                 c_groups=None
+                 c_groups=None,
                  ):
         
         super().__init__(
@@ -30,6 +32,7 @@ class ConceptBottleneckModel(BaseModel):
                  )
 
         self.task_interpretable = task_interpretable
+        self.neg_weights = neg_weights
         self.task_penalty = task_penalty
         self.c_names = list(c_names)
         self.int_prob = int_prob
@@ -44,7 +47,7 @@ class ConceptBottleneckModel(BaseModel):
 
         if self.task_interpretable:
             self.y_predictor = nn.Sequential(
-                nn.Linear(len(c_names), output_size)
+                nn.Linear(len(c_names), output_size, bias=bias)
             )
         else:
             self.y_predictor = nn.Sequential(
@@ -64,15 +67,16 @@ class ConceptBottleneckModel(BaseModel):
             intervention_idxs=int_idxs,
             intervention_rate=1.,
         )
-        y_pred = self.y_predictor(c_pred)
+        if self.neg_weights:
+            y_pred = self.y_predictor(2*c_pred - 1)
+        else:
+            y_pred = self.y_predictor(c_pred)
         return y_pred, c_pred
     
     def filter_output_for_loss(self, y_output, c_output=None):
         return y_output, c_output
     
     def loss(self, y_hat, y, c_hat=None, c=None):
-        if self.task == 'classification':
-            y = y.flatten().long()
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         return loss
 

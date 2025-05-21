@@ -1,0 +1,12 @@
+defaults:
+  - common
+  - _self_
+
+loader: 
+  name: xnor
+
+# Dataset parameters
+metadata:
+  task: classification
+  lr: 0.005
+  name: xnor

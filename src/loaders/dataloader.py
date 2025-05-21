@@ -54,7 +54,7 @@ class loader(object):
             for certain datasets.
             Raises ValueError if dataset name is not recognized.
     """
-    def __init__(self, 
+    def __init__(self,
                  name,
                  batch_size,
                  num_workers,
@@ -84,7 +84,12 @@ class loader(object):
         if self.name in ['xor', 'trigonometry', 'dot', 'checkmark']:
             dataset = ToyDataset(self.name, size=1000, random_state=42)
             concept_names = dataset.concept_attr_names
-            task_names = ['0', '1']
+            task_names = [self.name] #['0', '1']
+            concept_groups = None
+        elif self.name in ['xnor', 'nor']:
+            dataset = ToyDataset('xor', size=1000, random_state=42)
+            concept_names = dataset.concept_attr_names
+            task_names = [self.name] #['0', '1']
             concept_groups = None
         elif self.name in ['mnist_addition']:
             train_dataset = MNISTAddition(root=DATA_PATH, train=True)
@@ -121,6 +126,28 @@ class loader(object):
             train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
                 dataset, [0.7, 0.1, 0.2]
             )
+
+        elif self.name == 'xnor':
+            dataset = ToyDataset('xor', size=1000, random_state=42)
+            # split the dataset
+            dataset.task_labels = 1 - dataset.task_labels
+            dataset.name = 'xnor'
+            dataset.task_attr_names = 'xnor'
+            train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
+                dataset, [0.7, 0.1, 0.2]
+            )
+
+        elif self.name == 'nor':
+            dataset = ToyDataset('xor', size=1000, random_state=42)
+            # split the dataset
+            dataset.task_labels = ((dataset.data[:, 0] < 0.5).float() *
+                                   (dataset.data[:, 1] < 0.5).float())
+            dataset.name = 'nor'
+            dataset.task_attr_names = 'nor'
+            train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
+                dataset, [0.7, 0.1, 0.2]
+            )
+
         elif self.name == 'mnist_addition':
             train_dataset = MNISTAddition(root=DATA_PATH, train=True)
             test_dataset = MNISTAddition(root=DATA_PATH, train=False)
@@ -136,10 +163,12 @@ class loader(object):
         elif self.name == 'celeba':
             train_dataset = CelebADataset(root=DATA_PATH, split='train', 
                                           class_attributes=self.task_names,
-                                          transform=self.transform)
+                                          transform=self.transform,
+                                          download=True)
             test_dataset = CelebADataset(root=DATA_PATH, split='test', 
                                          class_attributes=self.task_names,
-                                         transform=self.transform)
+                                         transform=self.transform,
+                                         download=True)
             train_size = int(0.9 * len(train_dataset))
             val_size = len(train_dataset) - train_size
             train_dataset, val_dataset = random_split(train_dataset, 

@@ -107,12 +107,8 @@ class LinearMemoryReasoner(BaseModel):
         return y_output, c_output 
     
     def loss(self, y_hat, y, c_hat=None, c=None):
-        if self.task == 'classification':
-            y = y.flatten().long()
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         # Add L1 regularization on the weights of the equation memory
         # to encourage sparsity
         loss += self.weight_reg * self.equation_memory.weight.norm(p=1)
         return loss
-
-

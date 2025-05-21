@@ -1,0 +1,14 @@
+defaults:
+  - common
+  - _self_
+
+loader: 
+  name: nor
+
+# Dataset parameters
+metadata:
+  task: classification
+  lr: 0.01
+  name: nor
+
+latent_size: 8

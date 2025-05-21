@@ -42,7 +42,8 @@ def set_loggers(cfg):
                                name=name,
                                group=group,
                                tags=tags)
-    csv_logger = CSVLogger("logs/", 
+        wandb_logger.log_hyperparams(parse_hyperparams(cfg))
+    csv_logger = CSVLogger("logs/",
                            name="experiment_metrics")
     return wandb_logger, csv_logger
 
@@ -63,7 +64,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names, c_g
     x, c, y = next(iter(train_loader))
     input_size = x.shape[1]
     concept_size = c.shape[1]
-    n_labels = len(y_names) if len(y_names) > 1 else 2
+    n_labels = len(y_names)
     if c_groups is None or not isinstance(c_groups, dict):
         c_groups = c_groups
     else:

@@ -40,6 +40,7 @@ for exp in exps_path:
             with open(result_file, 'r') as file:
                 result = pd.read_csv(file, header=0)
 
+            # Select the last row of the dataframe where we test the model
             d['task'] = result['test_task_acc'].iloc[-1]
             if conf['model']['metadata']['name']=='blackbox':
                 d['concept'] = 0

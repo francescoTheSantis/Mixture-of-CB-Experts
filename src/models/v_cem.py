@@ -157,8 +157,6 @@ class VariationalConceptEmbeddingModel(BaseModel):
 
     def v_loss(self, y_pred, y, c_pred, c):
         # Concept + Task loss
-        if self.task == 'classification':
-            y = y.flatten().long()
         concept_task_loss = self.concept_based_loss(y_pred, y, c_pred, c)
 
         # KL divergence

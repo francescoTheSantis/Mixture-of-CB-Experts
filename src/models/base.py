@@ -60,7 +60,10 @@ class BaseModel(nn.Module):
         # Flatten the first dimension of x in the forward pass
 
         if task == 'classification':
-            self.task_loss_form = nn.CrossEntropyLoss()
+            if output_size > 1:
+                self.task_loss_form = nn.CrossEntropyLoss()
+            else:
+                self.task_loss_form = nn.BCEWithLogitsLoss()
         elif task == 'regression':
             self.task_loss_form = nn.MSELoss()
 
@@ -92,6 +95,11 @@ class BaseModel(nn.Module):
         return x, c_true, int_idxs
     
     def concept_based_loss(self, y_hat, y, c_hat=None, c=None):
+        if self.task == 'classification':
+            if self.output_size > 1:
+                y = y.flatten().long()
+            else:
+                y = y.flatten().float()
         # task loss
         task_loss = self.task_loss_form(y_hat.squeeze(), y)
         # concept loss

@@ -107,8 +107,6 @@ class LinearConceptEmbeddingModel(BaseModel):
         return y_output, c_output
     
     def loss(self, y_hat, y, c_hat=None, c=None):
-        if self.task == 'classification':
-            y = y.flatten().long()
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         # adding l1 regularization to the weights
         w_loss = self.weight_reg * self.__predicted_weights.norm(p=2)

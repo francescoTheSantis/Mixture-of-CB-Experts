@@ -1,0 +1,14 @@
+defaults:
+  - common
+  - _self_
+  
+params:
+  _target_: "src.models.cbm.ConceptBottleneckModel"
+  task_penalty: ${task_penalty}
+  task_interpretable: true
+  int_prob: ${int_prob}
+  neg_weights: false
+  bias: false
+
+metadata:
+  name: cbm_linear_no_bias
