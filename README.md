@@ -1,20 +1,25 @@
 # Linear-Memory-Reasoner
 
-Instructions to Execute the Code in This Repository:
+### Setup and Execution
 
-1. Create the Conda environment:
+1. **Create the Conda environment**:
     ```
     conda env create -f environment.yml
     ```
 
-2. Activate the environment:
+2. **Activate the environment***:
     ```
     conda activate lmr
     ```
 
-3. Run the experiments using the configuration in `conf/sweep.yaml`:
+3. **Set the following environmental variables in** `env.py`:
+    - `HOME`, Path to the project
+    - `DATA_PATH`, Path to the datasets
+    - (Optional) `PROJECT_NAME`, Name of the project
+
+4. **Run the experiments using the configuration in** `conf/sweep.yaml`:
     ```
     python main.py --config-name sweep
     ```
 
-To modify training parameters, datasets, or models, edit the respective configurations in `conf/...` as needed before running the experiments.
+**NOTE:** To modify training settings, datasets, or models, update the corresponding files in the `conf/` directory before running experiments.

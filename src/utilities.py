@@ -18,11 +18,21 @@ def set_seed(seed: int):
     torch.cuda.manual_seed_all(seed)
 
 def set_loggers(cfg):
+    """ Set the loggers for the experiment """
+    # Update the note in the config: if it is None, set it to an empty string
+    with open_dict(cfg):
+        cfg.update(
+            note = "" if cfg.note is None else cfg.note
+        )
     name = f"seed{cfg.seed}.{int(time())}"
     group_format = (
         "{dataset}_"
-        "{model}"
+        "{model}_"
+        "{note}"
     )
+    # Define the tags for wandb
+    tags = [cfg.dataset.metadata.name, cfg.model.metadata.name, cfg.note]
+    # Define the group for wandb
     group = group_format.format(**parse_hyperparams(cfg))
     if cfg.wandb.project is None or cfg.wandb.entity is None:
         wandb_logger = None
@@ -30,7 +40,8 @@ def set_loggers(cfg):
         wandb_logger = WandbLogger(project=cfg.wandb.project, 
                                entity=cfg.wandb.entity, 
                                name=name,
-                               group=group)
+                               group=group,
+                               tags=tags)
     csv_logger = CSVLogger("logs/", 
                            name="experiment_metrics")
     return wandb_logger, csv_logger
@@ -41,6 +52,7 @@ def parse_hyperparams(cfg: DictConfig):
         "model": cfg.model.metadata.name,
         "seed": cfg.seed,
         "hydra_cfg": OmegaConf.to_container(cfg),
+        "note": cfg.note,
     }
     return hyperparams
 
