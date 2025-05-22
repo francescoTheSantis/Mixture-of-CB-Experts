@@ -12,7 +12,7 @@ class ConceptBottleneckModel(BaseModel):
                  task, 
                  task_penalty,
                  task_interpretable=True,
-                 neg_weights=False,
+                 neg_concepts=False,
                  bias=True,
                  activation='ReLU',
                  int_prob=0.1,
@@ -32,7 +32,7 @@ class ConceptBottleneckModel(BaseModel):
                  )
 
         self.task_interpretable = task_interpretable
-        self.neg_weights = neg_weights
+        self.neg_concepts = neg_concepts
         self.task_penalty = task_penalty
         self.c_names = list(c_names)
         self.int_prob = int_prob
@@ -67,7 +67,7 @@ class ConceptBottleneckModel(BaseModel):
             intervention_idxs=int_idxs,
             intervention_rate=1.,
         )
-        if self.neg_weights:
+        if self.neg_concepts:
             y_pred = self.y_predictor(2*c_pred - 1)
         else:
             y_pred = self.y_predictor(c_pred)
