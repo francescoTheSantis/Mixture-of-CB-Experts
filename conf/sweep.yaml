@@ -3,7 +3,7 @@ defaults:
   - model: blackbox
   - engine: engine
 
-## Common parameters
+# Common parameters
 max_epochs: 500
 min_epochs: 30
 patience: 30
@@ -22,11 +22,17 @@ batch_size: 256
 task_penalty: 0.1
 int_prob: 0.25
 
+# Set this parameter to True if you want to use the stored, preprocessed dataset,
+# otherwise it will be preprocessed from scratch and saved in the cache. 
+use_stored_dataset: True
+
 hydra:
   mode: MULTIRUN
   sweeper:
     params:
-      # implemented datasets: xor, dot, trigometry, checkmark, mnist_addition, cub, celeba, awa2, (cebab)
+      # implemented toy datasets: xor, nor, xnor, dot, trigometry, checkmark 
+      # implemented image datasets: mnist_addition, cub, celeba, awa2
+      # implemented textual datasets: ...
       dataset: xor, cub, awa2, mnist_addition
       # implemented models: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, 
       #                     cmr, m_licem, v_cem, mv_cem, m_licem_pyc

@@ -8,7 +8,7 @@ loader:
 # Dataset parameters
 metadata:
   task: classification
-  lr: 0.01
+  lr: 0.1
   name: nor
 
 latent_size: 8

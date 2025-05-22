@@ -130,7 +130,7 @@ class loader(object):
         elif self.name == 'xnor':
             dataset = ToyDataset('xor', size=1000, random_state=42)
             # split the dataset
-            dataset.task_labels = 1 - dataset.task_labels
+            dataset.target_labels = 1 - dataset.target_labels
             dataset.name = 'xnor'
             dataset.task_attr_names = 'xnor'
             train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
@@ -140,7 +140,7 @@ class loader(object):
         elif self.name == 'nor':
             dataset = ToyDataset('xor', size=1000, random_state=42)
             # split the dataset
-            dataset.task_labels = ((dataset.data[:, 0] < 0.5).float() *
+            dataset.target_labels = ((dataset.data[:, 0] < 0.5).float() *
                                    (dataset.data[:, 1] < 0.5).float())
             dataset.name = 'nor'
             dataset.task_attr_names = 'nor'

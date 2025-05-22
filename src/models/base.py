@@ -107,7 +107,7 @@ class BaseModel(nn.Module):
         for i in range(c.shape[1]):
             concept_loss += self.concept_loss_form(c_hat[:,i], c[:,i])
         concept_loss /= c.shape[1]
-        # combine the two losses
+        # combine the two losses by considering the task penalty regularization
         loss = concept_loss + self.task_penalty * task_loss
         return loss
         

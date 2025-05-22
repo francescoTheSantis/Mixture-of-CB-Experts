@@ -8,5 +8,7 @@ loader:
 # Dataset parameters
 metadata:
   task: classification
-  lr: 0.005
+  lr: 0.1
   name: xnor
+
+latent_size: 8
