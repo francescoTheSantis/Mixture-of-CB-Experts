@@ -8,7 +8,7 @@ params:
   int_prob: ${int_prob}
   memory_size: 7
   weight_reg: 0 #1e-4
-  mc_approx: 10
+  mc_approx: 20
 
 metadata:
   name: m_licem

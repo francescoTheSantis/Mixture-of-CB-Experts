@@ -22,12 +22,12 @@ def set_loggers(cfg):
     # Update the note in the config: if it is None, set it to an empty string
     with open_dict(cfg):
         cfg.update(
-            note = "" if cfg.note is None else cfg.note
+            note = "_" if cfg.note is None else "_"+str(cfg.note)
         )
     name = f"seed{cfg.seed}.{int(time())}"
     group_format = (
         "{dataset}_"
-        "{model}_"
+        "{model}"
         "{note}"
     )
     # Define the tags for wandb

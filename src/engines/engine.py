@@ -64,36 +64,54 @@ class Engine(pl.LightningModule):
         # model forward
         model_output = self.forward(inputs)
         # Compute loss
-        y_output, c_output = self.model.filter_output_for_loss(*model_output)
-        loss = self.model.loss(y_output, y, c_output, c)
-        return loss, y_output, c_output, y, c
+        y_loss, c_loss = self.model.filter_output_for_loss(*model_output)
+        loss = self.model.loss(y_loss, y, c_loss, c)
+        return loss, model_output, y, c
 
     def training_step(self, batch, batch_idx):
         self.model.current_epoch = self.current_epoch
-        loss, y_output, c_output, y, c = self.shared_step(batch)
+        loss, model_output, y, c = self.shared_step(batch)
         self.log("train_loss", loss)
-        y_output, c_output = self.model.filter_output_for_metric(y_output, c_output)
-        task_acc = self.task_metric(y_output, y)
+        output_x_metrics = self.model.filter_output_for_metric(*model_output)
+        task_acc = self.task_metric(output_x_metrics[0], y)
         self.log('train_task_acc', task_acc)
         if self.model.has_concepts:
-            concept_acc = self.concept_metric(c_output, c)
+            concept_acc = self.concept_metric(output_x_metrics[1], c)
             self.log('train_concept_acc', concept_acc)
+        # If the name of the class is LinearMemoryReasoner,
+        # compute the selection entropy
+        if self.model.__class__.__name__ == 'LinearMemoryReasoner':
+            # Compute the entropy of the selection distribution
+            selection_dist = model_output[3]
+            selection_dist = torch.softmax(selection_dist, dim=-1)
+            selection_entropy = -torch.sum(selection_dist * torch.log(selection_dist + 1e-10), dim=1)
+            selection_entropy = selection_entropy.mean()
+            self.log('train_selection_entropy', selection_entropy)
         return loss      
 
     def validation_step(self, batch, batch_idx):
-        loss, y_output, c_output, y, c = self.shared_step(batch)
+        loss, model_output, y, c = self.shared_step(batch)
         self.log("val_loss", loss)
-        y_output, c_output = self.model.filter_output_for_metric(y_output, c_output)
+        y_output, c_output = self.model.filter_output_for_metric(*model_output)
         task_acc = self.task_metric(y_output, y)
         self.log('val_task_acc', task_acc)
         if self.model.has_concepts:
             concept_acc = self.concept_metric(c_output, c)
             self.log('val_concept_acc', concept_acc)
+        # If the name of the class is LinearMemoryReasoner,
+        # compute the selection entropy
+        if self.model.__class__.__name__ == 'LinearMemoryReasoner':
+            # Compute the entropy of the selection distribution
+            selection_dist = model_output[3]
+            selection_dist = torch.softmax(selection_dist, dim=-1)
+            selection_entropy = -torch.sum(selection_dist * torch.log(selection_dist + 1e-10), dim=1)
+            selection_entropy = selection_entropy.mean()
+            self.log('val_selection_entropy', selection_entropy)
         return loss 
     
     def test_step(self, batch, batch_idx):
-        loss, y_output, c_output, y, c = self.shared_step(batch)
-        y_output, c_output = self.model.filter_output_for_metric(y_output, c_output)
+        loss, model_output, y, c = self.shared_step(batch)
+        y_output, c_output = self.model.filter_output_for_metric(*model_output)
         self.log("test_loss", loss)
         task_acc = self.task_metric(y_output, y)
         self.log('test_task_acc', task_acc)

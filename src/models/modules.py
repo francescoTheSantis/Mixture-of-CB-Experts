@@ -48,7 +48,7 @@ class LinearMemoryClassifier(nn.Module):
         # Number of samples for the Monte-Carlo approximation
         self.mc_approx = mc_approx
 
-    def compute_temperature(self, current_epoch, tau_init=1, tau_min=0.1, decay_rate=0.99):
+    def compute_temperature(self, current_epoch, tau_init=1, tau_min=0.4, decay_rate=0.99):
         # The temperature is decayed from initial_temp to min_temp
         # over the course of the training
         tau = max(tau_min, tau_init * decay_rate ** current_epoch)
@@ -66,6 +66,8 @@ class LinearMemoryClassifier(nn.Module):
         # This implies computing the logits of the categorical distribution
         # that will be used to sample the CBM.
         selection = self.selector(c_emb)
+        # Store a copy of the selection for metrics
+        selection_dist = selection.clone()
         selection = selection.unsqueeze(-1)
 
         # Reshape the memory bank to match the selection
@@ -82,6 +84,7 @@ class LinearMemoryClassifier(nn.Module):
 
         selection = selection.expand(-1, -1, n_samples)
         
+        # Sample from the categorical distribution using the Gumbel-Softmax
         # Dimension: (bsz, memory_size, n_samples)
         selection = F.gumbel_softmax(selection, 
                                     tau=current_tau, 
@@ -101,7 +104,7 @@ class LinearMemoryClassifier(nn.Module):
         # Add the global biases
         y_probs = y_probs + self.biases.unsqueeze(0).unsqueeze(-1).expand(bsz, -1, n_samples)
 
-        return y_probs, c_pred, predicted_cbm
+        return y_probs, c_pred, predicted_cbm, selection_dist
     
     def forward(self, c_emb, c_pred, current_epoch=0):
         return self.classify(c_emb, c_pred, current_epoch)

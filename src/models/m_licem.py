@@ -75,21 +75,21 @@ class LinearMemoryReasoner(BaseModel):
         c_pred = c_dict['c_int']
 
         # Predict a CBM from the memory bank and classify the samples in the batch
-        y_pred, c_pred, predicted_cbm = self.classifier(c_emb, c_pred, self.current_epoch)
-        return y_pred, c_pred, predicted_cbm
+        y_pred, c_pred, predicted_cbm, selection_dist = self.classifier(c_emb, c_pred, self.current_epoch)
+        return y_pred, c_pred, predicted_cbm, selection_dist
 
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         loss += self.classifier.sparsity_loss()
         return loss
     
-    def filter_output_for_metric(self, y_output, c_output=None):
+    def filter_output_for_metric(self, y_output, c_output=None, predicted_cbm=None, distribution_over_memory=None):
         # Average over the last dimension, which contains the samples
         # form the Monte Carlo approximation.
         y_output = y_output.mean(dim=-1)
         return y_output, c_output
     
-    def filter_output_for_loss(self, y_output, c_output=None, predicted_cbm=None):
+    def filter_output_for_loss(self, y_output, c_output=None, predicted_cbm=None, distribution_over_memory=None):
         # This models return the predicted CBM in addition to the usual
         # y and c predictions. The loss function needs only y and c to be computed.
         return y_output, c_output
