@@ -66,9 +66,6 @@ class LinearMemoryReasoner(VariationalConceptEmbeddingModel):
         y_pred = self.classifier(c_emb, c_pred, self.current_epoch)
         return y_pred, c_pred
 
-    def filter_output_for_loss(self, y_output, c_output=None):
-        return y_output, c_output
-    
     def loss(self, y_pred, y, c_pred, c):
         loss = self.v_loss(y_pred, y, c_pred, c)
         loss += self.classifier.sparsity_loss()

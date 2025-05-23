@@ -101,7 +101,14 @@ class BaseModel(nn.Module):
             else:
                 y = y.flatten().float()
         # task loss
-        task_loss = self.task_loss_form(y_hat.squeeze(), y)
+        task_loss = 0
+        # In case of Monte Carlo sampling
+        if y_hat.ndim == 3:
+            for i in range(y_hat.shape[-1]):
+                task_loss += self.task_loss_form(y_hat[:,:,i].squeeze(), y)
+            task_loss /= y_hat.shape[-1]
+        else:
+            task_loss = self.task_loss_form(y_hat.squeeze(), y)
         # concept loss
         concept_loss = 0
         for i in range(c.shape[1]):
@@ -140,3 +147,17 @@ class BaseModel(nn.Module):
             mask = mask.int()
 
         return mask
+    
+    def filter_output_for_loss(self, y_output, c_output=None):
+        """
+        Filter the output of the model for loss computation.
+        This method can be overridden in subclasses to customize the output filtering.
+        """
+        return y_output, c_output
+    
+    def filter_output_for_metrics(self, y_output, c_output=None):
+        """
+        Filter the output of the model for metrics computation.
+        This method can be overridden in subclasses to customize the output filtering.
+        """
+        return y_output, c_output

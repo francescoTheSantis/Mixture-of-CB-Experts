@@ -12,7 +12,8 @@ class LinearMemoryClassifier(nn.Module):
                  embedding_size = 16,
                  latent_size = 128,
                  memory_size=7,
-                 weight_reg=1e-4
+                 weight_reg=1e-4,
+                 mc_approx=10
                 ):
         super().__init__()
 
@@ -24,18 +25,28 @@ class LinearMemoryClassifier(nn.Module):
         self.weight_reg = weight_reg
         self.output_size = output_size
 
-        # Parameters specific to this model.
+        # Parameters specific to this model
         self.memory_size = memory_size
-        # The memory bank is composed by the concepts and the biases
+
+        # The memory bank is composed by multiple CBMs
         self.memory_bank = nn.Parameter(
-            torch.randn(memory_size, output_size, len(c_names)+1)
+            torch.randn(memory_size, output_size, len(c_names))
         )
 
+        # The global class biases
+        self.biases = nn.Parameter(
+            torch.randn(output_size)
+        )
+
+        # The selector is an MLP that selects 1 CBM from the memory bank
         self.selector = nn.Sequential(
             nn.Linear(embedding_size * len(self.c_names), latent_size),
             getattr(nn, activation)(),
-            nn.Linear(latent_size, self.memory_size * output_size)
+            nn.Linear(latent_size, memory_size)
         )
+    
+        # Number of samples for the Monte-Carlo approximation
+        self.mc_approx = mc_approx
 
     def compute_temperature(self, current_epoch, tau_init=1, tau_min=0.1, decay_rate=0.99):
         # The temperature is decayed from initial_temp to min_temp
@@ -46,39 +57,56 @@ class LinearMemoryClassifier(nn.Module):
     def classify(self, c_emb, c_pred, current_epoch=0):
         memory_bank = self.memory_bank
         bsz = c_emb.shape[0]
+
         # Prepare the parameters needed for the selector to sample from the memory bank
         current_tau = self.compute_temperature(current_epoch)
         c_emb = c_emb.view(bsz, -1)
+
+        # For each sample, we select the corresponding CBM in the memory bank.
+        # This implies computing the logits of the categorical distribution
+        # that will be used to sample the CBM.
         selection = self.selector(c_emb)
-        selection = selection.view(-1, self.output_size, self.memory_size)
+        selection = selection.unsqueeze(-1)
 
         # Reshape the memory bank to match the selection
+        # Dimension: (bsz, memory_size, output_size, len(c_names))
         memory_bank = memory_bank.unsqueeze(0).expand(bsz, -1, -1, -1)
 
-        # Sample and reshape
-        selection = F.softmax(selection, dim=-1)
-        #selection = F.gumbel_softmax(selection, tau=current_tau, hard=False)
-        selection = selection.unsqueeze(-1).repeat(1, 1, 1, memory_bank.shape[-1])
-        selection = selection.permute(0, 1, 3, 2)
+        # At training time, we sample multiple times (Monte-Carlo approximation)
+        # from a categorical distribution
+        # At inference time, only one sample is taken
+        if self.training:
+           n_samples = self.mc_approx
+        else:
+           n_samples = 1
 
-        y_probs = torch.zeros(bsz, self.output_size, device=c_emb.device)
-        for i in range(self.output_size):
-            # Use the sampled selection to get the concepts from memory bank.
-            mat_prod = torch.bmm(selection[:, i, :, :], memory_bank[:, :, i, :])
-            weights_bias = torch.diagonal(mat_prod, dim1 = -2, dim2 = -1)
-            # Get the bias from the memory bank
-            bias = weights_bias[:, -1]
-            # Get the weights from the memory bank
-            weights = weights_bias[:, :-1]
-            # Compute the final prediction as a weighted sum of weights and concepts
-            y_probs[:,i] = torch.bmm(weights.unsqueeze(1), c_pred.unsqueeze(-1)).squeeze()
-            # Add bias
-            y_probs[:,i] += bias
-        return y_probs
+        selection = selection.expand(-1, -1, n_samples)
+        
+        # Dimension: (bsz, memory_size, n_samples)
+        selection = F.gumbel_softmax(selection, 
+                                    tau=current_tau, 
+                                    hard=True,
+                                    dim=1)
+
+        # Select the CBM from the memory bank
+        # Dimension: (bsz, output_size, len(c_names), n_samples)
+        predicted_cbm = torch.einsum('bmtc,bms->btcs', memory_bank, selection)
+
+        # Classify the sample by computing the matrix multiplication
+        # between the selected CBM and the concept predictions
+        # Dimension: (bsz, output_size, n_samples)
+        expanded_c_pred = c_pred.unsqueeze(-1).expand(-1, -1, n_samples)
+        y_probs = torch.einsum('bcs,btcs->bts', expanded_c_pred, predicted_cbm)
+
+        # Add the global biases
+        y_probs = y_probs + self.biases.unsqueeze(0).unsqueeze(-1).expand(bsz, -1, n_samples)
+
+        return y_probs, c_pred, predicted_cbm
     
     def forward(self, c_emb, c_pred, current_epoch=0):
         return self.classify(c_emb, c_pred, current_epoch)
     
     def sparsity_loss(self):
-        loss = self.weight_reg * self.memory_bank[:,:,:-1].norm(p=1)
+        # The sparsity loss is computed as the L1 norm of the memory bank
+        loss = self.weight_reg * self.memory_bank.norm(p=1)
         return loss

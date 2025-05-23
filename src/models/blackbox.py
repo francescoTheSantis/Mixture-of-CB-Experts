@@ -37,9 +37,6 @@ class BlackBox(BaseModel):
         y_hat = self.predictor(x)
         return y_hat, None
     
-    def filter_output_for_loss(self, y_output, c_output=None):
-        return y_output, c_output
-    
     def loss(self, y_hat, y, c_hat=None, c=None):
         if self.task == 'classification' and self.output_size > 1:
             y = y.flatten().long()

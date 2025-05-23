@@ -70,13 +70,20 @@ class Engine(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         self.model.current_epoch = self.current_epoch
-        loss, _, _, _, _ = self.shared_step(batch)
+        loss, y_output, c_output, y, c = self.shared_step(batch)
         self.log("train_loss", loss)
+        y_output, c_output = self.model.filter_output_for_metric(y_output, c_output)
+        task_acc = self.task_metric(y_output, y)
+        self.log('train_task_acc', task_acc)
+        if self.model.has_concepts:
+            concept_acc = self.concept_metric(c_output, c)
+            self.log('train_concept_acc', concept_acc)
         return loss      
 
     def validation_step(self, batch, batch_idx):
         loss, y_output, c_output, y, c = self.shared_step(batch)
         self.log("val_loss", loss)
+        y_output, c_output = self.model.filter_output_for_metric(y_output, c_output)
         task_acc = self.task_metric(y_output, y)
         self.log('val_task_acc', task_acc)
         if self.model.has_concepts:
@@ -86,6 +93,7 @@ class Engine(pl.LightningModule):
     
     def test_step(self, batch, batch_idx):
         loss, y_output, c_output, y, c = self.shared_step(batch)
+        y_output, c_output = self.model.filter_output_for_metric(y_output, c_output)
         self.log("test_loss", loss)
         task_acc = self.task_metric(y_output, y)
         self.log('test_task_acc', task_acc)

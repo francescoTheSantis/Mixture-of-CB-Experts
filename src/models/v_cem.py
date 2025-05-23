@@ -152,9 +152,6 @@ class VariationalConceptEmbeddingModel(BaseModel):
         d_kl = 0.5 * (dot_prod - self.embedding_size - logvar_q.sum(dim=-1) + logvar_q.exp().sum(dim=-1)) 
         return d_kl.mean() # average over the batch and concepts dimension
 
-    def filter_output_for_loss(self, y_output, c_output=None):
-        return y_output, c_output
-
     def v_loss(self, y_pred, y, c_pred, c):
         # Concept + Task loss
         concept_task_loss = self.concept_based_loss(y_pred, y, c_pred, c)

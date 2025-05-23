@@ -62,10 +62,7 @@ class ConceptEmbeddingModel(BaseModel):
         c_pred = c_dict['c_int']
         y_pred = self.y_predictor(c_emb.flatten(-2))
         return y_pred, c_pred
-    
-    def filter_output_for_loss(self, y_output, c_output=None):
-        return y_output, c_output
-    
+
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         return loss

@@ -134,9 +134,6 @@ class ConceptMemoryReasoner(BaseModel):
             
         return y_pred, c_pred
     
-    def filter_output_for_loss(self, y_output, c_output=None):
-        return y_output, c_output
-    
     def loss(self, y_hat, y, c_hat=None, c=None):
         # one hot encode the y variable
         if self.task == 'classification':
