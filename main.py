@@ -47,7 +47,7 @@ def main(cfg: DictConfig) -> None:
     c_names, y_names, c_groups = loader.get_names()
 
     # Set the c_names and y_names in the config
-    cfg = update_config_from_data(cfg, loaded_train, c_names, y_names, c_groups)
+    cfg = update_config_from_data(cfg, loaded_train, c_names, y_names, c_groups, csv_logger.log_dir)
 
     ###### Instantiate the model ######
     model = instantiate(cfg.engine)

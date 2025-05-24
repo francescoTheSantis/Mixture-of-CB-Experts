@@ -4,7 +4,7 @@ from src.models.base import BaseModel
 from src.models.modules import LinearMemoryClassifier
 import torch_concepts.nn as pyc_nn
 
-class LinearMemoryReasoner(BaseModel):
+class PredictCBM(BaseModel):
     def __init__(self, 
                  input_size, 
                  output_size,
@@ -83,7 +83,7 @@ class LinearMemoryReasoner(BaseModel):
         loss += self.classifier.sparsity_loss()
         return loss
     
-    def filter_output_for_metric(self, y_output, c_output=None, predicted_cbm=None, distribution_over_memory=None):
+    def filter_output_for_metrics(self, y_output, c_output=None, predicted_cbm=None, distribution_over_memory=None):
         # Average over the last dimension, which contains the samples
         # form the Monte Carlo approximation.
         y_output = y_output.mean(dim=-1)

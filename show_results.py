@@ -6,6 +6,7 @@ import warnings
 import os
 import yaml
 from matplotlib.ticker import FuncFormatter
+from src.utilities import plot_explanations
 
 # I used scienceplots for the style of the plots,
 # but you can use any other style you want.
@@ -13,12 +14,12 @@ warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
 # List the paths containing the results
-paths = ["/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-05-19/16-55-28"]
-
+paths = ["/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-05-24/14-57-51"]
 
 ###### Collect results regarding concept/task performance ######
 
 exps_path = []
+lmr_paths = []
 for path in paths:
     exps = os.listdir(path)
     exps_path += [os.path.join(path, exp) for exp in exps if 'multirun' not in exp]
@@ -48,10 +49,19 @@ for exp in exps_path:
                 d['concept'] = result['test_concept_acc'].iloc[-1]
 
             print(d)
+            
+            if d['model'] == 'm_licem' and d['seed']==1:
+                expl_dict = d.copy()
+                expl_dict['path'] = exp
+                lmr_paths.append(expl_dict)
+
             performance = pd.concat([performance, pd.DataFrame([d])], ignore_index=True)
         except:
             pass
 
+
+######### Only for the PredCBM with seed=1, plot explanations #########
+plot_explanations(lmr_paths)
 
 ########## Task & Concept Accuracy Plot ##########
 

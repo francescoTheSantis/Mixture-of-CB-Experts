@@ -3,11 +3,11 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.m_licem.LinearMemoryReasoner"
+  _target_: "src.models.m_licem.PredictCBM"
   task_penalty: ${task_penalty}
   int_prob: ${int_prob}
   memory_size: 7
-  weight_reg: 0 #1e-4
+  weight_reg: 1e-3
   mc_approx: 20
 
 metadata:

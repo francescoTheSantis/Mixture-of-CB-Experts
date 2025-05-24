@@ -45,12 +45,24 @@ class Trainer:
             callbacks=[early_stopping, checkpoint_callback, lr_monitor],
             logger=loggers,
             devices=self.cfg.gpus,  
-            accelerator="gpu" 
+            accelerator="gpu", 
         )
 
         # Optimizer
-        self.optimizer = AdamW(self.model.parameters(), lr=self.cfg.dataset.metadata.lr)
-        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=self.cfg.lr_step, gamma=self.cfg.gamma, verbose=True)
+        self.optimizer = AdamW(self.model.parameters(), 
+                               lr=self.cfg.dataset.metadata.lr)
+        #self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=self.cfg.lr_step, gamma=self.cfg.gamma, verbose=True)
+        LR_on_plateau = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 
+                                                                   mode='min', 
+                                                                   factor=self.cfg.gamma, 
+                                                                   patience=self.cfg.lr_patience, 
+                                                                   verbose=True)
+        self.scheduler = {
+            'scheduler': LR_on_plateau,
+            'monitor': 'val_loss',  
+            'interval': 'epoch',
+            'frequency': 1
+        }
 
         # Set the optimizer in the repsective model
         self.model.optimizer = self.optimizer
@@ -91,6 +103,7 @@ class Trainer:
                         inputs = {'x':x, 'c':c, 'y':y}
                         self.model.model.int_prob = p_int
                         output = self.model.forward(inputs)
+                        output = self.model.model.filter_output_for_metrics(*output)
                         y_pred = output[0]
                         y_preds.append(y_pred)
                         y_trues.append(y)
