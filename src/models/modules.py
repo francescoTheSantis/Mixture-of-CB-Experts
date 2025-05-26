@@ -66,6 +66,7 @@ class LinearMemoryClassifier(nn.Module):
         # This implies computing the logits of the categorical distribution
         # that will be used to sample the CBM.
         selection = self.selector(c_emb)
+        
         # Store a copy of the selection for metrics
         selection_dist = selection.clone()
         selection = selection.unsqueeze(-1)
@@ -104,7 +105,7 @@ class LinearMemoryClassifier(nn.Module):
         # Add the global biases
         y_probs = y_probs + self.biases.unsqueeze(0).unsqueeze(-1).expand(bsz, -1, n_samples)
 
-        return y_probs, c_pred, predicted_cbm, selection_dist
+        return y_probs, predicted_cbm, selection_dist
     
     def forward(self, c_emb, c_pred, current_epoch=0):
         return self.classify(c_emb, c_pred, current_epoch)

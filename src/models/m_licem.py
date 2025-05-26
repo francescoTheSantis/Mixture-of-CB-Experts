@@ -22,6 +22,8 @@ class PredictCBM(BaseModel):
                  memory_size=7,
                  weight_reg=1e-4,
                  mc_approx=10,
+                 negative_concepts=False,
+                 hard_concepts=False,
                  ):
 
         super().__init__(
@@ -33,8 +35,7 @@ class PredictCBM(BaseModel):
                  c_groups
                  )
 
-        # Parameters in common with the other Concept Embedding
-        # based models.
+        # Parameters in common with the other Concept Embedding based models.
         self.embedding_size = embedding_size
         self.task_penalty = task_penalty
         self.c_names = list(c_names)
@@ -43,6 +44,8 @@ class PredictCBM(BaseModel):
         self.has_concepts = True
         self.noise = noise
         self.concept_loss_form = nn.BCELoss()
+        self.negative_concepts = negative_concepts
+        self.hard_concepts = hard_concepts
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             latent_size,
@@ -74,8 +77,20 @@ class PredictCBM(BaseModel):
         )
         c_pred = c_dict['c_int']
 
+        # If hard_concepts is True, convert the predicted concepts to binary values
+        if self.hard_concepts:
+            input_concepts = (c_pred > 0.5).float()
+        else:
+            input_concepts = c_pred
+
+        # If negative_concepts is True, convert the concepts to a range of [-1, 1]
+        if self.negative_concepts:
+            input_concepts = 2 * input_concepts - 1 #TODO: consider converting into convex combination of positive and weights as in CBM
+        else:
+            input_concepts = input_concepts
+
         # Predict a CBM from the memory bank and classify the samples in the batch
-        y_pred, c_pred, predicted_cbm, selection_dist = self.classifier(c_emb, c_pred, self.current_epoch)
+        y_pred, predicted_cbm, selection_dist = self.classifier(c_emb, input_concepts, self.current_epoch)
         return y_pred, c_pred, predicted_cbm, selection_dist
 
     def loss(self, y_hat, y, c_hat=None, c=None):

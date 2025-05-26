@@ -45,8 +45,10 @@ class Engine(pl.LightningModule):
 
         self.c_names = c_names
         self.y_name = y_name
+        self.num_classes = len(y_name) if len(y_name)>1 else 2
+        self.class_names = y_name if len(y_name)>1 else ['0','1']
 
-        self.task_metric = Task_Accuracy()
+        self.task_metric = Task_Accuracy(logic_reasoning=True)
         self.concept_metric = Concept_Accuracy()
 
         self.csv_log_dir = csv_log_dir
@@ -152,7 +154,13 @@ class Engine(pl.LightningModule):
             self.c_trues = torch.cat(self.c_trues, dim=0)
             self.c_preds = torch.cat(self.c_preds, dim=0)
             self.y_trues = torch.cat(self.y_trues, dim=0)
-            self.y_preds = torch.cat(self.y_preds, dim=0).argmax(-1)
+            if self.num_classes > 2:
+                # If the number of classes is greater than 1, we need to take the argmax
+                self.y_preds = torch.cat(self.y_preds, dim=0).argmax(-1)
+            else:
+                # If the number of classes is 1, we just discretize the predictions
+                # to get the predicted labels.
+                self.y_preds = (torch.cat(self.y_preds, dim=0) > 0.5).long()
 
             # Convert the tensors to pandas dfs
             c_preds = pd.DataFrame(self.c_preds.cpu().numpy(), columns=self.c_names)
@@ -160,10 +168,10 @@ class Engine(pl.LightningModule):
 
             # Create a list of names for the y_preds and y_trues to create 
             # a pandas containing the list of predicted and true labels
-            y_preds = pd.DataFrame(F.one_hot(self.y_preds.cpu(), len(self.y_name)).numpy(), 
-                                   columns=self.y_name)
-            y_trues = pd.DataFrame(F.one_hot(self.y_trues.cpu(), len(self.y_name)).numpy(), 
-                                   columns=self.y_name)
+            y_preds = pd.DataFrame(F.one_hot(self.y_preds.cpu(), self.num_classes).squeeze().numpy(), 
+                                   columns=self.class_names)
+            y_trues = pd.DataFrame(F.one_hot(self.y_trues.long().cpu(), self.num_classes).squeeze().numpy(), 
+                                   columns=self.class_names)
 
             # Store the pandas dfs
             c_preds.to_csv(f"{self.csv_log_dir}/c_preds.csv", index=False)
