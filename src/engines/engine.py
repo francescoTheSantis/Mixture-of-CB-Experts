@@ -78,8 +78,8 @@ class Engine(pl.LightningModule):
         # model forward
         model_output = self.forward(inputs)
         # Compute loss
-        y_loss, c_loss = self.model.filter_output_for_loss(*model_output)
-        loss = self.model.loss(y_loss, y, c_loss, c)
+        y_output, c_output = self.model.filter_output_for_loss(*model_output)
+        loss = self.model.loss(y_output, y, c_output, c)
         return loss, model_output, y, c
 
     def training_step(self, batch, batch_idx):
@@ -87,7 +87,7 @@ class Engine(pl.LightningModule):
         loss, model_output, y, c = self.shared_step(batch)
         self.log("train_loss", loss)
         output_x_metrics = self.model.filter_output_for_metrics(*model_output)
-        task_acc = self.task_metric(output_x_metrics[0], y)
+        task_acc = self.task_metric(output_x_metrics[0], y) #TODO: check we have an output list for all models
         self.log('train_task_acc', task_acc)
         if self.model.has_concepts:
             concept_acc = self.concept_metric(output_x_metrics[1], c)
