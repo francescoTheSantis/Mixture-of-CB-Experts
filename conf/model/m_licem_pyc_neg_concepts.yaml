@@ -7,9 +7,9 @@ params:
   task_penalty: ${task_penalty}
   int_prob: ${int_prob}
   memory_size: 7
-  negative_concepts: False
+  negative_concepts: True
   hard_concepts: True
   weight_reg: 1e-4
 
 metadata:
-  name: m_licem_pyc
+  name: m_licem_pyc_neg_concepts

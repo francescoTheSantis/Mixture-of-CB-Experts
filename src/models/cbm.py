@@ -13,6 +13,7 @@ class ConceptBottleneckModel(BaseModel):
                  task_penalty,
                  task_interpretable=True,
                  neg_concepts=False,
+                 hard_concepts=False,
                  bias=True,
                  activation='ReLU',
                  int_prob=0.1,
@@ -33,6 +34,7 @@ class ConceptBottleneckModel(BaseModel):
 
         self.task_interpretable = task_interpretable
         self.neg_concepts = neg_concepts
+        self.hard_concepts = hard_concepts
         self.task_penalty = task_penalty
         self.c_names = list(c_names)
         self.int_prob = int_prob
@@ -46,9 +48,14 @@ class ConceptBottleneckModel(BaseModel):
         )
 
         if self.task_interpretable:
-            self.y_predictor = nn.Sequential(
-                nn.Linear(len(c_names), output_size, bias=bias)
-            )
+            if self.neg_concepts:
+                self.pos_y_predictor = (
+                    nn.Linear(len(c_names), output_size, bias=bias))
+                self.neg_y_predictor = (
+                    nn.Linear(len(c_names), output_size, bias=bias))
+            else:
+                self.y_predictor = (
+                    nn.Linear(len(c_names), output_size, bias=bias))
         else:
             self.y_predictor = nn.Sequential(
                 nn.Linear(len(c_names), 2 * len(c_names)),
@@ -67,10 +74,16 @@ class ConceptBottleneckModel(BaseModel):
             intervention_idxs=int_idxs,
             intervention_rate=1.,
         )
-        if self.neg_concepts:
-            y_pred = self.y_predictor(2*c_pred - 1)
+        if self.hard_concepts:
+            input_concepts = (c_pred > 0.5).float()
         else:
-            y_pred = self.y_predictor(c_pred)
+            input_concepts = c_pred
+        if self.neg_concepts and self.task_interpretable:
+            pos_concepts = input_concepts
+            neg_concepts = 1 - input_concepts
+            y_pred = self.pos_y_predictor(pos_concepts) + self.neg_y_predictor(neg_concepts)
+        else:
+            y_pred = self.y_predictor(input_concepts)
         return y_pred, c_pred
 
     def loss(self, y_hat, y, c_hat=None, c=None):

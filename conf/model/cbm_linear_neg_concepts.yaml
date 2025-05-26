@@ -7,8 +7,9 @@ params:
   task_penalty: ${task_penalty}
   task_interpretable: true
   int_prob: ${int_prob}
-  neg_weights: true
+  neg_concepts: true
+  hard_concepts: true
   bias: true
 
 metadata:
-  name: cbm_linear_neg_weights
+  name: cbm_linear_neg_concepts

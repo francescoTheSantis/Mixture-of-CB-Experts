@@ -21,6 +21,7 @@ class LinearMemoryReasoner(BaseModel):
                  c_groups=None,
                  memory_size=7,
                  negative_concepts=True,
+                 hard_concepts=False,
                  weight_reg=1e-4
                  ):
         super().__init__(
@@ -42,6 +43,7 @@ class LinearMemoryReasoner(BaseModel):
         self.noise = noise
         self.y_names = list(y_names)
         self.negative_concepts = negative_concepts
+        self.hard_concepts = hard_concepts
         self.weight_reg = weight_reg
 
         self.memory_size = memory_size
@@ -91,13 +93,17 @@ class LinearMemoryReasoner(BaseModel):
         equation_weights = self.equation_decoder(
             self.equation_memory.weight).unsqueeze(dim=0)
 
-        if self.negative_concepts:
-            c_mapped = 2*c_pred - 1
+        if self.hard_concepts:
+            input_concepts = (c_pred > 0.5).float()
         else:
-            c_mapped = c_pred
+            input_concepts = c_pred
+        if self.negative_concepts:
+            input_concepts = 2*input_concepts - 1 #TODO: consider converting into convex combination of positive and weights as in CBM
+        else:
+            input_concepts = input_concepts
 
         y_per_classifier = CF.linear_equation_eval(equation_weights, 
-                                                   c_mapped,
+                                                   input_concepts,
                                                    None)
         y_pred = CF.selection_eval(prob_per_classifier,
                                    y_per_classifier)

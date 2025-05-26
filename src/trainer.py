@@ -63,7 +63,7 @@ class Trainer:
             'frequency': 1
         }
 
-        # Set the optimizer in the repsective model
+        # Set the optimizer in the respective model
         self.model.optimizer = self.optimizer
         self.model.scheduler = self.scheduler
 
