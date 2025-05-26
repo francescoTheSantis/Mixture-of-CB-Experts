@@ -99,7 +99,7 @@ def plot_explanations(lmr_paths):
 
     for exp in lmr_paths:
         # If it does not exist, create the figs directory
-        figs_path = f'figs/PredCBM_explanations/{exp['dataset']}'
+        figs_path = f'figs/{exp['model']}_explanations/{exp['dataset']}'
         if not os.path.exists(figs_path):
             os.makedirs(figs_path)
         exp_info_path = os.path.join(exp['path'], 'logs/experiment_metrics/version_0')
@@ -110,7 +110,7 @@ def plot_explanations(lmr_paths):
         y_trues = pd.read_csv(os.path.join(exp_info_path, 'y_trues.csv'))
         y_preds = pd.read_csv(os.path.join(exp_info_path, 'y_preds.csv'))
 
-        # Sample N random samples from the dataset
+        # Sample N random samples from the test-set
         n_samples = 20
         random_indices = np.random.choice(len(y_trues), n_samples, replace=False)
 
@@ -128,8 +128,8 @@ def plot_explanations(lmr_paths):
             y_true = y_trues.iloc[idx].values.argmax(-1)
             y_pred = y_preds.iloc[idx].values.argmax(-1)
             # get the column name of the concepts corresponding to the highest value
-            y_name_pred = [x.replace('_',' ') for x in y_preds.columns[y_pred]]
-            y_name_true = [x.replace('_',' ') for x in y_trues.columns[y_true]]
+            y_name_pred = y_preds.columns[y_pred].replace('_',' ')
+            y_name_true = y_trues.columns[y_true].replace('_',' ')
             # Get the weights associated to the predicted class of the 
             # predicted CBM
             pred_CBM = pred_CBMs[idx,y_pred,:,:].squeeze().cpu().numpy()

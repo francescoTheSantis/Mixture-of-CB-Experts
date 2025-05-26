@@ -3,12 +3,11 @@ defaults:
   - model: blackbox
   - engine: engine
 
-# Common parameters
+## Common parameters
 max_epochs: 500
-min_epochs: 30
-patience: 30
-gamma: 0.5
-lr_step: 100
+patience: 40
+gamma: 0.1
+lr_patience: 20
 gpus: [0]
 seed: 1
 activation: LeakyReLU
@@ -30,14 +29,15 @@ hydra:
   mode: MULTIRUN
   sweeper:
     params:
+      
+      seed: 1, 2, 3 #, 4, 5
       # implemented toy datasets: xor, nor, xnor, dot, trigometry, checkmark 
       # implemented image datasets: mnist_addition, cub, celeba, awa2
       # implemented textual datasets: ...
-      dataset: xor, cub, awa2, mnist_addition
+      dataset: xor, mnist_addition, cub, awa2
       # implemented models: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, 
       #                     cmr, m_licem, v_cem, mv_cem, m_licem_pyc
       model: blackbox, cbm_linear, cbm_mlp, cem, dcr, cmr, m_licem, m_licem_pyc 
-      seed: 1, 2, 3, 4, 5
 
 wandb:
   # Set the params below if you want to use wandb as logger.

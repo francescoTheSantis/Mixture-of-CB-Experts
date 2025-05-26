@@ -41,7 +41,6 @@ class Trainer:
 
         self.trainer = pl.Trainer(
             max_epochs=self.cfg.max_epochs,
-            min_epochs=self.cfg.min_epochs, 
             callbacks=[early_stopping, checkpoint_callback, lr_monitor],
             logger=loggers,
             devices=self.cfg.gpus,  
