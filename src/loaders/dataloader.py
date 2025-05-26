@@ -86,10 +86,10 @@ class loader(object):
             concept_names = dataset.concept_attr_names
             task_names = [self.name] #['0', '1']
             concept_groups = None
-        elif self.name in ['xnor', 'nor']:
+        elif self.name in ['or', 'xnor', 'nor']:
             dataset = ToyDataset('xor', size=1000, random_state=42)
             concept_names = dataset.concept_attr_names
-            task_names = [self.name] #['0', '1']
+            task_names = [self.name]
             concept_groups = None
         elif self.name in ['mnist_addition']:
             train_dataset = MNISTAddition(root=DATA_PATH, train=True)
@@ -126,24 +126,29 @@ class loader(object):
             train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
                 dataset, [0.7, 0.1, 0.2]
             )
-
-        elif self.name == 'xnor':
+        elif self.name in ['or', 'nor', 'xnor']:
             dataset = ToyDataset('xor', size=1000, random_state=42)
             # split the dataset
-            dataset.target_labels = 1 - dataset.target_labels
-            dataset.name = 'xnor'
-            dataset.task_attr_names = 'xnor'
-            train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
-                dataset, [0.7, 0.1, 0.2]
-            )
-
-        elif self.name == 'nor':
-            dataset = ToyDataset('xor', size=1000, random_state=42)
-            # split the dataset
-            dataset.target_labels = ((dataset.data[:, 0] < 0.5).float() *
-                                   (dataset.data[:, 1] < 0.5).float())
-            dataset.name = 'nor'
-            dataset.task_attr_names = 'nor'
+            if self.name == 'xnor':
+                dataset.target_labels = 1 - dataset.target_labels
+                assert torch.isclose(dataset.target_labels.mean(), torch.tensor(0.5), atol=0.1), \
+                    "XNOR dataset not generated correctly"
+                dataset.name = 'xnor'
+                dataset.task_attr_names = 'xnor'
+            elif self.name == 'nor':
+                dataset.target_labels = ((dataset.data[:, 0] < 0.5).float() *
+                                         (dataset.data[:, 1] < 0.5).float())
+                assert torch.isclose(dataset.target_labels.mean(), torch.tensor(0.25), atol=0.1), \
+                    "NOR dataset not generated correctly"
+                dataset.name = 'nor'
+                dataset.task_attr_names = 'nor'
+            else:
+                dataset.target_labels = torch.clip(((dataset.data[:, 0] > 0.5).float() +
+                                         (dataset.data[:, 1] > 0.5).float()), 0, 1)
+                assert torch.isclose(dataset.target_labels.mean(), torch.tensor(0.75), atol=0.1), \
+                    "OR dataset not generated correctly"
+                dataset.name = 'or'
+                dataset.task_attr_names = 'or'
             train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
                 dataset, [0.7, 0.1, 0.2]
             )

@@ -3,12 +3,12 @@ defaults:
   - _self_
 
 loader: 
-  name: nor
+  name: or
 
 # Dataset parameters
 metadata:
   task: classification
   lr: 0.01
-  name: nor
+  name: or
 
 latent_size: 8
