@@ -3,10 +3,10 @@ import torch.nn as nn
 import torch_concepts.nn as pyc_nn
 from torch_concepts.semantic import ProductTNorm
 from torch_concepts.nn import functional as CF
-from src.models.base import BaseModel
+from src.models.base import BaseModel, LogicModel
 from torch.nn import functional as F
 
-class DeepConceptReasoner(BaseModel):
+class DeepConceptReasoner(LogicModel):
     def __init__(self, 
                  input_size, 
                  output_size,
@@ -83,7 +83,8 @@ class DeepConceptReasoner(BaseModel):
         # batch_size x memory_size x n_concepts x n_tasks x n_roles
         c_weights = torch.cat([polarity, 1 - relevance], dim=-1)
 
-        y_pred = CF.logic_rule_eval(c_weights, c_pred,
+        c_input = c_pred > 0.5 if self.hard_concepts else c_pred
+        y_pred = CF.logic_rule_eval(c_weights, c_input,
                                     semantic=self.semantic)
         # removing memory dimension
         y_pred = y_pred[:, :, 0]

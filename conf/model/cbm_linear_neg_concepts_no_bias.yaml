@@ -8,7 +8,6 @@ params:
   task_interpretable: true
   int_prob: ${int_prob}
   neg_concepts: true
-  hard_concepts: true
   bias: false
 
 metadata:

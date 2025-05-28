@@ -12,3 +12,5 @@ metadata:
   name: xor
 
 latent_size: 8
+
+hard_concepts: true

@@ -2,10 +2,10 @@ import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
 from torch_concepts.nn import functional as CF
-from src.models.base import BaseModel
+from src.models.base import BaseModel, LogicModel
 from torch.nn import functional as F
 
-class ConceptMemoryReasoner(BaseModel):
+class ConceptMemoryReasoner(LogicModel):
     def __init__(self, 
                  input_size, 
                  output_size,
@@ -118,7 +118,9 @@ class ConceptMemoryReasoner(BaseModel):
         concept_weights = self.memory_decoder(
             self.concept_memory.weight).softmax(dim=-1).unsqueeze(dim=0)
 
-        y_per_classifier = CF.logic_rule_eval(concept_weights, c_pred)
+        c_input = c_pred > 0.5 if self.hard_concepts else c_pred
+        y_per_classifier = CF.logic_rule_eval(concept_weights, c_input)
+
         if y_true is not None:
             c_rec_per_classifier = self._conc_recon(concept_weights,
                                                     c_true,

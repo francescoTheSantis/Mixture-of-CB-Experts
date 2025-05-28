@@ -161,3 +161,10 @@ class BaseModel(nn.Module):
         This method can be overridden in subclasses to customize the output filtering.
         """
         return y_output, c_output
+
+
+class LogicModel(BaseModel):
+    """
+    Base class for logic-based models. So far, it is used to only identify
+    the logic-based models that produce a logic-based output.
+    """

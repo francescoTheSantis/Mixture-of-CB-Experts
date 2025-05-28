@@ -7,7 +7,10 @@ from collections import OrderedDict
 import pandas as pd
 import torch.nn.functional as F
 
-class Engine(pl.LightningModule):  
+from src.models.base import LogicModel, BaseModel
+
+
+class Engine(pl.LightningModule):
     """
     PyTorch Lightning module wrapper.
 
@@ -34,7 +37,7 @@ class Engine(pl.LightningModule):
         configure_optimizers(): Returns the optimizer and learning rate scheduler.
     """
     def __init__(self,
-                model: Optional[nn.Module] = None,
+                model: Optional[BaseModel] = None,
                 c_names: Optional[list] = None,
                 y_name: Optional[str] = None,
                 csv_log_dir: Optional[str] = None,
@@ -45,15 +48,16 @@ class Engine(pl.LightningModule):
 
         self.c_names = c_names
         self.y_name = y_name
-        self.num_classes = len(y_name) if len(y_name)>1 else 2
-        self.class_names = y_name if len(y_name)>1 else ['0','1']
 
-        self.task_metric = Task_Accuracy(logic_reasoning=True)
+        if isinstance(self.model, LogicModel):
+            self.task_metric = Task_Accuracy(logic_output=True)
+        else:
+            self.task_metric = Task_Accuracy()
         self.concept_metric = Concept_Accuracy()
 
         self.csv_log_dir = csv_log_dir
 
-        # If we are using a the PredictCBM model,
+        # If we are using the PredictCBM model,
         # we need to save the tensors required for the explanations.
         if self.model.__class__.__name__ == 'PredictCBM':
             self.pred_CBMs = []
@@ -103,7 +107,7 @@ class Engine(pl.LightningModule):
             selection_entropy = -torch.sum(selection_dist * torch.log(selection_dist + 1e-10), dim=1)
             selection_entropy = selection_entropy.mean()
             self.log('train_selection_entropy', selection_entropy)
-        return loss      
+        return loss
 
     def validation_step(self, batch, batch_idx):
         loss, model_output, y, c = self.shared_step(batch)
@@ -168,9 +172,9 @@ class Engine(pl.LightningModule):
 
             # Create a list of names for the y_preds and y_trues to create 
             # a pandas containing the list of predicted and true labels
-            y_preds = pd.DataFrame(F.one_hot(self.y_preds.cpu(), self.num_classes).squeeze().numpy(), 
+            y_preds = pd.DataFrame(F.one_hot(self.y_preds.cpu(), self.num_classes).squeeze().numpy(),
                                    columns=self.class_names)
-            y_trues = pd.DataFrame(F.one_hot(self.y_trues.long().cpu(), self.num_classes).squeeze().numpy(), 
+            y_trues = pd.DataFrame(F.one_hot(self.y_trues.long().cpu(), self.num_classes).squeeze().numpy(),
                                    columns=self.class_names)
 
             # Store the pandas dfs

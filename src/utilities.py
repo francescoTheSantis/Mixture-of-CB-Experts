@@ -32,7 +32,7 @@ def set_loggers(cfg):
         cfg.update(
             note = "_" if cfg.note is None else "_"+str(cfg.note)
         )
-    name = f"seed{cfg.seed}.{int(time())}"
+    name = f"{cfg.dataset.metadata.name}.{cfg.model.metadata.name}.{cfg.seed}.{int(time())}"
     group_format = (
         "{dataset}_"
         "{model}"
@@ -94,6 +94,38 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names, c_g
             c_groups = c_groups
         )
     return cfg
+
+# def plot_data(data, predictions):
+#     """
+#     Return the figure of a plotting of data and predictions for logical problems with two variables
+#     and one output class (e.g. OR, NOR, XOR, XNOR). The data should be a 2D tensor
+#     with shape (n_samples, 2) and the predictions should be a 1D tensor with shape
+#     (n_samples,). The function will create a scatter plot of the data points and color them
+#     according to the predictions. The prediction take values between 0 and 1.
+#     """
+#     import matplotlib.pyplot as plt
+#     import seaborn as sns
+#     from matplotlib.colors import Normalize
+#     from matplotlib.cm import ScalarMappable
+#
+#     assert data.shape[1] == 2, "Data should have shape (n_samples, 2)"
+#     predictions = predictions.squeeze().cpu().numpy()
+#     assert len(predictions.shape) == 1, "Predictions should be a 1D tensor"
+#
+#     # Create a scatter plot of the data points
+#     fig = plt.figure(figsize=(8, 6))
+#     norm = Normalize(vmin=0, vmax=1)
+#     cmap = sns.color_palette("coolwarm", as_cmap=True)
+#     sm = ScalarMappable(cmap=cmap, norm=norm)
+#     sm.set_array([])
+#
+#     plt.scatter(data[:, 0], data[:, 1], c=predictions, cmap=cmap, norm=norm, s=100)
+#     plt.colorbar(sm, label='Predictions')
+#     plt.xlabel('Feature 1')
+#     plt.ylabel('Feature 2')
+#     plt.title('Data and Predictions')
+#
+#     return fig
 
 def plot_explanations(lmr_paths):
 

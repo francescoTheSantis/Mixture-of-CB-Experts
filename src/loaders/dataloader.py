@@ -211,3 +211,32 @@ class loader(object):
             loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
 
         return loaded_train, loaded_val, loaded_test
+
+
+if __name__ == '__main__':
+    print("\nXNOR dataset")
+    xnor_dataset = loader(
+        name='xnor',
+        batch_size=32,
+        num_workers=4,
+        device='cpu',
+    ).load_data()[0]
+    print(xnor_dataset.__iter__().__next__())
+
+    print("\nNOR dataset")
+    nor_dataset = loader(
+        name='nor',
+        batch_size=32,
+        num_workers=4,
+        device='cpu',
+    ).load_data()[0]
+    print(nor_dataset.__iter__().__next__())
+
+    print("\nOR dataset")
+    or_dataset = loader(
+        name='or',
+        batch_size=32,
+        num_workers=4,
+        device='cpu',
+    ).load_data()[0]
+    print(or_dataset.__iter__().__next__())

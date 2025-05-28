@@ -1,6 +1,8 @@
 import torch
 from torchmetrics import Metric
 from sklearn.metrics import f1_score, accuracy_score
+from torchmetrics.classification import BinaryAUROC, BinaryF1Score
+
 
 class Task_Accuracy(Metric):
     """
@@ -17,9 +19,11 @@ class Task_Accuracy(Metric):
             preds = torch.argmax(preds, dim=1)
         else:
             if self.logic_reasoning:
+                # if the output is a logic rule we do not apply an activation function,
+                # and we assume that the positive values are greater than 0.5
                 preds = preds.squeeze() > 0.5
             else:
-                preds = preds.squeeze() > 0. 
+                preds = preds.squeeze() > 0.
         target = target.squeeze()
         assert preds.shape == target.shape
         self.correct += torch.sum(preds == target)
@@ -63,3 +67,40 @@ def f1_acc_metrics(y_true, y_pred):
     # Calculate the accuracy
     accuracy = accuracy_score(y_true, y_pred)
     return f1, accuracy
+
+
+class LogitBinaryAUROC(BinaryAUROC):
+    """
+    AUROC metric from pytorch metrics working with logits.
+    """
+    def update(self, preds: torch.Tensor, target: torch.Tensor):
+        preds = torch.sigmoid(preds)
+        super().update(preds, target)
+
+class LogitBinaryF1Score(BinaryF1Score):
+    """
+    F1 score metric from pytorch metrics working with logits.
+    """
+    def update(self, preds: torch.Tensor, target: torch.Tensor):
+        preds = torch.sigmoid(preds)
+        super().update(preds, target)
+
+
+if __name__ == '__main__':
+    logic_task_acc = Task_Accuracy(logic_output=True)
+    logic_output = torch.tensor([0.8, 0.2, 0.6])  # Example logic output
+    logic_label = torch.tensor([1, 0, 1])
+    logic_task_acc.update(logic_output, logic_label)
+    print("Logic Task Accuracy:", logic_task_acc.compute().item())
+
+    logit_output = torch.tensor([0.4, -0.1, 0.3])  # Example logit output
+    logit_label = torch.tensor([1, 0, 1])
+    task_acc = Task_Accuracy()
+    task_acc.update(logit_output, logit_label)
+    print("Logit Task Accuracy:", task_acc.compute().item())
+
+    multi_class_outputs = torch.tensor([[0.8, 0.2], [0.1, 0.9], [0.6, 0.4]])
+    multi_class_label = torch.tensor([0, 1, 0])
+    multi_class_task_acc = Task_Accuracy()
+    multi_class_task_acc.update(multi_class_outputs, multi_class_label)
+    print("Multi-class Task Accuracy:", multi_class_task_acc.compute().item())

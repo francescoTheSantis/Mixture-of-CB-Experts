@@ -7,7 +7,7 @@ params:
   task_penalty: ${task_penalty}
   int_prob: ${int_prob}
   memory_size: 7
-  conc_rec_weight: 1.0
+  conc_rec_weight: 0.1
 
 metadata:
   name: cmr

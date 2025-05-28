@@ -23,7 +23,7 @@ class Trainer:
         early_stopping = EarlyStopping(
             monitor='val_loss', 
             patience=self.cfg.patience, 
-            verbose=True, 
+            verbose=False,
             mode='min'
         )
 
@@ -32,7 +32,7 @@ class Trainer:
             filename='best_model', 
             save_top_k=1, 
             mode='min', 
-            verbose=True
+            verbose=False
         )
 
         lr_monitor = LearningRateMonitor(logging_interval='step')
@@ -44,7 +44,8 @@ class Trainer:
             callbacks=[early_stopping, checkpoint_callback, lr_monitor],
             logger=loggers,
             devices=self.cfg.gpus,  
-            accelerator="gpu", 
+            accelerator="gpu",
+            enable_progress_bar=False,
         )
 
         # Optimizer
@@ -71,12 +72,12 @@ class Trainer:
         self.trainer.fit(self.model, 
                          train_dataloader, 
                          val_dataloader)
-    
+
     def test(self, test_dataloader):
         # Load the best model and test
         self.trainer.test(self.model, test_dataloader, ckpt_path=self.trainer.checkpoint_callback.best_model_path)
 
-    def interventions(self, test_dataloader):
+    def interventions(self, test_dataloader, verbose=True):
         """
         Perform interventions on the test set and return the dataframe containing the results.
         Interventional accuracy is computed for different levels of noise and intervention probability.
@@ -89,7 +90,7 @@ class Trainer:
         with torch.no_grad():
             for eps in self.epss:
                 print('Performing interventions with noise:', eps)
-                for p_int in tqdm(self.p_ints):
+                for p_int in tqdm(self.p_ints) if verbose else self.p_ints:
                     y_preds = []
                     y_trues = []
                     self.model.model.noise = eps
