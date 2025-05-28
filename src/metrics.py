@@ -87,7 +87,7 @@ class LogitBinaryF1Score(BinaryF1Score):
 
 
 if __name__ == '__main__':
-    logic_task_acc = Task_Accuracy(logic_output=True)
+    logic_task_acc = Task_Accuracy(logic_reasoning=True)
     logic_output = torch.tensor([0.8, 0.2, 0.6])  # Example logic output
     logic_label = torch.tensor([1, 0, 1])
     logic_task_acc.update(logic_output, logic_label)

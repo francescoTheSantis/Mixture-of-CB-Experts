@@ -21,7 +21,8 @@ class ConceptMemoryReasoner(LogicModel):
                  latent_size = 128,
                  c_groups=None,
                  memory_size=7,
-                 conc_rec_weight=1.0
+                 conc_rec_weight=1.0,
+                 hard_concepts=False,
                  ):
         super().__init__(
             input_size,
@@ -45,6 +46,7 @@ class ConceptMemoryReasoner(LogicModel):
         self.noise = noise
         self.y_names = list(y_names)
         self._multi_class = len(self.y_names) > 1
+        self.hard_concepts = hard_concepts
 
         self.memory_size = memory_size
         self.rec_weight = conc_rec_weight
@@ -118,7 +120,7 @@ class ConceptMemoryReasoner(LogicModel):
         concept_weights = self.memory_decoder(
             self.concept_memory.weight).softmax(dim=-1).unsqueeze(dim=0)
 
-        c_input = c_pred > 0.5 if self.hard_concepts else c_pred
+        c_input = (c_pred > 0.5).float() if self.hard_concepts else c_pred
         y_per_classifier = CF.logic_rule_eval(concept_weights, c_input)
 
         if y_true is not None:
@@ -142,5 +144,3 @@ class ConceptMemoryReasoner(LogicModel):
             y = F.one_hot(y.flatten().long(), num_classes=self.output_size).float()
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         return loss
-
-

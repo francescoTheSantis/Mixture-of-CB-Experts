@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
+from torch_concepts.nn import concept_embedding_mixture
+
 from src.models.base import BaseModel
 
 class ConceptEmbeddingModel(BaseModel):
@@ -17,7 +19,8 @@ class ConceptEmbeddingModel(BaseModel):
                  noise=None,
                  embedding_size = 16,
                  latent_size = 128,
-                 c_groups=None
+                 c_groups=None,
+                 hard_concepts=False
                  ):
 
         super().__init__(
@@ -36,6 +39,7 @@ class ConceptEmbeddingModel(BaseModel):
         self.int_idxs = int_idxs
         self.has_concepts = True
         self.noise = noise
+        self.hard_concepts = hard_concepts
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             latent_size,
@@ -60,6 +64,11 @@ class ConceptEmbeddingModel(BaseModel):
             intervention_rate=1.,
         )
         c_pred = c_dict['c_int']
+        if self.hard_concepts:
+            c_emb = self.bottleneck.linear(x)
+            c_pred_hard = (c_pred > 0.5).float()
+            c_emb = concept_embedding_mixture(c_emb, c_pred_hard)
+
         y_pred = self.y_predictor(c_emb.flatten(-2))
         return y_pred, c_pred
 

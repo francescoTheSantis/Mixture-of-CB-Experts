@@ -22,7 +22,8 @@ class DeepConceptReasoner(LogicModel):
                  latent_size = 128,
                  semantic = ProductTNorm(),
                  temperature = 100,
-                 c_groups=None
+                 c_groups=None,
+                 hard_concepts=False
                  ):
         super().__init__(
             input_size,
@@ -46,6 +47,7 @@ class DeepConceptReasoner(LogicModel):
         self.noise = noise
         self.semantic = semantic
         self.temperature = temperature
+        self.hard_concepts = hard_concepts
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             latent_size,
@@ -83,7 +85,7 @@ class DeepConceptReasoner(LogicModel):
         # batch_size x memory_size x n_concepts x n_tasks x n_roles
         c_weights = torch.cat([polarity, 1 - relevance], dim=-1)
 
-        c_input = c_pred > 0.5 if self.hard_concepts else c_pred
+        c_input = (c_pred > 0.5).float() if self.hard_concepts else c_pred
         y_pred = CF.logic_rule_eval(c_weights, c_input,
                                     semantic=self.semantic)
         # removing memory dimension

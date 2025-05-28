@@ -1,4 +1,4 @@
 params:
   activation: ${activation}
   latent_size: ${dataset.latent_size}
-  hard_concepts: ${dataset.hard_concepts?}
+  hard_concepts: ${dataset.hard_concepts}
