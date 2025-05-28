@@ -48,6 +48,8 @@ class Engine(pl.LightningModule):
 
         self.c_names = c_names
         self.y_name = y_name
+        self.num_classes = len(y_name) if len(y_name)>1 else 2
+        self.class_names = y_name if len(y_name)>1 else ['0','1']
 
         if isinstance(self.model, LogicModel):
             self.task_metric = Task_Accuracy(logic_output=True)
