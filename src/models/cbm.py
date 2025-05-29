@@ -20,7 +20,7 @@ class ConceptBottleneckModel(BaseModel):
                  int_idxs=None,
                  noise=None,
                  latent_size = 128,
-                 c_groups=None,
+                 c_groups=None
                  ):
         
         super().__init__(

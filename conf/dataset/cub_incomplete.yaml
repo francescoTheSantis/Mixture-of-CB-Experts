@@ -1,0 +1,19 @@
+defaults:
+  - common
+  - _self_
+
+loader: 
+  name: cub_incomplete
+  selected_concept_groups: [has_bill_shape, has_head_pattern, has_breast_color, has_bill_length, has_wing_shape, has_tail_pattern, has_bill_color]
+
+# Dataset parameters
+metadata:
+  task: classification
+  lr: 0.001
+  name: cub_incomplete
+
+latent_size: 256
+
+# We generated the CUB incomplete dataset following the same procedure as in the paper: https://arxiv.org/pdf/2504.17921v1.
+# More precisely, selecting the concepts belonging to the following groups:
+# [“has_bill_shape”, “has_head_pattern”, “has_breast_colour”, “has_bill_length”, “has_wing_shape”, “has_tail_pattern”, “has_bill_color”]

@@ -23,7 +23,7 @@ class Trainer:
         early_stopping = EarlyStopping(
             monitor='val_loss', 
             patience=self.cfg.patience, 
-            verbose=False,
+            verbose=True,
             mode='min'
         )
 
@@ -32,7 +32,7 @@ class Trainer:
             filename='best_model', 
             save_top_k=1, 
             mode='min', 
-            verbose=False
+            verbose=True
         )
 
         lr_monitor = LearningRateMonitor(logging_interval='step')
@@ -45,7 +45,7 @@ class Trainer:
             logger=loggers,
             devices=self.cfg.gpus,  
             accelerator="gpu",
-            enable_progress_bar=False,
+            enable_progress_bar=True,
         )
 
         # Optimizer

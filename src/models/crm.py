@@ -17,7 +17,8 @@ class ConceptResidualModel(BaseModel):
                  noise=None,
                  latent_size = 128,
                  residual_size = 10,
-                 c_groups=None
+                 c_groups=None,
+                 hard_concepts=False
                  ):
         
         super().__init__(
@@ -36,6 +37,7 @@ class ConceptResidualModel(BaseModel):
         self.has_concepts = True
         self.noise = noise
         self.residual_size = residual_size
+        self.hard_concepts = hard_concepts
 
         self.bottleneck = pyc_nn.LinearConceptResidualBottleneck(
             self.latent_size,
@@ -58,6 +60,7 @@ class ConceptResidualModel(BaseModel):
         int_idxs = self.int_idxs if self.int_idxs is not None \
             else torch.ones_like(c_true).bool()
         
+        # TODO: Handle hard concepts
         c_emb, c_dict = self.bottleneck(
             x,
             c_true=c_true,

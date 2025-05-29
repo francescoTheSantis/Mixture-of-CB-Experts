@@ -21,7 +21,8 @@ class LinearConceptEmbeddingModel(BaseModel):
                  c_groups=None,
                  use_bias=True,
                  weight_reg=1e-4,
-                 bias_reg=1e-4
+                 bias_reg=1e-4,
+                 hard_concepts=False,
                  ):
 
         super().__init__(
@@ -42,6 +43,7 @@ class LinearConceptEmbeddingModel(BaseModel):
         self.noise = noise
         self.use_bias = use_bias
         self.y_names = list(y_names)
+        self.hard_concepts = hard_concepts
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             latent_size,
@@ -53,7 +55,7 @@ class LinearConceptEmbeddingModel(BaseModel):
         # output batch_size x concept_number x task_number
         self.concept_relevance = torch.nn.Sequential(
             torch.nn.Linear(embedding_size, latent_size),
-            torch.nn.LeakyReLU(),
+            getattr(nn, activation)(),
             torch.nn.Linear(latent_size, len(self.y_names)),
             pyc_nn.Annotate([self.c_names, self.y_names], [1, 2])
         )
@@ -67,7 +69,7 @@ class LinearConceptEmbeddingModel(BaseModel):
                     len(self.c_names) * embedding_size,
                     embedding_size,
                 ),
-                torch.nn.LeakyReLU(),
+                getattr(nn, activation)(),
                 torch.nn.Linear(embedding_size, len(self.y_names)),
                 pyc_nn.Annotate(self.y_names, 1)
             )
@@ -90,6 +92,8 @@ class LinearConceptEmbeddingModel(BaseModel):
             intervention_rate=1.,
         )
         c_pred = c_dict['c_int']
+        c_input = (c_pred > 0.5).float() if self.hard_concepts else c_pred
+
         # adding memory dimension to concept weights
         c_weights = self.concept_relevance(c_emb).unsqueeze(dim=1)
         self.__predicted_weights = c_weights
@@ -100,7 +104,7 @@ class LinearConceptEmbeddingModel(BaseModel):
             y_bias = self.bias_predictor(c_emb).unsqueeze(dim=1)
             self.__predicted_bias = y_bias
 
-        y_pred = CF.linear_equation_eval(c_weights, c_pred, y_bias)
+        y_pred = CF.linear_equation_eval(c_weights, c_input, y_bias)
         return y_pred[:, :, 0], c_pred
     
     def loss(self, y_hat, y, c_hat=None, c=None):

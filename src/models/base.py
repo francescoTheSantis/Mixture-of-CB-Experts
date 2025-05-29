@@ -49,15 +49,12 @@ class BaseModel(nn.Module):
         self.int_idxs = None
         self.test_interventions = False
         self.c_groups = c_groups
-        self.current_epoch = 0
+        self.global_step = 0
 
         self.encoder = nn.Sequential(
             nn.Linear(input_size, latent_size),
             getattr(nn, activation)()
         )
-
-        # Implement MLP as encoder for mnist_addition
-        # Flatten the first dimension of x in the forward pass
 
         if task == 'classification':
             if output_size > 1:

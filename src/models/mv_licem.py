@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from src.models.v_cem import VariationalConceptEmbeddingModel
 import torch.nn.functional as F
-from src.models.modules import LinearMemoryClassifier
+from _OLD.modules import LinearMemoryClassifier
 
 class LinearMemoryReasoner(VariationalConceptEmbeddingModel):
     def __init__(self, 

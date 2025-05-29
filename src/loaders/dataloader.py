@@ -18,6 +18,7 @@ from src.loaders.preprocessing import EmbeddingExtractor
 import omegaconf
 from torchvision import transforms
 import os
+import itertools
 
 CUB_CONCEPT_NAMES = [x for i, x in enumerate(cub_concept_semantics) if i in cub_selected_concepts]
 
@@ -60,6 +61,7 @@ class loader(object):
                  num_workers,
                  device,
                  selected_concepts=None,
+                 selected_concept_groups=None,
                  class_attributes=None,
                  ):
         self.name = name
@@ -67,6 +69,7 @@ class loader(object):
         self.num_workers = num_workers
         self.device = device[0] if isinstance(device, omegaconf.listconfig.ListConfig) else device
         self.selected_concepts = selected_concepts
+        self.selected_concept_groups = selected_concept_groups
         self.task_names = class_attributes
         self.concept_groups = None
 
@@ -78,7 +81,38 @@ class loader(object):
                     std=[0.229, 0.224, 0.225]
                 )
             ])
+
+        if self.selected_concept_groups != None and self.name == 'cub_incomplete':
+            # Select the group that matches the selected group names
+            self.incomplete_cub_groups = {k:v for k,v in cub_concept_groups.items() if k in selected_concept_groups}
+            # Select the name of the concepts corresponding to the ones in the selected groups
+            self.selected_concept_idxes = list(itertools.chain.from_iterable([x for x in self.incomplete_cub_groups.values()]))
+            self.CUB_CONCEPT_NAMES = [x for i, x in enumerate(cub_concept_semantics) if i in self.selected_concept_idxes]
+            # reset the indexes in the cub groups
+            cnt = 0
+            for k,v in self.incomplete_cub_groups.items():
+                self.incomplete_cub_groups[k] = [x+cnt for x in list(range(len(self.incomplete_cub_groups[k])))]
+                cnt += len(self.incomplete_cub_groups[k])
         
+        if self.selected_concepts is not None and self.name == 'awa2_incomplete':
+            # Select the indexes that matches the selected concept names
+            self.selected_concept_idxes = [awa2_concept_semantics.index(x) for x in self.selected_concepts]
+            # Filter the group according to the selected concepts
+            self.incomplete_awa2_groups = {}
+            for k, v in awa2_concept_groups.items():
+                idxs = []
+                for idx in self.selected_concept_idxes:
+                    if idx in v:
+                        idxs.append(idx)
+                if len(idxs) > 0:
+                    self.incomplete_awa2_groups[k] = idxs
+
+            # reset the indexes in the cub groups
+            cnt = 0
+            for k,v in self.incomplete_awa2_groups.items():
+                self.incomplete_awa2_groups[k] = [x+cnt for x in list(range(len(self.incomplete_awa2_groups[k])))]
+                cnt += len(self.incomplete_awa2_groups[k])
+
     def get_names(self):
         # Get the concept names and task names
         if self.name in ['xor', 'trigonometry', 'dot', 'checkmark']:
@@ -113,6 +147,14 @@ class loader(object):
             concept_names = awa2_concept_semantics
             task_names = awa2_class_names
             concept_groups = awa2_concept_groups
+        elif self.name == 'awa2_incomplete':
+            concept_names = self.selected_concepts
+            task_names = awa2_class_names
+            concept_groups = self.incomplete_awa2_groups
+        elif self.name == 'cub_incomplete':
+            concept_names = self.CUB_CONCEPT_NAMES
+            task_names = cub_class_names
+            concept_groups = self.incomplete_cub_groups
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
         
@@ -165,6 +207,10 @@ class loader(object):
             train_dataset = CUBDataset(root=DATA_PATH, split='train')
             val_dataset = CUBDataset(root=DATA_PATH, split='val')
             test_dataset = CUBDataset(root=DATA_PATH, split='test')
+        elif self.name == 'cub_incomplete':
+            train_dataset = CUBDataset(root=DATA_PATH, split='train', selected_concepts=self.selected_concept_idxes)
+            val_dataset = CUBDataset(root=DATA_PATH, split='val', selected_concepts=self.selected_concept_idxes)
+            test_dataset = CUBDataset(root=DATA_PATH, split='test', selected_concepts=self.selected_concept_idxes)
         elif self.name == 'celeba':
             train_dataset = CelebADataset(root=DATA_PATH, split='train', 
                                           class_attributes=self.task_names,
@@ -183,6 +229,11 @@ class loader(object):
             train_dataset = AwA2Dataset(root=path, split='train')
             val_dataset = AwA2Dataset(root=path, split='val')
             test_dataset = AwA2Dataset(root=path, split='test')
+        elif self.name == 'awa2_incomplete':
+            path = os.path.join(DATA_PATH, 'Animals_with_Attributes2')
+            train_dataset = AwA2Dataset(root=path, split='train', selected_concepts=self.selected_concept_idxes)
+            val_dataset = AwA2Dataset(root=path, split='val', selected_concepts=self.selected_concept_idxes)
+            test_dataset = AwA2Dataset(root=path, split='test', selected_concepts=self.selected_concept_idxes)
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
 
@@ -200,7 +251,7 @@ class loader(object):
                                  shuffle=False,
                                  num_workers=self.num_workers)  
         
-        if self.name in ['cub', 'mnist_addition', 'celeba', 'awa2']:
+        if self.name in ['cub', 'mnist_addition', 'celeba', 'awa2', 'cub_incomplete', 'awa2_incomplete']:
             celeba_flag = True if self.name == 'celeba' else False
             E_extr = EmbeddingExtractor(loaded_train, 
                                         loaded_val, 

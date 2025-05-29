@@ -8,8 +8,8 @@ params:
   int_prob: ${int_prob}
   memory_size: 3
   weight_reg: 0 #1e-3
-  concept_state_weight: false
-  use_bias: true
+  concept_state_weight: true
+  use_bias: false
   mc_approx: 10
 
 metadata:
