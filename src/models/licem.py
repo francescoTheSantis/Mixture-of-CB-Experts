@@ -6,7 +6,6 @@ from torch_concepts.nn import functional as CF
 
 class LinearConceptEmbeddingModel(BaseModel):
     def __init__(self, 
-                 input_size, 
                  output_size,
                  c_names,
                  y_names,
@@ -23,15 +22,16 @@ class LinearConceptEmbeddingModel(BaseModel):
                  weight_reg=1e-4,
                  bias_reg=1e-4,
                  hard_concepts=False,
+                 encoder=None,
                  ):
 
         super().__init__(
-                 input_size, 
                  output_size,
                  task,
                  activation,
                  latent_size,
-                 c_groups
+                 c_groups,
+                 encoder
                  )
 
         self.embedding_size = embedding_size

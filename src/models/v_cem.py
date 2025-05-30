@@ -4,7 +4,6 @@ from src.models.base import BaseModel
 
 class VariationalConceptEmbeddingModel(BaseModel):
     def __init__(self, 
-                 input_size, 
                  output_size,
                  c_names,
                  y_names,
@@ -19,15 +18,17 @@ class VariationalConceptEmbeddingModel(BaseModel):
                  c_groups=None,
                  kl_penalty=5e-2,
                  randint_epoch_start=5,
+                 hard_concepts=False,
+                 encoder=None
                  ):
 
         super().__init__(
-                 input_size, 
                  output_size,
                  task,
                  activation,
                  latent_size,
-                 c_groups
+                 c_groups,
+                 encoder
                  )
 
         # Parameters in common with the other Concept Embedding

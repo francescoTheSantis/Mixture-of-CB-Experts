@@ -5,7 +5,6 @@ from src.models.base import BaseModel
 
 class ConceptBottleneckModel(BaseModel):
     def __init__(self, 
-                 input_size, 
                  output_size,
                  c_names,
                  y_names,
@@ -20,16 +19,17 @@ class ConceptBottleneckModel(BaseModel):
                  int_idxs=None,
                  noise=None,
                  latent_size = 128,
-                 c_groups=None
+                 c_groups=None,
+                 encoder=None
                  ):
         
         super().__init__(
-                 input_size, 
                  output_size,
                  task,
                  activation,
                  latent_size,
-                 c_groups
+                 c_groups,
+                 encoder
                  )
 
         self.task_interpretable = task_interpretable

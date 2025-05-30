@@ -4,26 +4,27 @@ from src.models.base import BaseModel
 
 class BlackBox(BaseModel):
     def __init__(self,
-                 input_size,
                  output_size=2,
                  c_names=None,
                  y_names=None,
+                 hard_concepts=False,
                  activation='ReLU',
                  task = 'classification',
                  latent_size = 128,
-                 c_groups = None
+                 c_groups = None,
+                 encoder=None
                  ):
         super().__init__(
-                 input_size, 
                  output_size,
                  task,
                  activation,
                  latent_size,
-                 c_groups
+                 c_groups,
+                 encoder
                  )
-                
+
         self.has_concepts = False
-        hidden_size = input_size * 128
+        hidden_size = latent_size * 2
         
         self.predictor = nn.Sequential(
             nn.Linear(latent_size, hidden_size),

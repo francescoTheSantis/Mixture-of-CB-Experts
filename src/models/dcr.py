@@ -8,7 +8,6 @@ from torch.nn import functional as F
 
 class DeepConceptReasoner(LogicModel):
     def __init__(self, 
-                 input_size, 
                  output_size,
                  c_names,
                  y_names,
@@ -23,15 +22,16 @@ class DeepConceptReasoner(LogicModel):
                  semantic = ProductTNorm(),
                  temperature = 100,
                  c_groups=None,
-                 hard_concepts=False
+                 hard_concepts=False,
+                 encoder=None,
                  ):
         super().__init__(
-            input_size,
             output_size,
             task,
             activation,
             latent_size,
-            c_groups
+            c_groups,
+            encoder
         )
 
         self.n_roles = 3

@@ -5,7 +5,6 @@ from src.models.base import BaseModel
 
 class ConceptResidualModel(BaseModel):
     def __init__(self, 
-                 input_size, 
                  output_size,
                  c_names,
                  y_names,
@@ -18,18 +17,19 @@ class ConceptResidualModel(BaseModel):
                  latent_size = 128,
                  residual_size = 10,
                  c_groups=None,
-                 hard_concepts=False
+                 hard_concepts=False,
+                 encoder=None
                  ):
         
         super().__init__(
-                 input_size, 
                  output_size,
                  task,
                  activation,
                  latent_size,
-                 c_groups
+                 c_groups,
+                 encoder
                  )
-        
+
         self.task_penalty = task_penalty
         self.c_names = list(c_names)
         self.int_prob = int_prob

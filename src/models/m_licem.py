@@ -6,7 +6,6 @@ import torch.nn.functional as F
 
 class PredictCBM(BaseModel):
     def __init__(self, 
-                 input_size, 
                  output_size,
                  c_names,
                  y_names,
@@ -23,16 +22,17 @@ class PredictCBM(BaseModel):
                  mc_approx=10,
                  hard_concepts=False,
                  use_bias=True,
-                 concept_state_weight=False
+                 concept_state_weight=False,
+                 encoder=None
                  ):
 
         super().__init__(
-                 input_size, 
                  output_size,
                  task,
                  activation,
                  latent_size,
-                 c_groups
+                 c_groups,
+                 encoder
                  )
 
         # Parameters in common with the other Concept Embedding based models.

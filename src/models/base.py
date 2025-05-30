@@ -1,6 +1,9 @@
 import torch.nn as nn
 import torch
 
+from src.models.encoders import BaseEncoder
+
+
 class BaseModel(nn.Module):
     """
     Base class for concept models (and blackbox).
@@ -33,16 +36,15 @@ class BaseModel(nn.Module):
             Generates a mask for concept interventions based on intervention probability and groups.
     """
     def __init__(self, 
-                 input_size, 
                  output_size,
                  task='classification',
                  activation='ReLU',
                  latent_size=64,
                  c_groups=None,
+                 encoder: BaseEncoder=None,
                  ):
         super().__init__()
         
-        self.input_size = input_size
         self.output_size = output_size
         self.task = task
         self.latent_size = latent_size
@@ -50,11 +52,7 @@ class BaseModel(nn.Module):
         self.test_interventions = False
         self.c_groups = c_groups
         self.global_step = 0
-
-        self.encoder = nn.Sequential(
-            nn.Linear(input_size, latent_size),
-            getattr(nn, activation)()
-        )
+        self.encoder = encoder
 
         if task == 'classification':
             if output_size > 1:

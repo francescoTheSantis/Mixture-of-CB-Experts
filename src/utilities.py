@@ -70,7 +70,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names, c_g
     Update the config with the input size, output size, and concept names.
     """
     x, c, y = next(iter(train_loader))
-    input_size = x.shape[1]
+    input_size = torch.prod(torch.tensor(x.shape[1:])).item()
     concept_size = c.shape[1]
     n_labels = len(y_names)
     if c_groups is None or not isinstance(c_groups, dict):
@@ -86,13 +86,20 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names, c_g
         )
         
         cfg.model.params.update(
-            input_size = input_size,
             output_size = n_labels,
             c_names = c_names,
             y_names = y_names,
             task = cfg.dataset.metadata.task,
             c_groups = c_groups
         )
+
+        if 'encoder' in cfg.dataset:
+            # If the encoder is defined in the dataset, update the entire encoder config
+            cfg.model.params.encoder = cfg.dataset.encoder
+        cfg.model.params.encoder.update(
+            input_size = input_size,
+         )
+
     return cfg
 
 # def plot_data(data, predictions):

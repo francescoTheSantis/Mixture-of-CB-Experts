@@ -2,3 +2,10 @@ params:
   activation: ${activation}
   latent_size: ${dataset.latent_size}
   hard_concepts: ${dataset.hard_concepts}
+
+  # These values can be overridden by the dataset configuration
+  encoder:
+    _target_: src.models.encoders.LinearEncoder
+    input_size: ${input_size}
+    output_size: ${dataset.latent_size}
+    input_transform: null

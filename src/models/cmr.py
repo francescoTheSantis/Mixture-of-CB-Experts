@@ -7,7 +7,6 @@ from torch.nn import functional as F
 
 class ConceptMemoryReasoner(LogicModel):
     def __init__(self, 
-                 input_size, 
                  output_size,
                  c_names,
                  y_names,
@@ -23,14 +22,15 @@ class ConceptMemoryReasoner(LogicModel):
                  memory_size=7,
                  conc_rec_weight=1.0,
                  hard_concepts=False,
+                 encoder=None,
                  ):
         super().__init__(
-            input_size,
             output_size,
             task,
             activation,
             latent_size,
-            c_groups
+            c_groups,
+            encoder
         )
 
         self.n_roles = 3

@@ -4,9 +4,20 @@ defaults:
 
 loader: 
   name: mnist_addition
+  extract_embeddings: false
 
 # Dataset parameters
 metadata:
   task: classification
   lr: 0.001
   name: mnist_addition
+
+latent_size: 64
+
+encoder:
+  _target_: "src.models.encoders.MLPEncoder"
+  output_size: ${dataset.latent_size}
+  hidden_size: 128
+  input_transform:
+    _target_: "src.models.encoders.MNISTTransform"
+    flatten: true

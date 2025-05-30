@@ -63,6 +63,7 @@ class loader(object):
                  selected_concepts=None,
                  selected_concept_groups=None,
                  class_attributes=None,
+                 extract_embeddings=True
                  ):
         self.name = name
         self.batch_size = batch_size
@@ -72,6 +73,7 @@ class loader(object):
         self.selected_concept_groups = selected_concept_groups
         self.task_names = class_attributes
         self.concept_groups = None
+        self.extract_embeddings = extract_embeddings
 
         self.transform = transforms.Compose([
                 transforms.Resize((224, 224)),
@@ -93,7 +95,7 @@ class loader(object):
             for k,v in self.incomplete_cub_groups.items():
                 self.incomplete_cub_groups[k] = [x+cnt for x in list(range(len(self.incomplete_cub_groups[k])))]
                 cnt += len(self.incomplete_cub_groups[k])
-        
+
         if self.selected_concepts is not None and self.name == 'awa2_incomplete':
             # Select the indexes that matches the selected concept names
             self.selected_concept_idxes = [awa2_concept_semantics.index(x) for x in self.selected_concepts]
@@ -251,7 +253,9 @@ class loader(object):
                                  shuffle=False,
                                  num_workers=self.num_workers)  
         
-        if self.name in ['cub', 'mnist_addition', 'celeba', 'awa2', 'cub_incomplete', 'awa2_incomplete']:
+        if self.name in ['cub', 'mnist_addition', 'celeba', 'awa2',
+                         'cub_incomplete', 'awa2_incomplete'] and \
+            self.extract_embeddings:
             celeba_flag = True if self.name == 'celeba' else False
             E_extr = EmbeddingExtractor(loaded_train, 
                                         loaded_val, 

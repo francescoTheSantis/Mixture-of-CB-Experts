@@ -6,7 +6,6 @@ from src.models.base import BaseModel
 
 class LinearMemoryReasoner(BaseModel):
     def __init__(self, 
-                 input_size, 
                  output_size,
                  c_names,
                  y_names,
@@ -22,15 +21,17 @@ class LinearMemoryReasoner(BaseModel):
                  memory_size=7,
                  negative_concepts=True,
                  hard_concepts=False,
-                 weight_reg=1e-4
+                 weight_reg=1e-4,
+                 encoder=None,
                  ):
+
         super().__init__(
-            input_size,
             output_size,
             task,
             activation,
             latent_size,
-            c_groups
+            c_groups,
+            encoder
         )
 
         self.embedding_size = embedding_size
