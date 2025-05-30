@@ -29,7 +29,8 @@ def main(cfg: DictConfig) -> None:
     # If the data have been preprocessed and use_stored_dataset=True, load the preprocessed data
     if os.path.exists(train_path) and os.path.exists(val_path)\
                                   and os.path.exists(test_path)\
-                                  and cfg.use_stored_dataset:
+                                  and cfg.use_stored_dataset\
+                                  and loader.extract_embeddings:
         print('Loading pre-processed data...')
         loaded_train = torch.load(f"{data_path}/train.pt")
         loaded_val = torch.load(f"{data_path}/val.pt")

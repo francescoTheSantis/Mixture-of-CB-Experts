@@ -9,6 +9,7 @@ params:
   memory_size: 7
   negative_concepts: True
   weight_reg: 1e-4
+  embedding_size: ${embedding_size}
 
 metadata:
   name: m_licem_pyc_neg_concepts

@@ -6,11 +6,11 @@ params:
   _target_: "src.models.m_licem.PredictCBM"
   task_penalty: ${task_penalty}
   int_prob: ${int_prob}
-  memory_size: 3
+  memory_size: 7
   weight_reg: 0 #1e-3
   concept_state_weight: true
   use_bias: false
-  mc_approx: 10
+  mc_approx: 1
 
 metadata:
   name: m_licem_weights_doubled

@@ -13,6 +13,7 @@ metadata:
   lr: 0.001
   name: awa2_incomplete
 
+latent_size: 128
 
 # We generated the Awa2 incomplete dataset following the same procedure as in the paper: https://arxiv.org/pdf/2504.17921v1.
 # More precisely, selecting the following concepts:
