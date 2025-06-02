@@ -93,12 +93,13 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names, c_g
             c_groups = c_groups
         )
 
-        if 'encoder' in cfg.dataset:
+        if 'encoder' in cfg.dataset and not cfg.dataset.loader.extract_embeddings:
             # If the encoder is defined in the dataset, update the entire encoder config
             cfg.model.params.encoder = cfg.dataset.encoder
+
         cfg.model.params.encoder.update(
             input_size = input_size,
-         )
+        )
 
     return cfg
 
