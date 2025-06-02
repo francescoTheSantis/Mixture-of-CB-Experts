@@ -14,7 +14,9 @@ warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
 # List the paths containing the results
-paths = ["/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-05-24/14-57-51"]
+paths = [
+    "/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-06-02/11-12-03",
+]
 
 ###### Collect results regarding concept/task performance ######
 
@@ -96,6 +98,10 @@ def get_df_name(df):
         return 'Checkmark'
     elif df=='celeba':
         return 'CelebA'
+    elif df=='cub_incomplete':
+        return 'CUB200-Incomplete'
+    elif df=='awa2_incomplete':
+        return 'AWA2-Incomplete'
 
 #df = performance.copy()
 # Filter data for 'task' and 'concept'
@@ -132,16 +138,18 @@ marker_size = 14
 model_styles = {
     #'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:blue', 'size': marker_size},
     'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:orange', 'size': marker_size},
-    'cbm_linear': {'marker': 's', 'name': 'CBM+Linear', 'color': 'tab:green', 'size': marker_size},
+    'cbm_linear': {'marker': '*', 'name': 'CBM+Linear', 'color': 'tab:olive', 'size': marker_size},
     'cbm_mlp': {'marker': '^', 'name': 'CBM+MLP', 'color': 'tab:red', 'size': marker_size},
     'blackbox': {'marker': 'o', 'name': 'Black-box', 'color': 'tab:purple', 'size': marker_size},
     #'crm': {'marker': 'X', 'name': 'CRM', 'color': 'tab:brown', 'size': marker_size},
     'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:gray', 'size': marker_size},
-    'm_licem': {'marker': '*', 'name': 'M-LICEM', 'color': 'tab:olive', 'size': marker_size},
+    'm_licem': {'marker': 's', 'name': 'M-LICEM', 'color': 'tab:green', 'size': marker_size},
+    'm_licem_no_decoder': {'marker': 's', 'name': 'M-LICEM-No-decoding', 'color': 'tab:cyan', 'size': marker_size},
     #'v_cem': {'marker': 'd', 'name': 'V-CEM', 'color': 'tab:cyan', 'size': marker_size},
     #'mv_licem': {'marker': '<', 'name': 'MV-LICEM', 'color': 'tab:pink', 'size': marker_size},
-    'm_licem_pyc': {'marker': '>', 'name': 'M-LICEM-PYC', 'color': 'tab:gray', 'size': marker_size},
+    'm_licem_no_c_emb': {'marker': '>', 'name': 'M-LICEM-cbm', 'color': 'tab:gray', 'size': marker_size},
+    #'m_licem_pyc_sampling': {'marker': '>', 'name': 'M-LICEM-PYC', 'color': 'tab:gray', 'size': marker_size},
 }
 
 # Define the custom order
@@ -152,12 +160,14 @@ custom_order = ['xor', \
                 #'trigonometry', \
                 'mnist_addition', \
                 'cub', \
-                'awa2']
+                'awa2',
+                'awa2_incomplete',
+                'cub_incomplete']
 
 merged_stats = merged_stats.sort_values('dataset')
 merged_stats['dataset'] = pd.Categorical(merged_stats['dataset'], categories=custom_order, ordered=True)
 
-fig, axes = plt.subplots(1, len(merged_stats['dataset'].unique()), figsize=(15, 4), sharey=False, sharex=False)
+fig, axes = plt.subplots(1, len(merged_stats['dataset'].unique()), figsize=(15, 4), sharey=False, sharex=True)
 
 for idx, dataset in enumerate(merged_stats['dataset'].unique()):
     ax = axes[idx]
@@ -283,7 +293,7 @@ for exp in exps_path:
 ########## Intervention plots ########## 
 
 def plot_intervention_results(df, metric='accuracy', title_font=None, label_font=None, tick_font=None, legend_font=None):
-    unique_noises = [0.1, 0.2, 0.4, 0.6, 0.8, 1]
+    unique_noises = [0, 0.1, 0.2, 0.4, 0.6, 0.8, 1]
     unique_datasets = custom_order
     n_cols = len(unique_noises)
     n_rows = len(unique_datasets)
@@ -350,7 +360,7 @@ def plot_intervention_results(df, metric='accuracy', title_font=None, label_font
     unique_datasets = custom_order
     n_cols = len(unique_noises)
     n_rows = len(unique_datasets)
-    fig, axes = plt.subplots(n_cols, n_rows, figsize=(30, 7), sharex=True, sharey=True)
+    fig, axes = plt.subplots(n_cols, n_rows, figsize=(30, 7), sharex=True, sharey=False)
     
     for i, dataset in enumerate(unique_datasets):
         for j, noise in enumerate(unique_noises):
@@ -398,7 +408,7 @@ def plot_intervention_results(df, metric='accuracy', title_font=None, label_font
 
 # Call the function with the desired metric and font properties
 legend_font = {'size': 44}
-title_font = {'size': 44, 'weight': 'bold'}
+title_font = {'size': 36, 'weight': 'bold'}
 label_font = {'size': 44}
-tick_font = {'size': 30}
+tick_font = {'size': 28}
 plot_intervention_results(performance, metric='accuracy', title_font=title_font, label_font=label_font, tick_font=tick_font, legend_font=legend_font)

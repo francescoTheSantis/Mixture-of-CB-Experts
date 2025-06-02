@@ -51,7 +51,7 @@ class Trainer:
         # Optimizer
         self.optimizer = AdamW(self.model.parameters(), 
                                lr=self.cfg.dataset.metadata.lr)
-        #self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=self.cfg.lr_step, gamma=self.cfg.gamma, verbose=True)
+
         LR_on_plateau = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 
                                                                    mode='min', 
                                                                    factor=self.cfg.gamma, 

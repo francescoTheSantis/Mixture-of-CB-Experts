@@ -13,7 +13,7 @@ params:
   sampling: True
   use_bias: True
   embedding_memory: True
-  intervene_on_selection: True
+  intervene_on_selection: False
 
 metadata:
-  name: m_licem
+  name: m_licem_no_c_emb

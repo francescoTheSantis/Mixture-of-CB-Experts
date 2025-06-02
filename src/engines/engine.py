@@ -59,9 +59,9 @@ class Engine(pl.LightningModule):
 
         self.csv_log_dir = csv_log_dir
 
-        # If we are using the PredictCBM model,
+        # If we are using the LinearMemoryReasoner model,
         # we need to save the tensors required for the explanations.
-        if self.model.__class__.__name__ == 'PredictCBM':
+        if self.model.__class__.__name__ == 'LinearMemoryReasoner':
             self.pred_CBMs = []
             self.c_trues = []
             self.c_preds = []
@@ -100,9 +100,9 @@ class Engine(pl.LightningModule):
         if self.model.has_concepts:
             concept_acc = self.concept_metric(output_x_metrics[1], c)
             self.log('train_concept_acc', concept_acc)
-        # If the name of the class is PredictCBM,
+        # If the name of the class is LinearMemoryReasoner,
         # compute the selection entropy
-        if self.model.__class__.__name__ == 'PredictCBM':
+        if self.model.__class__.__name__ == 'LinearMemoryReasoner':
             # Compute the entropy of the selection distribution
             selection_dist = model_output[3]
             selection_dist = torch.softmax(selection_dist, dim=-1)
@@ -120,9 +120,9 @@ class Engine(pl.LightningModule):
         if self.model.has_concepts:
             concept_acc = self.concept_metric(c_output, c)
             self.log('val_concept_acc', concept_acc)
-        # If the name of the class is PredictCBM,
+        # If the name of the class is LinearMemoryReasoner,
         # compute the selection entropy
-        if self.model.__class__.__name__ == 'PredictCBM':
+        if self.model.__class__.__name__ == 'LinearMemoryReasoner':
             # Compute the entropy of the selection distribution
             selection_dist = model_output[3]
             selection_dist = torch.softmax(selection_dist, dim=-1)
@@ -141,9 +141,9 @@ class Engine(pl.LightningModule):
             concept_acc = self.concept_metric(c_output, c)
             self.log('test_concept_acc', concept_acc)
 
-        # If the name of the class is PredictCBM,
+        # If the name of the class is LinearMemoryReasoner,
         # update the tensors required for the explanations.
-        if self.model.__class__.__name__ == 'PredictCBM':
+        if self.model.__class__.__name__ == 'LinearMemoryReasoner':
             self.pred_CBMs.append(model_output[2])
             self.c_trues.append(c)
             self.c_preds.append(c_output)
@@ -152,9 +152,9 @@ class Engine(pl.LightningModule):
         return loss 
     
     def on_test_epoch_end(self):
-        # If the name of the class is PredictCBM,
+        # If the name of the class is LinearMemoryReasoner,
         # store the tensors required for the explanations.
-        if self.model.__class__.__name__ == 'PredictCBM':
+        if self.model.__class__.__name__ == 'LinearMemoryReasoner':
             # Concatenate the tensors
             self.pred_CBMs = torch.cat(self.pred_CBMs, dim=0)
             self.c_trues = torch.cat(self.c_trues, dim=0)

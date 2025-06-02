@@ -184,7 +184,7 @@ def plot_explanations(lmr_paths):
                 # Perform the element-wise multiplication
                 logits = np.multiply(pred_CBM, c_pred)
 
-                # Sort the logits by absolute value in descending order and take the k highest values
+                # Sort the logits by absolute value in ascending order and take the k highest values
                 top_k = 10
                 indices = np.argsort(np.abs(logits))[::-1][:top_k]
                 logits = logits[indices]

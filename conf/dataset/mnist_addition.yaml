@@ -4,7 +4,7 @@ defaults:
 
 loader: 
   name: mnist_addition
-  extract_embeddings: false
+  extract_embeddings: true
 
 # Dataset parameters
 metadata:
