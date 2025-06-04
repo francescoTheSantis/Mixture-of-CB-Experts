@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+import torch.nn.functional as F
 
 from src.models.encoders import BaseEncoder
 
@@ -90,7 +91,7 @@ class BaseModel(nn.Module):
         return x, c_true, int_idxs
     
     def concept_based_loss(self, y_hat, y, c_hat=None, c=None):
-        if self.task == 'classification':
+        if self.task == 'classification' and not isinstance(self, LogicModel):
             if self.output_size > 1:
                 y = y.flatten().long()
             else:
@@ -161,5 +162,17 @@ class BaseModel(nn.Module):
 class LogicModel(BaseModel):
     """
     Base class for logic-based models. So far, it is used to only identify
-    the logic-based models that produce a logic-based output.
+    the logic-based models that produce a logic-based output and convert the
+    output to a binary format for the loss computation.
     """
+
+    def loss(self, y_hat, y, c_hat=None, c=None):
+        """
+        Logic models do not use the concept loss, so we only compute the task loss.
+        """
+        if self.task == 'classification' and self.output_size > 1:
+            y = F.one_hot(y.flatten().long(),
+                              num_classes=self.output_size).float()
+        elif self.output_size == 1:
+            y = y.squeeze().float()
+        return self.task_loss_form(y_hat.squeeze(), y)

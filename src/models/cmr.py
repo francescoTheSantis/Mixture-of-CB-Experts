@@ -138,9 +138,3 @@ class ConceptMemoryReasoner(LogicModel):
             
         return y_pred, c_pred
     
-    def loss(self, y_hat, y, c_hat=None, c=None):
-        # one hot encode the y variable
-        if self.task == 'classification' and self.output_size > 1:
-            y = F.one_hot(y.flatten().long(), num_classes=self.output_size).float()
-        loss = self.concept_based_loss(y_hat, y, c_hat, c)
-        return loss
