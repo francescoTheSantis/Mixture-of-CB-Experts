@@ -21,6 +21,12 @@ batch_size: 256
 task_penalty: 0.1
 int_prob: 0.25
 
+## Shared Concept-embedding based model
+embedding_size: 16
+
+## Shared Concept Memory model
+memory_size: 8
+
 # Set this parameter to True if you want to use the stored, preprocessed dataset,
 # otherwise it will be preprocessed from scratch and saved in the cache. 
 use_stored_dataset: True
@@ -30,14 +36,13 @@ hydra:
   sweeper:
     params:
       
-      seed: 1, 2, 3 #, 4, 5
+      seed: 1, 2, 3, 4, 5
       # implemented toy datasets: xor, nor, xnor, dot, trigometry, checkmark 
       # implemented image datasets: mnist_addition, cub, celeba, awa2
       # implemented textual datasets: ...
       dataset: xor, mnist_addition, cub, awa2, cub_incomplete, awa2_incomplete
-      # implemented models: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, 
-      #                     cmr, m_licem, v_cem, mv_cem
-      model: blackbox, cbm_linear, cbm_mlp, cem, dcr, cmr, m_licem, m_licem_weights_doubled 
+      # implemented models: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, cmr, m_licem
+      model: m_licem, blackbox, cbm_linear, cem, licem, dcr, cmr
 
 wandb:
   # Set the params below if you want to use wandb as logger.

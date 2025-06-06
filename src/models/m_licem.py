@@ -20,15 +20,16 @@ class LinearMemoryReasoner(BaseModel):
                  latent_size = 128,
                  c_groups=None,
                  memory_size=7,
-                 negative_concepts=True,
+                 negative_concepts=False,
                  hard_concepts=False,
                  weight_reg=1e-4,
                  encoder=None,
-                 sampling=False,
-                 use_bias=False,
+                 sampling=True,
+                 use_bias=True,
                  mc_approx=10,
                  embedding_memory=True,
-                 intervene_on_selection=True
+                 intervene_on_selection=True,
+                 linear_classifier_selection=False
                  ):
 
         super().__init__(
@@ -61,6 +62,7 @@ class LinearMemoryReasoner(BaseModel):
         self.embedding_memory = embedding_memory
         self.memory_size = memory_size
         self.intervene_on_selection = intervene_on_selection
+        self.linear_classifier_selection = linear_classifier_selection
 
         # If the user, with interventions, wants to modify both the selection of the linear classifier
         # and the execution of the linear classifier, we need to use the 
@@ -81,12 +83,22 @@ class LinearMemoryReasoner(BaseModel):
                 self.c_names,
             )            
 
+        # The selector generates logits that define a probability distribution 
+        # over the linear equations stored in memory.
+        # More precisely, for each class in y_names, we have a set of linear equations in the memory, and the selector
+        # selects a linear equation for each class in y_names.
         selector_input_size = embedding_size * len(c_names) if self.intervene_on_selection else latent_size
-        self.classifier_selector = nn.Sequential(
-            torch.nn.Linear(selector_input_size, memory_size)
-        )
+        if self.linear_classifier_selection:
+            self.classifier_selector = nn.Sequential(
+                nn.Linear(selector_input_size, memory_size),
+            )
+        else:
+            self.classifier_selector = nn.Sequential(
+                nn.Linear(selector_input_size, memory_size * len(y_names)),
+            )
 
-        # The memory containing the set of linear clasifiers can be implemented in two ways:
+        # The memory containing the set linear equations for each class in self.y_names.
+        # It can be instantiated in two ways:
         # 1. using embeddings to represent each cell of the memory, and then use a decoder to 
         #    associate a set of parameters (weights) to each embedding.
         # 2. directly learning the classifiers' parameters by using torch.nn.Parameter
@@ -95,7 +107,6 @@ class LinearMemoryReasoner(BaseModel):
                 memory_size,
                 latent_size
             )
-
             self.equation_decoder = pyc_nn.LinearConceptLayer(
                 latent_size,
                 [
@@ -106,9 +117,9 @@ class LinearMemoryReasoner(BaseModel):
         else: 
             self.equation_memory = nn.Parameter(
                 torch.randn(memory_size, len(c_names), output_size)
-        )
+            )
 
-        # We give to the user the possibility to use a global bias to make predictions.
+        # We give to the user the possibility to use a global bias.
         if self.use_bias:
             # The global class biases
             self.biases = nn.Parameter(
@@ -146,12 +157,7 @@ class LinearMemoryReasoner(BaseModel):
 
         classifier_selector_logits = self.classifier_selector(selector_input)
 
-        # Save the distribution over the memory to compute the entropy,
-        # which allows to evaluate how peaked the distribution is. 
-        selection_dist = classifier_selector_logits.clone().detach()
-
         if self.sampling:
-            current_tau = self.compute_tau(self.global_step)
             # At training time, we sample multiple times (Monte-Carlo approximation)
             # from a categorical distribution.
             # At inference time, only one sample is taken
@@ -159,23 +165,40 @@ class LinearMemoryReasoner(BaseModel):
                 n_samples = self.mc_approx
             else:
                 n_samples = 1
+
+        if not self.linear_classifier_selection:
+            # Reshape the logits to have dimension (bsz, memory_size, n_classes)
+            classifier_selector_logits = classifier_selector_logits.view(-1, self.memory_size, len(self.y_names))
+            # Save the distribution over the memory to compute the entropy,
+            # which allows to evaluate how peaked the distribution is. 
+            selection_dist = classifier_selector_logits.view(bsz*len(self.y_names), self.memory_size).clone().detach()
+            # Dimension: (bsz, memory_size, n_classes, n_samples)
+            classifier_selector_logits = classifier_selector_logits.unsqueeze(-1).expand(-1, -1, -1, n_samples)
+        else:
+            selection_dist = classifier_selector_logits.clone().detach()
+            # Dimension: (bsz, memory_size, n_samples)
             classifier_selector_logits = classifier_selector_logits.unsqueeze(-1).expand(-1, -1, n_samples)
+
+        if self.sampling:
+            # Compute the temperature for the Gumbel-Softmax distribution
+            current_tau = self.compute_tau(self.global_step)
 
             # Dimension: (bsz, memory_size, n_samples)
             prob_per_classifier = F.gumbel_softmax(classifier_selector_logits, 
                                                           tau=current_tau, 
-                                                          hard=True, 
+                                                          hard=False, 
                                                           dim=1)
         else:
             n_samples = 1
-            prob_per_classifier = torch.softmax(classifier_selector_logits, dim=-1).unsqueeze(-1)
+            prob_per_classifier = torch.softmax(classifier_selector_logits, dim=1).unsqueeze(-1)
 
-        # adding batch dimension to concept memory
+        # Get the parameters of the linear equations stored in memory.
         if self.embedding_memory:
-            equation_weights = self.equation_decoder(
-                self.equation_memory.weight).unsqueeze(dim=0)
+            equation_weights = self.equation_decoder(self.equation_memory.weight)
         else:
-            equation_weights = self.equation_memory.unsqueeze(dim=0)
+            equation_weights = self.equation_memory
+        # adding batch dimension to concept memory
+        equation_weights = equation_weights.unsqueeze(dim=0).expand(bsz, -1, -1, -1)
 
         if self.hard_concepts:
             input_concepts = (c_pred > 0.5).float()
@@ -189,12 +212,14 @@ class LinearMemoryReasoner(BaseModel):
         # Get the weights to generate the explanation
         predicted_weights = self.get_weights_for_explanation(equation_weights, prob_per_classifier)
 
+        # Execute the linear equations stored in memory by performing the dot product 
+        # among the input concepts and the weights of the linear equations.
         # Dimension: (batch_size, output_size, memory_size)
         y_per_classifier = CF.linear_equation_eval(equation_weights, 
                                                    input_concepts,
                                                    None)
         
-        # Select one of the linear classifier form the memory
+        # Select one logit for each class of y form the memory
         # Dimension: (batch_size, output_size, n_samples)
         y_pred = self.selection_eval(prob_per_classifier, y_per_classifier)
 
@@ -208,17 +233,23 @@ class LinearMemoryReasoner(BaseModel):
         """
         Select the linear classifier from the memory based on the probabilities
         computed by the classifier selector.
+        The output dimension is (batch_size, output_size, n_samples).
         """
-        # Dimension: (batch_size, output_size)
-        y_pred = torch.einsum('bms,btm->bts', prob_per_classifier, y_per_classifier)
-        return y_pred
+        if self.linear_classifier_selection:
+            return torch.einsum('bms,btm->bts', prob_per_classifier, y_per_classifier)
+        else:
+            return torch.einsum('bmts,btm->bts', prob_per_classifier, y_per_classifier)
     
     def get_weights_for_explanation(self, memory, selection):
         """
         Get the classifier's weights selection according to the distribution probabilities.
+        The output dimension is (batch_size, output_size, n_concepts, n_samples).
         """
-        return torch.einsum('bmct,bms->btcs', memory, selection)
-
+        if self.linear_classifier_selection:
+            return torch.einsum('bmct,bms->btcs', memory, selection)
+        else:
+            return torch.einsum('bmct,bmts->btcs', memory, selection)
+        
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         # Add L1 regularization on the weights of the equation memory

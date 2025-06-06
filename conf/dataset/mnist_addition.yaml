@@ -4,7 +4,7 @@ defaults:
 
 loader: 
   name: mnist_addition
-  extract_embeddings: true
+  extract_embeddings: false
 
 # Dataset parameters
 metadata:
@@ -17,7 +17,7 @@ latent_size: 64
 encoder:
   _target_: "src.models.encoders.MLPEncoder"
   output_size: ${dataset.latent_size}
-  hidden_size: 128
+  hidden_size: ${dataset.latent_size}
   input_transform:
     _target_: "src.models.encoders.MNISTTransform"
     flatten: true
