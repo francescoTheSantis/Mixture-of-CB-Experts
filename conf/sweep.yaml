@@ -40,7 +40,7 @@ hydra:
       # implemented toy datasets: xor, nor, xnor, dot, trigometry, checkmark 
       # implemented image datasets: mnist_addition, cub, celeba, awa2
       # implemented textual datasets: ...
-      dataset: xor, mnist_addition, cub, awa2, cub_incomplete, awa2_incomplete
+      dataset: xor, cub, awa2, cub_incomplete, awa2_incomplete, mnist_addition
       # implemented models: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, cmr, m_licem
       model: m_licem, blackbox, cbm_linear, cem, licem, dcr, cmr
 

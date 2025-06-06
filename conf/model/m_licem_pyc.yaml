@@ -6,12 +6,15 @@ params:
   _target_: "src.models.m_licem.LinearMemoryReasoner"
   task_penalty: ${task_penalty}
   int_prob: ${int_prob}
-  memory_size: 7
-  negative_concepts: True
+  memory_size: ${memory_size}
+  negative_concepts: False
   weight_reg: 1e-4
   embedding_size: ${embedding_size}
-  sampling: false
-  use_bias: false
+  sampling: False
+  use_bias: True
+  embedding_memory: True
+  intervene_on_selection: True
+  linear_classifier_selection: False
 
 metadata:
-  name: m_licem_neg_concepts
+  name: m_licem_pyc
