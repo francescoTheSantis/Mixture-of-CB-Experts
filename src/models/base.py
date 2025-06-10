@@ -90,12 +90,37 @@ class BaseModel(nn.Module):
         
         return x, c_true, int_idxs
     
-    def concept_based_loss(self, y_hat, y, c_hat=None, c=None):
-        if self.task == 'classification' and not isinstance(self, LogicModel):
-            if self.output_size > 1:
+    def _logic_model_checker(self):
+        """
+        Check if the model is a logic-based model.
+        Logic-based models are identified by their class name.
+        """
+        return self.__class__.__name__ in ['DeepConceptReasoner', 'ConceptMemoryReasoner']
+
+    def _task_loss_variable_check(self, y, y_hat):
+        """
+        Check the type and shape of y and y_hat before computing the task loss.
+        This is useful to ensure that the task loss function receives the correct input format.
+        """
+        # Check if the model is a logic-based model
+        logic_model_check = self._logic_model_checker()
+        # Check y type and shape before task loss computation
+        if self.task == 'classification':
+            if logic_model_check and self.output_size > 1:
+                y = F.one_hot(y.flatten().long(), num_classes=self.output_size).float()
+            elif self.output_size > 1:
                 y = y.flatten().long()
             else:
                 y = y.flatten().float()
+        elif self.task == 'regression':
+            raise NotImplementedError("Regression task is not implemented for concept-based loss.")
+        else:
+            raise ValueError(f"Unknown task type: {self.task}. Supported tasks are 'classification' and 'regression'.")
+        return y, y_hat
+    
+    def concept_based_loss(self, y_hat, y, c_hat=None, c=None):
+        # Update type and shape of y and y_hat before task loss computation
+        y, y_hat = self._task_loss_variable_check(y, y_hat)
         # task loss
         task_loss = 0
         # In case of Monte Carlo sampling
@@ -114,9 +139,7 @@ class BaseModel(nn.Module):
         loss = concept_loss + self.task_penalty * task_loss
         return loss
         
-    def get_intervened_concepts_predictions(self, 
-                                            labels, 
-                                            groups=None):
+    def get_intervened_concepts_predictions(self, labels, groups=None):
         '''
         Function to generate a mask for the intervention process.
         The mask is generated based on the probability of intervention 

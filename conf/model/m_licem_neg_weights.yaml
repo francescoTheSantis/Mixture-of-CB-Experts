@@ -7,14 +7,14 @@ params:
   task_penalty: ${task_penalty}
   int_prob: ${int_prob}
   memory_size: ${memory_size}
-  negative_concepts: False
+  negative_concepts: True
   weight_reg: 1e-4
   embedding_size: ${embedding_size}
-  sampling: True
-  use_bias: True
+  sampling: False
+  use_bias: False
   embedding_memory: True
   intervene_on_selection: False
-  linear_classifier_selection: ${linear_classifier_selection}
+  linear_classifier_selection: False
 
 metadata:
-  name: m_licem_cbm
+  name: m_licem_neg_weights

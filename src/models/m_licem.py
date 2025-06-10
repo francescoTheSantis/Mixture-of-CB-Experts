@@ -255,7 +255,7 @@ class LinearMemoryReasoner(BaseModel):
         # Add L1 regularization on the weights of the equation memory
         # to encourage sparsity
         if self.embedding_memory:
-            loss += self.weight_reg * self.equation_memory.weight.norm(p=1)
+            loss += self.weight_reg * self.equation_decoder(self.equation_memory.weight).norm(p=1)
         else:
             loss += self.weight_reg * self.equation_memory.norm(p=1)
         return loss

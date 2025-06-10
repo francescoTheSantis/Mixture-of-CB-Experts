@@ -3,7 +3,6 @@ from torchmetrics import Metric
 from sklearn.metrics import f1_score, accuracy_score
 from torchmetrics.classification import BinaryAUROC, BinaryF1Score
 
-
 class Task_Accuracy(Metric):
     """
     Task accuracy metric of the pytorch_lightning model.
@@ -32,7 +31,6 @@ class Task_Accuracy(Metric):
     def compute(self):
         return self.correct.float() / self.total
 
-
 class Concept_Accuracy(Metric):
     """
     Concept accuracy metric of the pytorch_lightning model.
@@ -50,7 +48,6 @@ class Concept_Accuracy(Metric):
 
     def compute(self):
         return self.correct.float() / self.total
-    
 
 def f1_acc_metrics(y_true, y_pred):
     """
@@ -68,7 +65,6 @@ def f1_acc_metrics(y_true, y_pred):
     accuracy = accuracy_score(y_true, y_pred)
     return f1, accuracy
 
-
 class LogitBinaryAUROC(BinaryAUROC):
     """
     AUROC metric from pytorch metrics working with logits.
@@ -84,7 +80,6 @@ class LogitBinaryF1Score(BinaryF1Score):
     def update(self, preds: torch.Tensor, target: torch.Tensor):
         preds = torch.sigmoid(preds)
         super().update(preds, target)
-
 
 if __name__ == '__main__':
     logic_task_acc = Task_Accuracy(logic_reasoning=True)

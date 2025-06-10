@@ -6,7 +6,7 @@ from torch_concepts.nn import functional as CF
 from src.models.base import BaseModel, LogicModel
 from torch.nn import functional as F
 
-class DeepConceptReasoner(LogicModel):
+class DeepConceptReasoner(BaseModel):
     def __init__(self, 
                  output_size,
                  c_names,
@@ -92,4 +92,6 @@ class DeepConceptReasoner(LogicModel):
         y_pred = y_pred[:, :, 0]
         return y_pred, c_pred
 
-
+    def loss(self, y_hat, y, c_hat=None, c=None):
+        loss = self.concept_based_loss(y_hat, y, c_hat, c)
+        return loss
