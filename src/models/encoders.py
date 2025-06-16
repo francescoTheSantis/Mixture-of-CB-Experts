@@ -144,23 +144,13 @@ class ImageTransform(nn.Module):
         input_size (int): Size of the input images (assumed square).
     """
 
-    def __init__(self, flatten=False, data_augmentation=False):
+    def __init__(self, flatten=False):
         super().__init__()
-        if data_augmentation:
-            self.transform = torchvision.transforms.Compose([
-                torchvision.transforms.RandomResizedCrop(224),
-                torchvision.transforms.RandomHorizontalFlip(),
-                torchvision.transforms.ToTensor(),
-                torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                 std=[0.229, 0.224, 0.225])
-            ])
-        else:
-            self.transform = torchvision.transforms.Compose([
-                torchvision.transforms.Resize((224, 224)),
-                torchvision.transforms.ToTensor(),
-                torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                 std=[0.229, 0.224, 0.225])
-            ])
+        self.transform = torchvision.transforms.Compose([
+            torchvision.transforms.Resize((224, 224)),
+            torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                std=[0.229, 0.224, 0.225])
+        ])
         self.flatten = flatten
 
     def forward(self, x):

@@ -8,3 +8,10 @@ loader:
 latent_size: ${latent_size}
 hard_concepts: false
 
+# encoder:
+#   _target_: "src.models.encoders.ResNetEncoder"
+#   output_size: ${dataset.latent_size}
+#   resnet_type: resnet18
+#   input_transform:
+#     _target_: "src.models.encoders.ImageTransform"
+#     flatten: false

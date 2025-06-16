@@ -1,0 +1,53 @@
+defaults:
+  - dataset: xor
+  - model: blackbox
+  - engine: engine
+
+## Common parameters
+max_epochs: 500
+patience: 40
+gamma: 0.5
+lr_patience: 20
+gpus: [0]
+seed: 1
+activation: LeakyReLU
+num_workers: 0
+
+## These parameters can be overridden by the dataset config
+latent_size: 64
+batch_size: 256
+
+## Shared Concept-based model parameters
+task_penalty: 0.1
+int_prob: 0.25
+
+## Shared Concept-embedding based model
+embedding_size: 64
+
+## Shared Concept Memory model
+memory_size: 8
+
+# Set this parameter to True if you want to use the stored, preprocessed dataset,
+# otherwise it will be preprocessed from scratch and saved in the cache. 
+use_stored_dataset: True
+
+hydra:
+  mode: MULTIRUN
+  sweeper:
+    params:
+      seed: 1, 2, 3
+      # implemented toy datasets: xor, nor, xnor, dot, trigometry, checkmark 
+      # implemented image datasets: mnist_addition, cub, celeba, awa2
+      # implemented textual datasets: ...
+      dataset: xor, awa2_incomplete, cub_incomplete, awa2, cub, mnist_addition
+      model: m_licem_proto_int_sel
+
+wandb:
+  # Set the params below if you want to use wandb as logger.
+  # Set it to null if you do not want to use wandb.
+  project: "linear_memory_reasoner" # Set to your project name
+  entity: "francescothesantis-politecnico-di-torino"  # Set to your wandb entity name
+
+# The note will be appended to the group name in wandb.
+# If you do not want to add any note, set it to null.
+note: null

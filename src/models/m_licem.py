@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
-from torch_concepts.nn import functional as CF
 from src.models.base import BaseModel
 import torch.nn.functional as F
 
@@ -24,12 +23,12 @@ class LinearMemoryReasoner(BaseModel):
                  hard_concepts=False,
                  weight_reg=1e-4,
                  encoder=None,
-                 sampling=True,
-                 use_bias=True,
                  mc_approx=10,
                  embedding_memory=True,
                  intervene_on_selection=True,
-                 linear_classifier_selection=False
+                 linear_classifier_selection=False,
+                 cos_sim=True,
+                 sampling=True
                  ):
 
         super().__init__(
@@ -57,12 +56,12 @@ class LinearMemoryReasoner(BaseModel):
 
         # Parameters specific for the LinearMemoryReasoner
         self.sampling = sampling
-        self.use_bias = use_bias
         self.mc_approx = mc_approx
         self.embedding_memory = embedding_memory
         self.memory_size = memory_size
         self.intervene_on_selection = intervene_on_selection
         self.linear_classifier_selection = linear_classifier_selection
+        self.cos_sim = cos_sim
 
         # If the user, with interventions, wants to modify both the selection of the linear classifier
         # and the execution of the linear classifier, we need to use the 
@@ -119,20 +118,27 @@ class LinearMemoryReasoner(BaseModel):
                 torch.randn(memory_size, len(c_names), output_size)
             )
 
-        # We give to the user the possibility to use a global bias.
-        if self.use_bias:
-            # The global class biases
-            self.biases = nn.Parameter(
-                torch.randn(output_size)
-            )
-
         self.concept_loss_form = nn.BCELoss()
+
+        self.scale = torch.nn.Parameter(torch.tensor(1.0))
+        self.softplus = nn.Softplus()
 
     def compute_tau(self, global_step, tau_init=1, tau_min=0.1, decay_rate=0.99):
         # The temperature is decayed from initial_temp to min_temp over time
         tau = max(tau_min, tau_init * decay_rate ** global_step)
         return tau
     
+    def transform_concepts(self, c_pred):
+        if self.hard_concepts:
+            input_concepts = (c_pred > 0.5).float()
+        else:
+            input_concepts = c_pred
+        if self.negative_concepts:
+            input_concepts = 2*input_concepts - 1 
+        else:
+            input_concepts = input_concepts
+        return input_concepts
+
     def forward(self, input):
         latent, c_true, int_idxs = self.encode(input)
         bsz = latent.shape[0]
@@ -157,14 +163,13 @@ class LinearMemoryReasoner(BaseModel):
 
         classifier_selector_logits = self.classifier_selector(selector_input)
 
-        if self.sampling:
-            # At training time, we sample multiple times (Monte-Carlo approximation)
-            # from a categorical distribution.
-            # At inference time, only one sample is taken
-            if self.training:
-                n_samples = self.mc_approx
-            else:
-                n_samples = 1
+        # At training time, we sample multiple times (Monte-Carlo approximation)
+        # from a categorical distribution.
+        # At inference time, only one sample is taken
+        if self.training and self.sampling:
+            n_samples = self.mc_approx
+        else:
+            n_samples = 1
 
         if not self.linear_classifier_selection:
             # Reshape the logits to have dimension (bsz, memory_size, n_classes)
@@ -185,29 +190,22 @@ class LinearMemoryReasoner(BaseModel):
 
             # Dimension: (bsz, memory_size, n_samples)
             prob_per_classifier = F.gumbel_softmax(classifier_selector_logits, 
-                                                          tau=current_tau, 
-                                                          hard=False, 
-                                                          dim=1)
+                                                            tau=current_tau, 
+                                                            hard=False, 
+                                                            dim=1)
         else:
-            n_samples = 1
-            prob_per_classifier = torch.softmax(classifier_selector_logits, dim=1).unsqueeze(-1)
+            # Dimension: (bsz, memory_size, n_samples)
+            prob_per_classifier = F.softmax(classifier_selector_logits, dim=1)
 
         # Get the parameters of the linear equations stored in memory.
         if self.embedding_memory:
             equation_weights = self.equation_decoder(self.equation_memory.weight)
         else:
             equation_weights = self.equation_memory
-        # adding batch dimension to concept memory
+        # Adding batch dimension to concept memory
         equation_weights = equation_weights.unsqueeze(dim=0).expand(bsz, -1, -1, -1)
 
-        if self.hard_concepts:
-            input_concepts = (c_pred > 0.5).float()
-        else:
-            input_concepts = c_pred
-        if self.negative_concepts:
-            input_concepts = 2*input_concepts - 1 #TODO: consider converting into convex combination of positive and weights as in CBM
-        else:
-            input_concepts = input_concepts
+        input_concepts = self.transform_concepts(c_pred)
 
         # Get the weights to generate the explanation
         predicted_weights = self.get_weights_for_explanation(equation_weights, prob_per_classifier)
@@ -215,20 +213,25 @@ class LinearMemoryReasoner(BaseModel):
         # Execute the linear equations stored in memory by performing the dot product 
         # among the input concepts and the weights of the linear equations.
         # Dimension: (batch_size, output_size, memory_size)
-        y_per_classifier = CF.linear_equation_eval(equation_weights, 
-                                                   input_concepts,
-                                                   None)
+        y_per_classifier = self.linear_equation_eval(equation_weights, 
+                                                   input_concepts)
         
         # Select one logit for each class of y form the memory
         # Dimension: (batch_size, output_size, n_samples)
         y_pred = self.selection_eval(prob_per_classifier, y_per_classifier)
 
-        # Add global biases if self.bias is True
-        if self.use_bias:
-            y_pred = y_pred + self.biases.unsqueeze(0).unsqueeze(-1).expand(bsz, -1, n_samples)
-
         return y_pred, c_pred, predicted_weights, selection_dist
     
+    def linear_equation_eval(self, memory, input_concepts):
+        if self.cos_sim:
+            # Normalize over the memory dimension
+            memory = F.normalize(memory, p=2, dim=2)
+            input_concepts = F.normalize(input_concepts, p=2, dim=1)
+        y_pred = torch.einsum('bmcy,bc->bym', memory, input_concepts)
+        if self.cos_sim:
+            y_pred = self.softplus(self.scale) * y_pred
+        return y_pred
+
     def selection_eval(self, prob_per_classifier, y_per_classifier):
         """
         Select the linear classifier from the memory based on the probabilities

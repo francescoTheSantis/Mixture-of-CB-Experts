@@ -8,4 +8,4 @@ params:
     _target_: src.models.encoders.LinearEncoder
     input_size: ${input_size}
     output_size: ${dataset.latent_size}
-    input_transform: null
+    activation: ${activation}

@@ -10,11 +10,9 @@ params:
   negative_concepts: False
   weight_reg: 1e-4
   embedding_size: ${embedding_size}
-  sampling: False
-  use_bias: False
   embedding_memory: True
   intervene_on_selection: False
   linear_classifier_selection: False
 
 metadata:
-  name: m_licem
+  name: m_licem_sampling
