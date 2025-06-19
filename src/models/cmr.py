@@ -2,8 +2,12 @@ import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
 from torch_concepts.nn import functional as CF
+from torch_concepts.semantic import CMRSemantic
+
 from src.models.base import BaseModel, LogicModel
 from torch.nn import functional as F
+
+eps = 1e-8
 
 class ConceptMemoryReasoner(BaseModel):
     def __init__(self, 
@@ -98,6 +102,7 @@ class ConceptMemoryReasoner(BaseModel):
         )
         # weighting the reconstruction loss - lower reconstruction weights
         # brings values closer to 1 thus influencing less the prediction
+        c_rec_per_classifier = (eps / 2 + c_rec_per_classifier * (1 - eps/2))
         c_rec_per_classifier = torch.pow(c_rec_per_classifier, self.rec_weight)
 
         return c_rec_per_classifier
@@ -118,10 +123,13 @@ class ConceptMemoryReasoner(BaseModel):
         prob_per_classifier = torch.softmax(classifier_selector_logits, dim=-1)
         # softmax over roles and adding batch dimension to concept memory
         concept_weights = self.memory_decoder(
-            self.concept_memory.weight).softmax(dim=-1).unsqueeze(dim=0)
+            self.concept_memory.weight)
+
+        # check
+        concept_weights = (eps / 2 + concept_weights * (1 - eps/2)).softmax(dim=-1).unsqueeze(dim=0)
 
         c_input = (c_pred > 0.5).float() if self.hard_concepts else c_pred
-        y_per_classifier = CF.logic_rule_eval(concept_weights, c_input)
+        y_per_classifier = self.logic_rule_eval(concept_weights, c_input)
 
         if y_true is not None:
             c_rec_per_classifier = self._conc_recon(concept_weights,
@@ -140,4 +148,75 @@ class ConceptMemoryReasoner(BaseModel):
     
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
+        if torch.isnan(loss):
+            raise ValueError("Loss is NaN. Check your model and data.")
         return loss
+
+
+    def logic_rule_eval(
+            self,
+            concept_weights: torch.Tensor,
+            c_pred: torch.Tensor,
+            memory_idxs: torch.Tensor = None,
+            semantic=CMRSemantic()
+    ) -> torch.Tensor:
+        """
+        Use concept weights to make predictions based on logic rules.
+
+        Args:
+            concept_weights: concept weights with shape (batch_size,
+                memory_size, n_concepts, n_tasks, n_roles) with n_roles=3.
+            c_pred: concept predictions with shape (batch_size, n_concepts).
+            memory_idxs: Indices of rules to evaluate with shape (batch_size,
+                n_tasks). Default is None (evaluate all).
+            semantic: Semantic function to use for rule evaluation.
+
+        Returns:
+            torch.Tensor: Rule predictions with shape (batch_size, n_tasks,
+                memory_size)
+        """
+
+        assert len(concept_weights.shape) == 5, \
+            ("Size error, concept weights should be batch_size x memory_size "
+             f"x n_concepts x n_tasks x n_roles. Received {concept_weights.shape}")
+        memory_size = concept_weights.size(1)
+        n_tasks = concept_weights.size(3)
+
+
+        pos_polarity, neg_polarity, irrelevance = (
+            concept_weights[..., 0],
+            concept_weights[..., 1],
+            concept_weights[..., 2],
+        )
+
+        if memory_idxs is None:
+            # cast all to (batch_size, memory_size, n_concepts, n_tasks)
+            x = c_pred.unsqueeze(1).unsqueeze(-1).expand(
+                -1,
+                memory_size,
+                -1,
+                n_tasks,
+            )
+        else:  # cast all to (batch_size, memory_size=1, n_concepts, n_tasks)
+            # TODO: memory_idxs never used!
+            x = c_pred.unsqueeze(1).unsqueeze(-1).expand(-1, 1, -1, n_tasks)
+
+        # batch_size, mem_size, n_tasks
+        y_per_rule = semantic.disj(
+            irrelevance,
+            semantic.conj((1 - x), neg_polarity),
+            semantic.conj(x, pos_polarity)
+        )
+
+        y_per_rule = (eps / 2 + y_per_rule * (1 - eps/2))
+
+        assert (y_per_rule < 1.0).all(), "y_per_rule should be in [0, 1]"
+        assert (y_per_rule > 0.0).all(), "y_per_rule should be in [0, 1]"
+
+        # performing a conj while iterating over concepts of y_per_rule
+        y_per_rule = semantic.conj(
+            *[y for y in y_per_rule.split(1, dim=2)]
+        ).squeeze(dim=2)
+
+        return y_per_rule.permute(0, 2, 1)
+
