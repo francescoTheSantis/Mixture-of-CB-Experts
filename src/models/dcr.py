@@ -24,6 +24,7 @@ class DeepConceptReasoner(BaseModel):
                  c_groups=None,
                  hard_concepts=False,
                  encoder=None,
+                 concept_loss_form=nn.BCELoss(),
                  ):
         super().__init__(
             output_size,
@@ -48,11 +49,14 @@ class DeepConceptReasoner(BaseModel):
         self.semantic = semantic
         self.temperature = temperature
         self.hard_concepts = hard_concepts
+        self.concept_loss_form = concept_loss_form
+        c_activation = nn.Identity if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.sigmoid
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             latent_size,
             self.c_names,
             embedding_size,
+            activation=c_activation
         )
         self.concept_importance_predictor = nn.Sequential(
             nn.Linear(embedding_size, self.latent_size),
@@ -61,7 +65,6 @@ class DeepConceptReasoner(BaseModel):
             nn.Unflatten(-1, (output_size, self.n_roles)),
         )
 
-        self.concept_loss_form = nn.BCELoss()
         self.task_loss_form = nn.BCELoss()
 
     def forward(self, input):

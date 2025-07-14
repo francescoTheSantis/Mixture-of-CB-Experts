@@ -62,6 +62,12 @@ class BaseModel(nn.Module):
                 self.task_loss_form = nn.BCEWithLogitsLoss()
         elif task == 'regression':
             self.task_loss_form = nn.MSELoss()
+        elif task == 'generation':
+            self.task_loss_form = nn.CrossEntropyLoss()
+        else:
+            raise NotImplementedError(f"Task {task} is not implemented. "
+                                      f"Supported tasks are 'classification', "
+                                      f"'regression', and 'generation'.")
 
         self.concept_loss_form = None
         self.task_penalty = None
@@ -102,6 +108,7 @@ class BaseModel(nn.Module):
         Check the type and shape of y and y_hat before computing the task loss.
         This is useful to ensure that the task loss function receives the correct input format.
         """
+
         # Check if the model is a logic-based model
         logic_model_check = self._logic_model_checker()
         # Check y type and shape before task loss computation
@@ -114,8 +121,11 @@ class BaseModel(nn.Module):
                 y = y.flatten().float()
         elif self.task == 'regression':
             raise NotImplementedError("Regression task is not implemented for concept-based loss.")
+        elif self.task == 'generation':
+            # in case of generation, we assume y is a sequence of tokens
+            y = y.flatten().long()
         else:
-            raise ValueError(f"Unknown task type: {self.task}. Supported tasks are 'classification' and 'regression'.")
+            raise ValueError(f"Unknown task type: {self.task}. Supported tasks are 'classification', 'regression', and 'generation'.")
         return y, y_hat
     
     def concept_based_loss(self, y_hat, y, c_hat=None, c=None):
@@ -132,9 +142,14 @@ class BaseModel(nn.Module):
             task_loss = self.task_loss_form(y_hat.squeeze(), y)
         # concept loss
         concept_loss = 0
-        for i in range(c.shape[1]):
-            concept_loss += self.concept_loss_form(c_hat[:,i], c[:,i])
-        concept_loss /= c.shape[1]
+        if isinstance(self.concept_loss_form, nn.BCELoss):
+            for i in range(c.shape[1]):
+                concept_loss += self.concept_loss_form(c_hat[:,i], c[:,i])
+            concept_loss /= c.shape[1]
+        elif isinstance(self.concept_loss_form, nn.CrossEntropyLoss):
+            concept_loss = self.concept_loss_form(c_hat, c.argmax(-1))
+        else:
+            raise NotImplementedError(f"{self.concept_loss_form} not supported")
         # combine the two losses by considering the task penalty regularization
         loss = concept_loss + self.task_penalty * task_loss
         return loss

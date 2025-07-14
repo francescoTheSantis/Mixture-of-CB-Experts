@@ -27,6 +27,7 @@ class ConceptMemoryReasoner(BaseModel):
                  conc_rec_weight=1.0,
                  hard_concepts=False,
                  encoder=None,
+                 concept_loss_form=nn.BCELoss()
                  ):
         super().__init__(
             output_size,
@@ -54,10 +55,13 @@ class ConceptMemoryReasoner(BaseModel):
 
         self.memory_size = memory_size
         self.rec_weight = conc_rec_weight
+        self.concept_loss_form = concept_loss_form
+        c_activation = nn.Identity if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.sigmoid
 
         self.bottleneck = pyc_nn.LinearConceptBottleneck(
             latent_size,
             self.c_names,
+            activation=c_activation,
         )
 
         self.concept_memory = torch.nn.Embedding(
@@ -79,7 +83,6 @@ class ConceptMemoryReasoner(BaseModel):
             ),
         )
 
-        self.concept_loss_form = nn.BCELoss()
         self.task_loss_form = nn.BCELoss()
 
 

@@ -75,10 +75,22 @@ class Engine(pl.LightningModule):
         x = batch[0]
         c = batch[1]
         y = batch[2]
+
+        assert x.isnan().sum() == 0, "Input tensor contains NaN values"
+        assert c.isnan().sum() == 0, "Concept tensor contains NaN values"
+        assert y.isnan().sum() == 0, "Target tensor contains NaN values"
+
         return x, c, y
 
     def shared_step(self, batch):
         x, c, y = self.unpack_batch(batch)
+        # If the concepts are in a sequence, we need to flatten it
+        # TODO: remove and manage otherwise if we finetune the LLM encoder
+        if c.dim() == 3:
+            c = c.view(c.size(0)*c.size(1), -1)
+            x = x.view(x.size(0)*x.size(1), -1)
+            y = y.view(y.size(0)*y.size(1), -1)
+
         inputs = {'x':x, 'c':c, 'y':y.float()}
         # model forward
         model_output = self.forward(inputs)

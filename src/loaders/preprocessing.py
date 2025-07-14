@@ -241,13 +241,18 @@ class TextEmbeddingDataset(torch.utils.data.Dataset):
             "concept": self.labels[idx],
             "task": self.input_ids[idx]
         }
-        # Create concept labels: where the attention mask is 0 (padding token), assign -100 (ignored by the loss function)
-        concept_label = torch.where(
-            sample["attention_mask"][:-1] == 0, -100,
-            sample["concept"].view(-1, 1))
+        seq_len = sample["attention_mask"].shape[0]
+        mask = sample["attention_mask"][:-1]
+
+        # Create concept labels: first convert the concept to one-hot encoding
+        concept_label = F.one_hot(sample["concept"], num_classes=self.labels.max()+1).float()
+        # Shift the task labels to create next-token prediction labels
+        concept_label = concept_label.repeat(seq_len, 1)[:-1, :].float()
+        # Set to 0 where the attention mask is 0
+        concept_label = concept_label * mask.unsqueeze(-1).float()
+
         # Create word labels: where the attention mask is 0, assign -100; otherwise, use the next token as the label
-        word_label = torch.where(sample["attention_mask"][:-1] == 0,
-                                 -100, sample["task"][1:])
+        word_label = torch.where(mask == 0, -100, sample["task"][1:])
         # Select all embeddings except the last one to align with the shifted labels
         # (the last token does not have a next token to predict)
         features = sample["embeddings"][:-1].float()

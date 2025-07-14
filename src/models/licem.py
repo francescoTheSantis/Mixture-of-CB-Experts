@@ -23,6 +23,7 @@ class LinearConceptEmbeddingModel(BaseModel):
                  bias_reg=1e-4,
                  hard_concepts=False,
                  encoder=None,
+                 concept_loss_form=nn.BCELoss()
                  ):
 
         super().__init__(
@@ -44,11 +45,14 @@ class LinearConceptEmbeddingModel(BaseModel):
         self.use_bias = use_bias
         self.y_names = list(y_names)
         self.hard_concepts = hard_concepts
+        self.concept_loss_form = concept_loss_form
+        c_activation = nn.Identity if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.sigmoid
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             latent_size,
             self.c_names,
             embedding_size,
+            activation=c_activation,
         )
         # module predicting the concept importance for all concepts and tasks
         # input batch_size x concept_number x embedding_size
@@ -80,7 +84,6 @@ class LinearConceptEmbeddingModel(BaseModel):
         if self.use_bias:
             self.__predicted_bias = None
 
-        self.concept_loss_form = nn.BCELoss()
 
     def forward(self, input):
         latent, c_true, int_idxs = self.encode(input)

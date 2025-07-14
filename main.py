@@ -32,9 +32,10 @@ def main(cfg: DictConfig) -> None:
                                   and cfg.use_stored_dataset\
                                   and loader.extract_embeddings:
         print('Loading pre-processed data...')
-        loaded_train = torch.load(f"{data_path}/train.pt")
-        loaded_val = torch.load(f"{data_path}/val.pt")
-        loaded_test = torch.load(f"{data_path}/test.pt")
+        loaded_train = torch.load(train_path)
+        loaded_val = torch.load(val_path)
+        loaded_test = torch.load(test_path)
+
     # Otherwise, preprocess the data and then store the results
     else:
         print('Preprocessing data...')

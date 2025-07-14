@@ -94,7 +94,9 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             c_names = c_names,
             y_names = y_names,
             task = cfg.dataset.metadata.task,
-            c_groups = c_groups
+            c_groups = c_groups,
+            concept_loss_form=cfg.dataset.get('concept_loss_form', {
+                '_target_': 'torch.nn.BCELoss'})
         )
 
         if 'encoder' in cfg.dataset and not cfg.dataset.loader.extract_embeddings:

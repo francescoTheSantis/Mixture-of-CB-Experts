@@ -21,6 +21,7 @@ class ConceptEmbeddingModel(BaseModel):
                  c_groups=None,
                  hard_concepts=False,
                  encoder=None,
+                 concept_loss_form=nn.BCELoss()
                  ):
 
         super().__init__(
@@ -40,11 +41,14 @@ class ConceptEmbeddingModel(BaseModel):
         self.has_concepts = True
         self.noise = noise
         self.hard_concepts = hard_concepts
+        self.concept_loss_form = concept_loss_form
+        c_activation = nn.Identity if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.sigmoid
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             latent_size,
             self.c_names,
             embedding_size,
+            c_activation
         )
         self.y_predictor = nn.Sequential(
             nn.Linear(len(self.c_names) * embedding_size, latent_size),
@@ -52,7 +56,6 @@ class ConceptEmbeddingModel(BaseModel):
             nn.Linear(latent_size, output_size),
         )
 
-        self.concept_loss_form = nn.BCELoss()
 
     def forward(self, input):
         x, c_true, int_idxs = self.encode(input)

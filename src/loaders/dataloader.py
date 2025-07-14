@@ -177,7 +177,7 @@ class loader(object):
             tokenizer = AutoTokenizer.from_pretrained(
                 "mistralai/Mistral-7B-v0.1")
             # Ottieni la lista di tutti i token (stringhe)
-            task_names = list(tokenizer.get_vocab().keys())
+            task_names = [f"w_{i}" for i in range(len(tokenizer.get_vocab().keys()))] # simple keys were not working
             concept_groups = None
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
@@ -325,29 +325,56 @@ class loader(object):
 
 
 if __name__ == '__main__':
-    print("\nXNOR dataset")
-    xnor_dataset = loader(
-        name='xnor',
-        batch_size=32,
-        num_workers=4,
-        device='cpu',
-    ).load_data()[0]
-    print(xnor_dataset.__iter__().__next__())
+    print("\nSST2 dataset")
+    sst2_datasets = loader(
+        name='sst2',
+        batch_size=10,
+        num_workers=0,
+        device='mps',
+        extract_embeddings=False
+    ).load_data()
 
-    print("\nNOR dataset")
-    nor_dataset = loader(
-        name='nor',
-        batch_size=32,
-        num_workers=4,
-        device='cpu',
-    ).load_data()[0]
-    print(nor_dataset.__iter__().__next__())
+    print([val.shape for val in sst2_datasets[0].__iter__().__next__().values()])
 
-    print("\nOR dataset")
-    or_dataset = loader(
-        name='or',
-        batch_size=32,
-        num_workers=4,
-        device='cpu',
-    ).load_data()[0]
-    print(or_dataset.__iter__().__next__())
+    E_extr = TextEmbeddingExtractor(sst2_datasets[0],
+                                    sst2_datasets[1],
+                                    sst2_datasets[2],
+                                    device='mps',
+                                    )
+    train_loader, val_loader, test_loader = E_extr.produce_loaders()
+
+    # we save the train, validation and test loaders
+    data_path = os.path.join(DATA_PATH, 'stored_tensors', 'sst2')
+    os.makedirs(data_path, exist_ok=True)
+    torch.save(train_loader, os.path.join(data_path, 'train.pt'))
+    torch.save(val_loader, os.path.join(data_path, 'val.pt'))
+    torch.save(test_loader, os.path.join(data_path, 'test.pt'))
+
+    # print("\nXNOR dataset")
+    # xnor_dataset = loader(
+    #     name='xnor',
+    #     batch_size=32,
+    #     num_workers=4,
+    #     device='cpu',
+    # ).load_data()[0]
+    # print(xnor_dataset.__iter__().__next__())
+    #
+    # print("\nNOR dataset")
+    # nor_dataset = loader(
+    #     name='nor',
+    #     batch_size=32,
+    #     num_workers=4,
+    #     device='cpu',
+    # ).load_data()[0]
+    # print(nor_dataset.__iter__().__next__())
+    #
+    # print("\nOR dataset")
+    # or_dataset = loader(
+    #     name='or',
+    #     batch_size=32,
+    #     num_workers=4,
+    #     device='cpu',
+    # ).load_data()[0]
+    # print(or_dataset.__iter__().__next__())
+
+

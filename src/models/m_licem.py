@@ -27,8 +27,9 @@ class LinearMemoryReasoner(BaseModel):
                  embedding_memory=True,
                  intervene_on_selection=True,
                  linear_classifier_selection=False,
-                 cos_sim=True,
-                 sampling=True
+                 cos_sim=False,
+                 sampling=True,
+                 concept_loss_form=nn.BCELoss(),
                  ):
 
         super().__init__(
@@ -62,17 +63,20 @@ class LinearMemoryReasoner(BaseModel):
         self.intervene_on_selection = intervene_on_selection
         self.linear_classifier_selection = linear_classifier_selection
         self.cos_sim = cos_sim
+        self.concept_loss_form = concept_loss_form
+        c_activation = nn.Identity if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.sigmoid
 
         # If the user, with interventions, wants to modify both the selection of the linear classifier
         # and the execution of the linear classifier, we need to use the 
         # Concept embedding model to produce both concept predictions and embeddings.
-        # Which will allow to interven on both the linear classifier selection (concept embeddings) 
+        # Which will allow to intervene on both the linear classifier selection (concept embeddings)
         # and execution (concept predictions).
         if self.intervene_on_selection:
             self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
                 latent_size,
                 self.c_names,
                 embedding_size,
+                activation=c_activation
             )
         else:
             # If the user wants to intervene only on the execution of the linear classifier,
@@ -80,6 +84,7 @@ class LinearMemoryReasoner(BaseModel):
             self.bottleneck = pyc_nn.LinearConceptBottleneck(
                 self.latent_size,
                 self.c_names,
+                activation=c_activation
             )            
 
         # The selector generates logits that define a probability distribution 
@@ -117,8 +122,6 @@ class LinearMemoryReasoner(BaseModel):
             self.equation_memory = nn.Parameter(
                 torch.randn(memory_size, len(c_names), output_size)
             )
-
-        self.concept_loss_form = nn.BCELoss()
 
         self.scale = torch.nn.Parameter(torch.tensor(1.0))
         self.softplus = nn.Softplus()

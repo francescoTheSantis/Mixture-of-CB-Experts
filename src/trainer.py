@@ -44,7 +44,7 @@ class Trainer:
             callbacks=[early_stopping, checkpoint_callback, lr_monitor],
             logger=loggers,
             devices=self.cfg.gpus,  
-            accelerator="gpu",
+            accelerator="auto",
             enable_progress_bar=True,
         )
 

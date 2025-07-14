@@ -18,7 +18,8 @@ class ConceptResidualModel(BaseModel):
                  residual_size = 10,
                  c_groups=None,
                  hard_concepts=False,
-                 encoder=None
+                 encoder=None,
+                concept_loss_form=nn.BCELoss()
                  ):
         
         super().__init__(
@@ -50,7 +51,7 @@ class ConceptResidualModel(BaseModel):
             nn.Linear(latent_size, output_size),
         )
 
-        self.concept_loss_form = nn.BCELoss()
+        self.concept_loss_form = concept_loss_form
 
     def forward(self, input):
         x, c_true, int_idxs = self.encode(input)
