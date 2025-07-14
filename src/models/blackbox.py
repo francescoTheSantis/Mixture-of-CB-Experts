@@ -5,14 +5,12 @@ from src.models.base import BaseModel
 class BlackBox(BaseModel):
     def __init__(self,
                  output_size=2,
-                 c_names=None,
-                 y_names=None,
-                 hard_concepts=False,
                  activation='ReLU',
                  task = 'classification',
                  latent_size = 128,
                  c_groups = None,
-                 encoder=None
+                 encoder=None,
+                 **kwargs
                  ):
         super().__init__(
                  output_size,
