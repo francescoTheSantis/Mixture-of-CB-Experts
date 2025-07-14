@@ -81,7 +81,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         c_groups = c_groups
     else:
         c_groups = dict(c_groups)
-    
+
     with open_dict(cfg):
         cfg.engine.update(
             c_names = c_names,
@@ -147,7 +147,7 @@ def plot_explanations(lmr_paths):
     for exp in lmr_paths:
         try:
             # If it does not exist, create the figs directory
-            figs_path = f'figs/{exp['model']}_explanations/{exp['dataset']}'
+            figs_path = f'figs/{exp["model"]}_explanations/{exp["dataset"]}'
             if not os.path.exists(figs_path):
                 os.makedirs(figs_path)
             exp_info_path = os.path.join(exp['path'], 'logs/experiment_metrics/version_0')
