@@ -65,12 +65,16 @@ def parse_hyperparams(cfg: DictConfig):
     }
     return hyperparams
 
-def update_config_from_data(cfg: DictConfig, train_loader, c_names, y_names, c_groups, csv_log_dir) -> DictConfig:
+def update_config_from_data(cfg: DictConfig, train_loader, c_names,
+                            y_names, c_groups, csv_log_dir) -> DictConfig:
     """
     Update the config with the input size, output size, and concept names.
     """
     x, c, y = next(iter(train_loader))
-    input_size = torch.prod(torch.tensor(x.shape[1:])).item()
+    if cfg.dataset.metadata.name != 'sst2':
+        input_size = torch.prod(torch.tensor(x.shape[1:])).item()
+    else:
+        input_size = x.shape[-1]
     concept_size = c.shape[1]
     n_labels = len(y_names)
     if c_groups is None or not isinstance(c_groups, dict):

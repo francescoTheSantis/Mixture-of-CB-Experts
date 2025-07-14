@@ -14,7 +14,8 @@ from torch_concepts.data.awa2 import CONCEPT_GROUPS as awa2_concept_groups
 from torch_concepts.data.celeba import CelebADataset
 from torch.utils.data import DataLoader, random_split
 from env import DATA_PATH
-from src.loaders.preprocessing import EmbeddingExtractor
+from src.loaders.preprocessing import EmbeddingExtractor, \
+    TextEmbeddingExtractor
 import omegaconf
 from torchvision import transforms
 import os
