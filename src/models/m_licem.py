@@ -64,7 +64,7 @@ class LinearMemoryReasoner(BaseModel):
         self.linear_classifier_selection = linear_classifier_selection
         self.cos_sim = cos_sim
         self.concept_loss_form = concept_loss_form
-        c_activation = nn.Identity if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.sigmoid
+        c_activation = nn.Identity if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.Sigmoid()
 
         # If the user, with interventions, wants to modify both the selection of the linear classifier
         # and the execution of the linear classifier, we need to use the 

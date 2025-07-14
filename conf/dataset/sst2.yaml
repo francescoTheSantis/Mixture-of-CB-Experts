@@ -12,3 +12,6 @@ metadata:
   name: sst2
 
 latent_size: 1024
+
+concept_loss_form:
+  _target_: "torch.nn.CrossEntropyLoss"

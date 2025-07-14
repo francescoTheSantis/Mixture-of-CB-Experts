@@ -56,7 +56,7 @@ class ConceptMemoryReasoner(BaseModel):
         self.memory_size = memory_size
         self.rec_weight = conc_rec_weight
         self.concept_loss_form = concept_loss_form
-        c_activation = nn.Identity if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.sigmoid
+        c_activation = nn.Identity if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.Sigmoid()
 
         self.bottleneck = pyc_nn.LinearConceptBottleneck(
             latent_size,
