@@ -250,6 +250,11 @@ class TextEmbeddingDataset(torch.utils.data.Dataset):
                                  -100, sample["task"][1:])
         # Select all embeddings except the last one to align with the shifted labels
         # (the last token does not have a next token to predict)
-        features = sample["embeddings"][:, :-1].float()
+        features = sample["embeddings"][:-1].float()
+
+        assert features.shape[0] == concept_label.squeeze().shape[0],\
+                "Features and concept labels must have the same sequence length"
+        assert features.shape[0] == word_label.squeeze().shape[0],\
+                "Features and word labels must have the same sequence length"
 
         return features, concept_label, word_label
