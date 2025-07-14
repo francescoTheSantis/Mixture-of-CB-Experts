@@ -164,8 +164,6 @@ class TextEmbeddingExtractor:
 
         self.model = AutoModel.from_pretrained(model_name,
                                                torch_dtype=torch.bfloat16)
-        self.model = self.model.to(self.device)
-        self.model.eval()
 
     def _extract_embeddings(self, loader):
         embeddings = []
@@ -173,6 +171,8 @@ class TextEmbeddingExtractor:
         labels = []
         input_ids = []
 
+        self.model = self.model.to(self.device)
+        self.model.eval()
         with torch.no_grad():
             for batch in tqdm(loader, desc="Extracting embeddings"):
                 batch = {k: v.to(self.device) for k, v in batch.items()}
@@ -249,7 +249,7 @@ class TextEmbeddingDataset(torch.utils.data.Dataset):
         # Shift the task labels to create next-token prediction labels
         concept_label = concept_label.repeat(seq_len, 1)[:-1, :].float()
         # Set to 0 where the attention mask is 0
-        concept_label = concept_label * mask.unsqueeze(-1).float()
+        concept_label = torch.where(mask.unsqueeze(-1) == 0, -100, concept_label)
 
         # Create word labels: where the attention mask is 0, assign -100; otherwise, use the next token as the label
         word_label = torch.where(mask == 0, -100, sample["task"][1:])
