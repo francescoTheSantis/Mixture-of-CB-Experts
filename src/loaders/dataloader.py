@@ -20,6 +20,18 @@ from torchvision import transforms
 import os
 import itertools
 
+class TextDataset(torch.utils.data.Dataset):
+    def __init__(self, encoded_text):
+        self.encoded_text = encoded_text
+
+    def __getitem__(self, idx):
+        t = {key: torch.tensor(values[idx]) for key, values in
+             self.encoded_text.items()}
+        return t
+
+    def __len__(self):
+        return len(self.encoded_text['input_ids'])
+
 CUB_CONCEPT_NAMES = [x for i, x in enumerate(cub_concept_semantics) if i in cub_selected_concepts]
 
 class loader(object):
@@ -157,6 +169,15 @@ class loader(object):
             concept_names = self.CUB_CONCEPT_NAMES
             task_names = cub_class_names
             concept_groups = self.incomplete_cub_groups
+        elif self.name == "sst2":
+            from transformers import AutoTokenizer
+            # For SST2, we use the concept names as the task names
+            concept_names = ['negative', 'positive']
+            tokenizer = AutoTokenizer.from_pretrained(
+                "mistralai/Mistral-7B-v0.1")
+            # Ottieni la lista di tutti i token (stringhe)
+            task_names = list(tokenizer.get_vocab().keys())
+            concept_groups = None
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
         
@@ -236,6 +257,34 @@ class loader(object):
             train_dataset = AwA2Dataset(root=path, split='train', selected_concepts=self.selected_concept_idxes)
             val_dataset = AwA2Dataset(root=path, split='val', selected_concepts=self.selected_concept_idxes)
             test_dataset = AwA2Dataset(root=path, split='test', selected_concepts=self.selected_concept_idxes)
+
+        elif self.name == 'sst2':
+            from datasets import load_dataset
+            from transformers import AutoTokenizer
+
+            train_dataset = load_dataset('SetFit/sst2', split='train')
+            val_dataset = load_dataset('SetFit/sst2', split='validation')
+            test_dataset = load_dataset('SetFit/sst2', split='test')
+            tokenizer = AutoTokenizer.from_pretrained(
+                "mistralai/Mistral-7B-v0.1")
+            tokenizer.pad_token = tokenizer.eos_token
+            encoded_datasets = []
+            for dataset in [train_dataset, val_dataset, test_dataset]:
+                encoded_dataset = dataset.map(
+                    lambda e: tokenizer(e['text'], padding=True,
+                                        truncation=True,
+                                        max_length=350), batched=True,
+                    batch_size=len(dataset))
+                encoded_dataset = encoded_dataset.remove_columns(['text'])
+                encoded_dataset = encoded_dataset.remove_columns(['label_text'])
+                encoded_dataset = encoded_dataset[:len(encoded_dataset)]
+                encoded_datasets.append(encoded_dataset)
+
+            encoded_train_dataset, encoded_val_dataset, encoded_test_dataset = encoded_datasets
+
+            train_dataset = TextDataset(encoded_train_dataset)
+            val_dataset = TextDataset(encoded_val_dataset)
+            test_dataset = TextDataset(encoded_test_dataset)
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
 
@@ -263,6 +312,12 @@ class loader(object):
                                         self.device,
                                         celeba_flag,
                                         self.task_names)
+            loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
+        elif self.name == 'sst2' and self.extract_embeddings:
+            E_extr = TextEmbeddingExtractor(loaded_train,
+                                            loaded_val,
+                                            loaded_test,
+                                            self.device)
             loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
 
         return loaded_train, loaded_val, loaded_test

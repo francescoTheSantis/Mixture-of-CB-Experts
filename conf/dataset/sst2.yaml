@@ -1,0 +1,14 @@
+defaults:
+  - common
+  - _self_
+
+loader: 
+  name: sst2
+
+# Dataset parameters
+metadata:
+  task: generation
+  lr: 0.001
+  name: sst2
+
+latent_size: 1024
