@@ -213,4 +213,6 @@ class LogicModel(BaseModel):
                               num_classes=self.output_size).float()
         elif self.output_size == 1:
             y = y.squeeze().float()
+        else:
+            raise NotImplementedError(f"Unknown taks {self.task} for logic model.")
         return self.task_loss_form(y_hat.squeeze(), y)

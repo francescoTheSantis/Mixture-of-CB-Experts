@@ -11,7 +11,12 @@ metadata:
   lr: 0.001
   name: sst2
 
-latent_size: 1024
+latent_size: 4096
+
+encoder:
+  _target_: "src.models.encoders.IdentityEncoder"
+  input_size: 4096
+  output_size: 4096
 
 concept_loss_form:
   _target_: "torch.nn.CrossEntropyLoss"

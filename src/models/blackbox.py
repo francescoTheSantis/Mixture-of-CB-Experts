@@ -22,7 +22,7 @@ class BlackBox(BaseModel):
                  )
 
         self.has_concepts = False
-        hidden_size = latent_size * 2
+        hidden_size = latent_size # * 2
         
         self.predictor = nn.Sequential(
             nn.Linear(latent_size, hidden_size),
@@ -43,6 +43,10 @@ class BlackBox(BaseModel):
             y = y.flatten().long()
         elif self.output_size == 1:
             y = y.flatten().float()
+        else:
+            raise NotImplementedError(f"Task {self.task} is not implemented. "
+                                      f"Supported tasks are 'classification', "
+                                      f"'regression', and 'generation'.")
         # cross entropy
         loss = self.task_loss_form(y_hat.squeeze(), y)
         return loss
