@@ -39,7 +39,9 @@ class BlackBox(BaseModel):
     def loss(self, y_hat, y, c_hat=None, c=None):
         if self.task == 'classification' and self.output_size > 1:
             y = y.flatten().long()
-        else:
+        elif self.task == 'generation':
+            y = y.flatten().long()
+        elif self.output_size == 1:
             y = y.flatten().float()
         # cross entropy
         loss = self.task_loss_form(y_hat.squeeze(), y)
