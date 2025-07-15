@@ -99,7 +99,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
                 '_target_': 'torch.nn.BCELoss'})
         )
 
-        if 'encoder' in cfg.dataset and not cfg.dataset.loader.extract_embeddings:
+        if 'encoder' in cfg.dataset:
             # If the encoder is defined in the dataset, update the entire encoder config
             cfg.model.params.encoder = cfg.dataset.encoder
 

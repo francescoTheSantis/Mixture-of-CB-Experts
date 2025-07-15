@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from src.metrics import f1_acc_metrics
 from tqdm import tqdm
+from src.models.m_licem import LinearMemoryReasoner
 
 class Trainer:
     """
@@ -46,6 +47,7 @@ class Trainer:
             devices=self.cfg.gpus,  
             accelerator="auto",
             enable_progress_bar=True,
+            gradient_clip_val=1.0
         )
 
         # Optimizer
@@ -68,14 +70,16 @@ class Trainer:
         self.model.optimizer = self.optimizer
         self.model.scheduler = self.scheduler
 
-    def train(self, train_dataloader, val_dataloader):
+    def train(self, train_dataloader, val_dataloader, ckpt_path=None):
         self.trainer.fit(self.model, 
                          train_dataloader, 
-                         val_dataloader)
+                         val_dataloader, ckpt_path=ckpt_path)
 
-    def test(self, test_dataloader):
+    def test(self, test_dataloader, ckpt_path=None):
         # Load the best model and test
-        self.trainer.test(self.model, test_dataloader, ckpt_path=self.trainer.checkpoint_callback.best_model_path)
+        if ckpt_path is None:
+            ckpt_path = self.trainer.checkpoint_callback.best_model_path
+        self.trainer.test(self.model, test_dataloader, ckpt_path=ckpt_path)
 
     def interventions(self, test_dataloader, verbose=True):
         """
@@ -89,7 +93,8 @@ class Trainer:
         self.model.model.test_interventions = True
         with torch.no_grad():
             for eps in self.epss:
-                print('Performing interventions with noise:', eps)
+                if verbose:
+                    print('Performing interventions with noise:', eps)
                 for p_int in tqdm(self.p_ints) if verbose else self.p_ints:
                     y_preds = []
                     y_trues = []
@@ -122,3 +127,72 @@ class Trainer:
                     intervention_df = pd.concat([intervention_df, pd.DataFrame([intervention_results])], ignore_index=True)
         self.model.model.test_interventions = False
         return intervention_df
+
+    def plot_results(self, test_dataloader, verbose=True):
+        """
+        Plot the results of the model on the test set.
+        This method is specific to the xor, or, nor, and, nand, xnor datasets.
+        If the model is a LinearModel it will plot the weights of the model as well as the predictions.
+        """
+
+        # Set the model on the right device
+        from matplotlib import pyplot as plt
+        import numpy as np
+
+        self.model = self.model.to(self.cfg.gpus[0])
+        self.model.eval()
+
+        with torch.no_grad():
+            input_list = []
+            outputs = []
+            for batch in test_dataloader:
+                x, c, y = self.model.unpack_batch(batch)
+                # Move the data to the GPU
+                x = x.to(self.cfg.gpus[0])
+                c = c.to(self.cfg.gpus[0])
+                y = y.to(self.cfg.gpus[0])
+                inputs = {'x': x, 'c': c, 'y': y}
+                output = self.model.forward(inputs)
+                output = self.model.model.filter_output_for_metrics(*output)
+                y_pred = output[0]
+                y_pred = y_pred.cpu().numpy()
+                if len(self.cfg.model.params.y_names) == 1:
+                    y_pred = (y_pred > 0.5).astype(int)
+                else:
+                    y_pred = y_pred.argmax(-1)
+                outputs.append(y_pred)
+                input_list.append(x.cpu().numpy())
+
+            # Plot the results
+            outputs = np.concatenate(outputs, axis=0).squeeze()
+            input_list = np.concatenate(input_list, axis=0)
+
+            pos_preds = input_list[outputs == 1]
+            neg_preds = input_list[outputs == 0]
+
+            if isinstance(self.model.model, LinearMemoryReasoner):
+                # Plot the weights of the model
+                model = self.model.model
+                weights = model.equation_decoder(model.equation_memory.weight).detach().cpu().numpy()
+                norm_weights = weights / np.linalg.norm(weights, axis=1, keepdims=True)
+                for i, (w1, w2) in enumerate(zip(norm_weights[:, 0], norm_weights[:, 1])):
+                    plt.arrow(0, 0, w1.item(), w2.item(), head_width=0.05, head_length=0.1, fc='k', ec='k', label=f'Weight {i+1}')
+
+                if model.negative_concepts:
+                    pos_preds = 2* pos_preds - 1
+                    neg_preds = 2* neg_preds - 1
+
+            plt.scatter(neg_preds[:, 0], neg_preds[:, 1], label='Negative Predictions')
+            plt.scatter(pos_preds[:, 0], pos_preds[:, 1], label='Positive Predictions')
+
+            plt.xlabel('X1')
+            plt.ylabel('X2')
+
+            plt.title('Model Predictions on Test Set')
+            plt.legend()
+            plt.savefig(f"{self.wandb_logger.experiment.dir}/test_predictions.png")
+
+            if verbose:
+                plt.show()
+            else:
+                plt.close()
