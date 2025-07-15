@@ -7,22 +7,33 @@ class Task_Accuracy(Metric):
     """
     Task accuracy metric of the pytorch_lightning model.
     """
-    def __init__(self, logic_reasoning=False, dist_sync_on_step=False):
+    def __init__(self, logic_reasoning=False, dist_sync_on_step=False,
+                 task='classification'):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
         self.logic_reasoning = logic_reasoning
+        self.task = task
 
     def update(self, preds: torch.Tensor, target: torch.Tensor):
-        if len(preds.squeeze().shape) > 1:
+        if self.task == 'generation':
+            # remove invalid predictions associated with padding
+            mask = target[:, 0] != -100
+            preds = preds[mask]
+            target = target[mask]
             preds = torch.argmax(preds, dim=1)
-        else:
-            if self.logic_reasoning:
-                # if the output is a logic rule we do not apply an activation function,
-                # and we assume that the positive values are greater than 0.5
-                preds = preds.squeeze() > 0.5
+        elif self.task == 'classification':
+            if len(preds.squeeze().shape) > 1:
+                preds = torch.argmax(preds, dim=1)
             else:
-                preds = preds.squeeze() > 0.
+                if self.logic_reasoning:
+                    # if the output is a logic rule we do not apply an activation function,
+                    # and we assume that the positive values are greater than 0.5
+                    preds = preds.squeeze() > 0.5
+                else:
+                    preds = preds.squeeze() > 0.
+        else:
+            raise NotImplementedError(f"Task {self.task} not implemented for Task_Accuracy metric.")
         target = target.squeeze()
         assert preds.shape == target.shape
         self.correct += torch.sum(preds == target)
@@ -35,16 +46,28 @@ class Concept_Accuracy(Metric):
     """
     Concept accuracy metric of the pytorch_lightning model.
     """
-    def __init__(self, dist_sync_on_step=False):
+    def __init__(self, dist_sync_on_step=False, task='classification'):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.task = task
 
     def update(self, preds: torch.Tensor, target: torch.Tensor):
-        preds = torch.where(preds > 0.5, 1, 0)
+        if self.task == 'generation':
+            # remove invalid predictions associated with padding
+            mask = target[:, 0] != -100
+            preds = preds[mask]
+            target = target[mask]
+            preds = torch.argmax(preds, dim=-1)
+            target = torch.argmax(target, dim=-1)
+        elif self.task == 'classification':
+            preds = torch.where(preds > 0.5, 1, 0)
+        else:
+            raise NotImplementedError(f"Task {self.task} not implemented for Concept_Accuracy metric.")
+
         assert preds.shape == target.shape
         self.correct += torch.sum(preds == target)
-        self.total += target.shape[0] * target.shape[1]
+        self.total += target.numel()
 
     def compute(self):
         return self.correct.float() / self.total

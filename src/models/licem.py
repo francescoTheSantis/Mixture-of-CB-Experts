@@ -46,7 +46,7 @@ class LinearConceptEmbeddingModel(BaseModel):
         self.y_names = list(y_names)
         self.hard_concepts = hard_concepts
         self.concept_loss_form = concept_loss_form
-        c_activation = nn.Identity if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.Sigmoid()
+        c_activation = nn.Identity() if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.Sigmoid()
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             latent_size,

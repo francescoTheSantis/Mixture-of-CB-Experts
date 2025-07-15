@@ -51,8 +51,9 @@ class Engine(pl.LightningModule):
         self.num_classes = len(y_name) if len(y_name)>1 else 2
         self.class_names = y_name if len(y_name)>1 else ['0','1']
 
-        self.task_metric = Task_Accuracy(logic_reasoning=self.model._logic_model_checker())
-        self.concept_metric = Concept_Accuracy()
+        self.task_metric = Task_Accuracy(logic_reasoning=self.model._logic_model_checker(),
+                                         task=self.model.task)
+        self.concept_metric = Concept_Accuracy(task=self.model.task)
 
         self.csv_log_dir = csv_log_dir
 

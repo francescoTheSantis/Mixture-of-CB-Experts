@@ -43,7 +43,7 @@ class ConceptBottleneckModel(BaseModel):
         self.has_concepts = True
         self.noise = noise
         self.concept_loss_form = concept_loss_form
-        c_activation = nn.Identity if isinstance(concept_loss_form,
+        c_activation = nn.Identity() if isinstance(concept_loss_form,
                                                  nn.CrossEntropyLoss) else nn.Sigmoid()
         self.bottleneck = pyc_nn.LinearConceptBottleneck(
             self.latent_size,
