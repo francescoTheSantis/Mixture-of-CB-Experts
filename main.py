@@ -38,7 +38,7 @@ def main(cfg: DictConfig) -> None:
 
     # Otherwise, preprocess the data and then store the results
     else:
-        print('Preprocessing data...')
+        print('Prepearing dataloaders...')
         loaded_train, loaded_val, loaded_test = loader.load_data()
         if loader.extract_embeddings:
             os.makedirs(data_path, exist_ok=True)

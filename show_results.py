@@ -8,14 +8,13 @@ import yaml
 from matplotlib.ticker import FuncFormatter
 from src.utilities import plot_explanations
 
-# I used scienceplots for the style of the plots,
-# but you can use any other style you want.
+# I used scienceplots for the style of the plots, but you can use any other style you want.
 warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
 # List the paths containing the results
 paths = [
-    "/home/fdesantis/projects/Linear-Memory-Reasoner/multirun/2025-06-02/11-12-03",
+    
 ]
 
 ###### Collect results regarding concept/task performance ######
@@ -62,10 +61,7 @@ for exp in exps_path:
             pass
 
 
-######### Only for the PredCBM with seed=1, plot explanations #########
-plot_explanations(lmr_paths)
-
-########## Task & Concept Accuracy Plot ##########
+######### Dataset and model styles #########
 
 def get_df_name(df):
     if df=='xor':
@@ -103,6 +99,54 @@ def get_df_name(df):
     elif df=='awa2_incomplete':
         return 'AWA2-Incomplete'
 
+marker_size = 14
+
+# Define a dictionary to associate marker, name, and color to each model.
+# If the experiment you run does not contain a model, just remove it from the dictionary.
+# If you want to add a new model, just add it to the dictionary.
+model_styles = {
+    'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:orange', 'size': marker_size},
+    'cbm_linear': {'marker': '*', 'name': 'CBM+Linear', 'color': 'tab:olive', 'size': marker_size},
+    'cbm_mlp': {'marker': '^', 'name': 'CBM+MLP', 'color': 'tab:red', 'size': marker_size},
+    'blackbox': {'marker': 'o', 'name': 'BlackBox', 'color': 'tab:purple', 'size': marker_size},
+    'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
+    'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:gray', 'size': marker_size},
+    'm_licem': {'marker': 's', 'name': 'M-LICEM', 'color': 'tab:blue', 'size': marker_size},
+    #'m_licem_sampling': {'marker': 'D', 'name': 'M-LICEM', 'color': 'tab:cyan', 'size': marker_size},
+    #'m_licem_int_sel_sampling': {'marker': 'X', 'name': 'M-LICEM+IntSel+Sampling', 'color': 'tab:green', 'size': marker_size},
+    #'m_licem_neg_weights': {'marker': '<', 'name': 'M-LICEM+NegWeights', 'color': 'tab:brown', 'size': marker_size},
+    #'m_licem_neg_weights_sampling': {'marker': '>', 'name': 'M-LICEM+NegWeights+Sampling', 'color': 'tab:olive', 'size': marker_size},
+    #'m_licem_neg_weights_int_sel_sampling': {'marker': '8', 'name': 'M-LICEM+NegWeights+IntSel+Sampling', 'color': 'tab:gray', 'size': marker_size},
+    #'m_licem_proto': {'marker': 'D', 'name': 'ProtoCBM', 'color': 'tab:green', 'size': marker_size},
+    #'m_licem_proto_int_sel': {'marker': 's', 'name': 'ProtoCBM+IntSel', 'color': 'tab:blue', 'size': marker_size},
+}
+
+# Define the custom order
+# If the experiment you run does not contain a dataset, just remove it from the list.
+custom_order = ['xor', \
+                #'dot', \
+                #'checkmark', \
+                #'trigonometry', \
+                'mnist_addition', \
+                'cub', \
+                'awa2',
+                'awa2_incomplete',
+                'cub_incomplete'
+                ]
+
+
+# Filter the performance dataframe to keep only the models in model_styles 
+# and datasets in custom_order.
+performance = performance[performance['model'].isin(model_styles.keys()) & \
+                          performance['dataset'].isin(custom_order)]
+
+
+######### Only for the LinearMemoryReasoner with seed=1, plot explanations #########
+plot_explanations(lmr_paths)
+
+
+########## Task & Concept Accuracy Plot ##########
+
 #df = performance.copy()
 # Filter data for 'task' and 'concept'
 task_df = performance.copy()
@@ -130,47 +174,16 @@ title_font = {'size': 24, 'weight': 'bold'}
 label_font = {'size': 24}
 tick_font = {'size': 10}
 
-marker_size = 14
-
-# Define a dictionary to associate marker, name, and color to each model.
-# If the experiment you run does not contain a model, just remove it from the dictionary.
-# If you want to add a new model, just add it to the dictionary.
-model_styles = {
-    #'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:blue', 'size': marker_size},
-    'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:orange', 'size': marker_size},
-    'cbm_linear': {'marker': '*', 'name': 'CBM+Linear', 'color': 'tab:olive', 'size': marker_size},
-    'cbm_mlp': {'marker': '^', 'name': 'CBM+MLP', 'color': 'tab:red', 'size': marker_size},
-    'blackbox': {'marker': 'o', 'name': 'Black-box', 'color': 'tab:purple', 'size': marker_size},
-    #'crm': {'marker': 'X', 'name': 'CRM', 'color': 'tab:brown', 'size': marker_size},
-    'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
-    'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:gray', 'size': marker_size},
-    'm_licem': {'marker': 's', 'name': 'M-LICEM', 'color': 'tab:green', 'size': marker_size},
-    'm_licem_no_decoder': {'marker': 's', 'name': 'M-LICEM-No-decoding', 'color': 'tab:cyan', 'size': marker_size},
-    #'v_cem': {'marker': 'd', 'name': 'V-CEM', 'color': 'tab:cyan', 'size': marker_size},
-    #'mv_licem': {'marker': '<', 'name': 'MV-LICEM', 'color': 'tab:pink', 'size': marker_size},
-    'm_licem_no_c_emb': {'marker': '>', 'name': 'M-LICEM-cbm', 'color': 'tab:gray', 'size': marker_size},
-    #'m_licem_pyc_sampling': {'marker': '>', 'name': 'M-LICEM-PYC', 'color': 'tab:gray', 'size': marker_size},
-}
-
-# Define the custom order
-# If the experiment you run does not contain a dataset, just remove it from the list.
-custom_order = ['xor', \
-                #'dot', \
-                #'checkmark', \
-                #'trigonometry', \
-                'mnist_addition', \
-                'cub', \
-                'awa2',
-                'awa2_incomplete',
-                'cub_incomplete']
-
 merged_stats = merged_stats.sort_values('dataset')
 merged_stats['dataset'] = pd.Categorical(merged_stats['dataset'], categories=custom_order, ordered=True)
 
 fig, axes = plt.subplots(1, len(merged_stats['dataset'].unique()), figsize=(15, 4), sharey=False, sharex=True)
 
 for idx, dataset in enumerate(merged_stats['dataset'].unique()):
-    ax = axes[idx]
+    if len(merged_stats['dataset'].unique()) == 1:
+        ax = axes
+    else:
+        ax = axes[idx]
     data = merged_stats[merged_stats['dataset'] == dataset]
     for model in data['model']:
         model_data = data[data['model'] == model]
@@ -188,10 +201,10 @@ for idx, dataset in enumerate(merged_stats['dataset'].unique()):
     ax.set_xlabel('Concept Acc', fontdict=label_font)
 
 # Create custom legend handles
-custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=style['size'], label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in model_styles.values()]
+custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=(style['size']-3), label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in model_styles.values()]
 
 # Create a single legend below the plots
-fig.legend(handles=custom_handles, loc='lower center', ncol=len(custom_handles), fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.1))
+fig.legend(handles=custom_handles, loc='lower center', ncol=(len(custom_handles) + 1) // 2, fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.15), columnspacing=1.0, handletextpad=0.5)
 
 plt.tight_layout()
 plt.savefig('figs/performance.pdf')
@@ -226,6 +239,10 @@ for i, row in pivot_table_avg.iterrows():
     
 # Reindex the columns of final_table according to the custom order
 final_table = final_table.reindex(columns=custom_order)
+
+# Replace the model and dataset names
+final_table.index = final_table.index.map(lambda x: model_styles[x]['name'] if x in model_styles else x)
+final_table.columns = final_table.columns.map(lambda x: get_df_name(x))
 
 print('\n\nTask Accuracy Table:')
 print('-------------------')
@@ -262,6 +279,10 @@ for i, row in pivot_table_avg.iterrows():
 # Reindex the columns of final_table according to the custom order
 final_table = final_table.reindex(columns=custom_order)
 
+# Replace the model and dataset names
+final_table.index = final_table.index.map(lambda x: model_styles[x]['name'] if x in model_styles else x)
+final_table.columns = final_table.columns.map(lambda x: get_df_name(x))
+
 print('\n\nConcept Accuracy Table:')
 print('-------------------')
 print(final_table)
@@ -288,6 +309,11 @@ for exp in exps_path:
         d['model'] = conf['model']['metadata']['name']
 
         performance = pd.concat([performance, d], ignore_index=True)
+
+# Filter the performance dataframe to keep only the models in model_styles 
+# and datasets in custom_order.
+performance = performance[performance['model'].isin(model_styles.keys()) & \
+                          performance['dataset'].isin(custom_order)]
 
 
 ########## Intervention plots ########## 
@@ -400,7 +426,16 @@ def plot_intervention_results(df, metric='accuracy', title_font=None, label_font
     custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=style['size']+10, label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in model_styles.values()]
 
     # Create a single legend below the plots
-    fig.legend(handles=custom_handles, loc='lower center', ncol=len(custom_handles), fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.2))
+    fig.legend(
+        handles=custom_handles,
+        loc='lower center',
+        ncol=(len(custom_handles) + 1) // 2,  # Split legend into two rows
+        fontsize=tick_font['size'],
+        frameon=True,
+        bbox_to_anchor=(0.5, -0.2),
+        columnspacing=1.0,
+        handletextpad=0.5
+    )
 
     plt.tight_layout()
     plt.savefig('figs/intervention_id.pdf')

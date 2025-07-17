@@ -1,0 +1,7 @@
+encoder:
+  _target_: "src.models.encoders.resnet.ResNetEncoder"
+  output_size: ${dataset.latent_size}
+  resnet_type: resnet18
+  input_transform:
+    _target_: "src.models.encoders.transform.ImageTransform"
+    flatten: false

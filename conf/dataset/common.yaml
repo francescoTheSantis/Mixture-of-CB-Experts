@@ -3,15 +3,7 @@ loader:
   num_workers: ${num_workers}
   batch_size: ${batch_size}
   device: ${gpus}
-  extract_embeddings: true
+  extract_embeddings: ${extract_embeddings}
 
 latent_size: ${latent_size}
 hard_concepts: false
-
-# encoder:
-#   _target_: "src.models.encoders.ResNetEncoder"
-#   output_size: ${dataset.latent_size}
-#   resnet_type: resnet18
-#   input_transform:
-#     _target_: "src.models.encoders.ImageTransform"
-#     flatten: false

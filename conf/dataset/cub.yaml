@@ -1,9 +1,12 @@
 defaults:
   - common
+  - /encoder: resnet
   - _self_
 
 loader: 
   name: cub
+  batch_size: 128
+
 
 # Dataset parameters
 metadata:

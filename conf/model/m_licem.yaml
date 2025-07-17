@@ -13,6 +13,8 @@ params:
   embedding_memory: True
   intervene_on_selection: False
   linear_classifier_selection: False
+  sampling: True
+  cos_sim: False
 
 metadata:
-  name: m_licem_sampling
+  name: m_licem

@@ -12,7 +12,8 @@ params:
   embedding_size: ${embedding_size}
   embedding_memory: False
   intervene_on_selection: False
-  dot_product: False
+  linear_classifier_selection: False
+  cos_sim: True
   sampling: False
 
 metadata:

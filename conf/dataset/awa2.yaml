@@ -1,7 +1,8 @@
 defaults:
   - common
+  - /encoder: resnet
   - _self_
-
+  
 loader: 
   name: awa2
   batch_size: 128

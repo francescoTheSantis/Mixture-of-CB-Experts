@@ -1,6 +1,8 @@
 defaults:
   - common
+  - /encoder: mlp
   - _self_
+
 
 loader: 
   name: trigonometry

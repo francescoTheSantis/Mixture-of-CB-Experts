@@ -1,9 +1,7 @@
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
-
-from src.models.encoders import BaseEncoder
-
+from src.models.encoders.base import BaseEncoder
 
 class BaseModel(nn.Module):
     """

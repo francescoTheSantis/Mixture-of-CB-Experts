@@ -1,56 +1,19 @@
 defaults:
-  - dataset: xor
-  - model: blackbox
-  - engine: engine
-
-## Common parameters
-max_epochs: 500
-patience: 40
-gamma: 0.5
-lr_patience: 20
-gpus: [1]
-seed: 1
-activation: LeakyReLU
-num_workers: 0
-
-# These parameters can be overridden by the dataset config
-latent_size: 64
-batch_size: 256
-
-## Shared Concept-based model parameters
-task_penalty: 0.1
-int_prob: 0.25
-
-## Shared Concept-embedding based model
-embedding_size: 16
-
-## Shared Concept Memory model
-memory_size: 8
-
-# Set this parameter to True if you want to use the stored, preprocessed dataset,
-# otherwise it will be preprocessed from scratch and saved in the cache. 
-use_stored_dataset: True
+  - common
+  - _self_
 
 hydra:
   mode: MULTIRUN
+  sweep:
+      dir: output/everything_sweep/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      
-      seed: 1, 2, 3, 4, 5
+      seed: 1 #1, 2, 3, 4, 5
       # implemented toy datasets: xor, nor, xnor, dot, trigometry, checkmark 
       # implemented image datasets: mnist_addition, cub, celeba, awa2
       # implemented textual datasets: ...
-      dataset: xor, cub, awa2, cub_incomplete, awa2_incomplete, mnist_addition
+      dataset: cub # xor, cub, awa2, cub_incomplete, awa2_incomplete, mnist_addition
       # implemented models: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, cmr, m_licem
-      model: m_licem, blackbox, cbm_linear, cem, licem, dcr, cmr
+      model: cbm_linear # m_licem, blackbox, cbm_linear, cbm_mlp, cem, licem, dcr, cmr
 
-wandb:
-  # Set the params below if you want to use wandb as logger.
-  # Set it to null if you do not want to use wandb.
-  project: null # Set to your project name
-  entity: null # Set to your wandb entity name
-
-# The note will be appended to the group name in wandb 
-# and will be considered as an additional tag (for filtering).
-# If you do not want to add any note, set it to null.
-note: null
+gpus: [1]

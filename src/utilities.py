@@ -11,8 +11,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import scienceplots
 
-# I used scienceplots for the style of the plots,
-# but you can use any other style you want.
 warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
@@ -71,10 +69,12 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
     Update the config with the input size, output size, and concept names.
     """
     x, c, y = next(iter(train_loader))
+
     if cfg.dataset.metadata.name != 'sst2':
         input_size = torch.prod(torch.tensor(x.shape[1:])).item()
     else:
         input_size = x.shape[-1]
+        
     concept_size = c.shape[1]
     n_labels = len(y_names)
     if c_groups is None or not isinstance(c_groups, dict):
@@ -99,9 +99,19 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
                 '_target_': 'torch.nn.BCELoss'})
         )
 
-        if 'encoder' in cfg.dataset:
-            # If the encoder is defined in the dataset, update the entire encoder config
-            cfg.model.params.encoder = cfg.dataset.encoder
+        # if we want to extract the embeddings it means that we are NOT 
+        # fine-tuning a pre-trained model during training.
+        # This means that we just need a linear encoder
+        if cfg.extract_embeddings:
+            cfg.model.params.encoder = {
+                '_target_': 'src.models.encoders.linear.LinearEncoder',
+                'output_size': cfg.dataset.latent_size,
+                'activation': cfg.activation,
+            }
+        else:
+            # On the other hand, if we are fine-tuning a pre-trained model,
+            # we need to set the encoder to the one defined in the dataset config
+            cfg.model.params.encoder = cfg.dataset.encoder.encoder
 
         cfg.model.params.encoder.update(
             input_size = input_size,
