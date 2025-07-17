@@ -21,7 +21,7 @@ class LinearMemoryReasoner(BaseModel):
                  memory_size=7,
                  negative_concepts=False,
                  hard_concepts=False,
-                 weight_reg=1e-4,
+                 weight_reg=0,
                  encoder=None,
                  mc_approx=10,
                  embedding_memory=True,
@@ -211,13 +211,14 @@ class LinearMemoryReasoner(BaseModel):
         input_concepts = self.transform_concepts(c_pred)
 
         # Get the weights to generate the explanation
-        predicted_weights = self.get_weights_for_explanation(equation_weights, prob_per_classifier)
+        predicted_weights = self.get_weights_for_explanation(equation_weights, 
+                                                             prob_per_classifier)
 
         # Execute the linear equations stored in memory by performing the dot product 
         # among the input concepts and the weights of the linear equations.
         # Dimension: (batch_size, output_size, memory_size)
         y_per_classifier = self.linear_equation_eval(equation_weights, 
-                                                   input_concepts)
+                                                     input_concepts)
         
         # Select one logit for each class of y form the memory
         # Dimension: (batch_size, output_size, n_samples)
@@ -230,9 +231,10 @@ class LinearMemoryReasoner(BaseModel):
             # Normalize over the memory dimension
             memory = F.normalize(memory, p=2, dim=2)
             input_concepts = F.normalize(input_concepts, p=2, dim=1)
-        y_pred = torch.einsum('bmcy,bc->bym', memory, input_concepts)
-        if self.cos_sim:
+            y_pred = torch.einsum('bmcy,bc->bym', memory, input_concepts)
             y_pred = self.softplus(self.scale) * y_pred
+        else:
+            y_pred = torch.einsum('bmcy,bc->bym', memory, input_concepts)
         return y_pred
 
     def selection_eval(self, prob_per_classifier, y_per_classifier):

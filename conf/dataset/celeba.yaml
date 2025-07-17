@@ -12,7 +12,7 @@ loader:
 # Dataset parameters
 metadata:
   task: classification
-  lr: 0.0005
+  lr: 0.0001
   name: celeba
 
 latent_size: 128

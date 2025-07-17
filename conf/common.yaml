@@ -4,7 +4,7 @@ defaults:
   - engine: engine
 
 ## Common parameters
-max_epochs: 1
+max_epochs: 500
 patience: 40
 gamma: 0.5
 lr_patience: 20
@@ -15,7 +15,7 @@ num_workers: 0
 
 ## These parameters can be overridden by the dataset config
 latent_size: 64
-batch_size: 256
+batch_size: 128
 
 ## Shared Concept-based model parameters
 task_penalty: 0.1
@@ -38,8 +38,10 @@ extract_embeddings: False
 wandb:
   # Set the params below if you want to use wandb as logger.
   # Set it to null if you do not want to use wandb.
-  project: null # Set to your project name
-  entity: null # Set to your wandb entity name
+  #project: null # Set to your project name
+  #entity: null # Set to your wandb entity name
+  entity: "francescothesantis-politecnico-di-torino"
+  project: "linear_memory_reasoner"
 
 # The note will be appended to the group name in wandb 
 # and will be considered as an additional tag (for filtering).

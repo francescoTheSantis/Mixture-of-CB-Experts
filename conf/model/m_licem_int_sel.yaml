@@ -7,13 +7,13 @@ params:
   task_penalty: ${task_penalty}
   int_prob: ${int_prob}
   memory_size: ${memory_size}
-  negative_concepts: True
+  negative_concepts: False
   embedding_size: ${embedding_size}
-  embedding_memory: False
-  intervene_on_selection: False
+  embedding_memory: True
+  intervene_on_selection: True
   linear_classifier_selection: False
-  cos_sim: True
-  sampling: False
+  sampling: True
+  cos_sim: False
 
 metadata:
-  name: m_licem_proto
+  name: m_licem_int_sel

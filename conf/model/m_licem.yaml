@@ -8,7 +8,6 @@ params:
   int_prob: ${int_prob}
   memory_size: ${memory_size}
   negative_concepts: False
-  weight_reg: 1e-4
   embedding_size: ${embedding_size}
   embedding_memory: True
   intervene_on_selection: False

@@ -8,12 +8,12 @@ hydra:
       dir: output/everything_sweep/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 1 #1, 2, 3, 4, 5
+      seed: 1, 2, 3, 4, 5
+      # implemented models: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, cmr, m_licem
+      model: m_licem, blackbox, cbm_linear, cbm_mlp, cem, licem, dcr, cmr
       # implemented toy datasets: xor, nor, xnor, dot, trigometry, checkmark 
       # implemented image datasets: mnist_addition, cub, celeba, awa2
       # implemented textual datasets: ...
-      dataset: cub # xor, cub, awa2, cub_incomplete, awa2_incomplete, mnist_addition
-      # implemented models: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, cmr, m_licem
-      model: cbm_linear # m_licem, blackbox, cbm_linear, cbm_mlp, cem, licem, dcr, cmr
+      dataset: xor, cub, awa2, cub_incomplete, awa2_incomplete, mnist_addition
 
-gpus: [1]
+gpus: [0]
