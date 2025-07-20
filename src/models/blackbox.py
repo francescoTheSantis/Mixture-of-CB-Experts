@@ -10,6 +10,7 @@ class BlackBox(BaseModel):
                  latent_size = 128,
                  c_groups = None,
                  encoder=None,
+                 backbone_latent_size=None,
                  **kwargs
                  ):
         super().__init__(
@@ -22,10 +23,10 @@ class BlackBox(BaseModel):
                  )
 
         self.has_concepts = False
-        hidden_size = latent_size # * 2
+        hidden_size = latent_size 
         
         self.predictor = nn.Sequential(
-            nn.Linear(latent_size, hidden_size),
+            nn.Linear(backbone_latent_size, hidden_size),
             getattr(nn, activation)(),
             nn.Linear(hidden_size, output_size)
         )

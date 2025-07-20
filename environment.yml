@@ -23,6 +23,7 @@ dependencies:
     - hydra-core
     - plotly
     - scikit-learn-extra
+    - datasets
     - numpy==1.26.4
     - pandas
     - git+https://github.com/pyc-team/pytorch_concepts.git@models

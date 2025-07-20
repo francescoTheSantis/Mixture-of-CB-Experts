@@ -25,6 +25,7 @@ class DeepConceptReasoner(BaseModel):
                  hard_concepts=False,
                  encoder=None,
                  concept_loss_form=nn.BCELoss(),
+                 backbone_latent_size=None
                  ):
         super().__init__(
             output_size,
@@ -53,7 +54,7 @@ class DeepConceptReasoner(BaseModel):
         c_activation = nn.Identity() if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.Sigmoid()
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
-            latent_size,
+            backbone_latent_size,
             self.c_names,
             embedding_size,
             activation=c_activation

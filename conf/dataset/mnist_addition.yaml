@@ -1,6 +1,6 @@
 defaults:
   - common
-  - /encoder: mlp
+  - /encoder: resnet
   - _self_
 
 loader: 
@@ -13,6 +13,7 @@ metadata:
   task: classification
   lr: 0.0001
   name: mnist_addition
+  data_type: image
 
 latent_size: 64
 

@@ -10,6 +10,7 @@ metadata:
   task: generation
   lr: 0.001
   name: sst2
+  data_type: text
 
 latent_size: 4096
 

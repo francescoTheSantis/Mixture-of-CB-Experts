@@ -30,6 +30,7 @@ class LinearMemoryReasoner(BaseModel):
                  cos_sim=False,
                  sampling=True,
                  concept_loss_form=nn.BCELoss(),
+                 backbone_latent_size=None
                  ):
 
         super().__init__(
@@ -73,7 +74,7 @@ class LinearMemoryReasoner(BaseModel):
         # and execution (concept predictions).
         if self.intervene_on_selection:
             self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
-                latent_size,
+                backbone_latent_size,
                 self.c_names,
                 embedding_size,
                 activation=c_activation
@@ -82,7 +83,7 @@ class LinearMemoryReasoner(BaseModel):
             # If the user wants to intervene only on the execution of the linear classifier,
             # we can use the simpler LinearConceptBottleneck, which only produces concept predictions.
             self.bottleneck = pyc_nn.LinearConceptBottleneck(
-                self.latent_size,
+                backbone_latent_size,
                 self.c_names,
                 activation=c_activation
             )            
@@ -91,7 +92,7 @@ class LinearMemoryReasoner(BaseModel):
         # over the linear equations stored in memory.
         # More precisely, for each class in y_names, we have a set of linear equations in the memory, and the selector
         # selects a linear equation for each class in y_names.
-        selector_input_size = embedding_size * len(c_names) if self.intervene_on_selection else latent_size
+        selector_input_size = embedding_size * len(c_names) if self.intervene_on_selection else backbone_latent_size
         if self.linear_classifier_selection:
             self.classifier_selector = nn.Sequential(
                 nn.Linear(selector_input_size, memory_size),

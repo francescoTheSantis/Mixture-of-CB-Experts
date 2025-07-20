@@ -21,7 +21,8 @@ class ConceptEmbeddingModel(BaseModel):
                  c_groups=None,
                  hard_concepts=False,
                  encoder=None,
-                 concept_loss_form=nn.BCELoss()
+                 concept_loss_form=nn.BCELoss(),
+                 backbone_latent_size=None,
                  ):
 
         super().__init__(
@@ -45,7 +46,7 @@ class ConceptEmbeddingModel(BaseModel):
         c_activation = nn.Identity() if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.Sigmoid()
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
-            latent_size,
+            backbone_latent_size,
             self.c_names,
             embedding_size,
             c_activation

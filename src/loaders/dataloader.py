@@ -12,6 +12,7 @@ from torch_concepts.data.awa2 import CONCEPT_SEMANTICS as awa2_concept_semantics
 from torch_concepts.data.awa2 import CLASS_NAMES as awa2_class_names
 from torch_concepts.data.awa2 import CONCEPT_GROUPS as awa2_concept_groups
 from torch_concepts.data.celeba import CelebADataset
+from src.loaders.datasets.cebab import CEBaBDataset
 from torch.utils.data import DataLoader, random_split
 from env import DATA_PATH
 from src.loaders.preprocessing import EmbeddingExtractor, \
@@ -174,17 +175,20 @@ class loader(object):
             from transformers import AutoTokenizer
             # For SST2, we use the concept names as the task names
             concept_names = ['negative', 'positive']
-            tokenizer = AutoTokenizer.from_pretrained(
-                "mistralai/Mistral-7B-v0.1")
-            # Ottieni la lista di tutti i token (stringhe)
+            tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+            # get the list of all tokens
             task_names = [f"w_{i}" for i in range(len(tokenizer.get_vocab().keys()))] # simple keys were not working
+            concept_groups = None
+        elif self.name == "cebab":
+            concept_names = ['food', 'ambience', 'service', 'noise']
+            task_names = ['review']
             concept_groups = None
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
         
         return concept_names, task_names, concept_groups
 
-    def load_data(self):
+    def load_data(self, cfg=None):
         # Load the data
         if self.name in ['xor', 'trigonometry', 'dot', 'checkmark']:
             dataset = ToyDataset(self.name, size=1000, random_state=42)
@@ -218,7 +222,6 @@ class loader(object):
             train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
                 dataset, [0.7, 0.1, 0.2]
             )
-
         elif self.name == 'mnist_addition':
             train_dataset = MNISTAddition(root=DATA_PATH, train=True)
             test_dataset = MNISTAddition(root=DATA_PATH, train=False)
@@ -266,16 +269,18 @@ class loader(object):
             train_dataset = load_dataset('SetFit/sst2', split='train')
             val_dataset = load_dataset('SetFit/sst2', split='validation')
             test_dataset = load_dataset('SetFit/sst2', split='test')
-            tokenizer = AutoTokenizer.from_pretrained(
-                "mistralai/Mistral-7B-v0.1")
+            tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
             tokenizer.pad_token = tokenizer.eos_token
             encoded_datasets = []
             for dataset in [train_dataset, val_dataset, test_dataset]:
                 encoded_dataset = dataset.map(
-                    lambda e: tokenizer(e['text'], padding=True,
+                    lambda e: tokenizer(e['text'], 
+                                        padding=True,
                                         truncation=True,
-                                        max_length=350), batched=True,
-                    batch_size=len(dataset))
+                                        max_length=350), 
+                                        batched=True,
+                                        batch_size=len(dataset)
+                )
                 encoded_dataset = encoded_dataset.remove_columns(['text'])
                 encoded_dataset = encoded_dataset.remove_columns(['label_text'])
                 encoded_dataset = encoded_dataset[:len(encoded_dataset)]
@@ -286,40 +291,46 @@ class loader(object):
             train_dataset = TextDataset(encoded_train_dataset)
             val_dataset = TextDataset(encoded_val_dataset)
             test_dataset = TextDataset(encoded_test_dataset)
+        elif self.name == "cebab":
+            loader = CEBaBDataset(cfg.text_backbone_name, self.batch_size)
+            loaded_train, loaded_val, loaded_test = loader.collator()
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
 
-        # create the dataloaders
-        loaded_train = DataLoader(train_dataset, 
-                                  batch_size=self.batch_size, 
-                                  shuffle=True,
-                                  num_workers=self.num_workers)
-        loaded_val = DataLoader(val_dataset, 
-                                batch_size=self.batch_size, 
-                                shuffle=False,
-                                num_workers=self.num_workers)
-        loaded_test = DataLoader(test_dataset, 
-                                 batch_size=self.batch_size, 
-                                 shuffle=False,
-                                 num_workers=self.num_workers)  
+        if self.name not in ['cebab']:
+            loaded_train = DataLoader(train_dataset, 
+                                    batch_size=self.batch_size, 
+                                    shuffle=True,
+                                    num_workers=self.num_workers)
+            loaded_val = DataLoader(val_dataset, 
+                                    batch_size=self.batch_size, 
+                                    shuffle=False,
+                                    num_workers=self.num_workers)
+            loaded_test = DataLoader(test_dataset, 
+                                    batch_size=self.batch_size, 
+                                    shuffle=False,
+                                    num_workers=self.num_workers)  
         
-        if self.name in ['cub', 'mnist_addition', 'celeba', 'awa2',
-                         'cub_incomplete', 'awa2_incomplete'] and \
-            self.extract_embeddings:
+        if self.name in ['cub', 'awa2', 'awa2_incomplete', 'cub_incomplete', 'mnist_addition', 'celeba']:
             celeba_flag = True if self.name == 'celeba' else False
-            E_extr = EmbeddingExtractor(loaded_train, 
+            E_extr = EmbeddingExtractor(cfg,
+                                        loaded_train, 
                                         loaded_val, 
                                         loaded_test, 
                                         self.device,
                                         celeba_flag,
-                                        self.task_names)
-            loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
-        elif self.name == 'sst2' and self.extract_embeddings:
+                                        self.task_names,
+                                        self.extract_embeddings
+                                        )
+            
+        elif self.name in ['sst2', 'cebab']:
             E_extr = TextEmbeddingExtractor(loaded_train,
                                             loaded_val,
                                             loaded_test,
-                                            self.device)
-            loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
+                                            self.device,
+                                            self.extract_embeddings)
+            
+        loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
 
         return loaded_train, loaded_val, loaded_test
 

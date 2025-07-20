@@ -12,5 +12,6 @@ metadata:
   task: classification
   lr: 0.1
   name: dot
-
+  data_type: toy
+  
 latent_size: 8

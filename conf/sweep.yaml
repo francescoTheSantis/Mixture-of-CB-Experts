@@ -10,10 +10,15 @@ hydra:
     params:
       seed: 1, 2, 3, 4, 5
       # implemented models: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, cmr, m_licem
-      model: m_licem, blackbox, cbm_linear, cbm_mlp, cem, licem, dcr, cmr
+      model: blackbox, m_licem, cbm_linear, cbm_mlp, cem, dcr, cmr
       # implemented toy datasets: xor, nor, xnor, dot, trigometry, checkmark 
       # implemented image datasets: mnist_addition, cub, celeba, awa2
-      # implemented textual datasets: ...
+      # implemented textual datasets: cebab (regression), dataset2 (regression), 
+      #                               dataset3 (numeric concepts and classification),
+      #                               dataset4 (numeric concepts and classification)
       dataset: xor, cub, awa2, cub_incomplete, awa2_incomplete, mnist_addition
+
+#use_stored_dataset: True
+#extract_embeddings: True
 
 gpus: [0]

@@ -1,0 +1,15 @@
+defaults:
+  - common
+  - /encoder: transformer
+  - _self_
+
+loader: 
+  name: cebab
+
+# Dataset parameters
+metadata:
+  task: regression
+  lr: 0.01
+  name: cebab
+  data_type: text
+  concept_type: numeric 

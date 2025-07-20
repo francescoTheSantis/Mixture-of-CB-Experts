@@ -1,0 +1,4 @@
+encoder:
+  _target_: "src.models.encoders.transformer.TransformerEncoder"
+  output_size: ${dataset.latent_size}
+  type: ${text_backbone_name}

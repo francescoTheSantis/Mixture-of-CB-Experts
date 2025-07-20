@@ -27,6 +27,10 @@ embedding_size: 16
 ## Shared Concept Memory model
 memory_size: 8
 
+## Pre-trained backbones
+img_backbone_name: resnet18
+text_backbone_name: bert-base-uncased
+
 # Set this parameter to True if you want to use the stored, preprocessed dataset,
 # otherwise it will be preprocessed from scratch and saved in the cache. 
 use_stored_dataset: False

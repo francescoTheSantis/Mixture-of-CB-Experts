@@ -9,6 +9,8 @@ baselines.yaml
 m_licems.yaml
 output/
 wandb_entity.txt
+debugging.yaml
+sweep_extract_emb.yaml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

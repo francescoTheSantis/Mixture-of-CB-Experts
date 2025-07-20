@@ -9,6 +9,8 @@ from time import time
 from pytorch_lightning.loggers import WandbLogger, CSVLogger
 import pandas as pd
 import matplotlib.pyplot as plt
+from torch import nn
+from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
 import scienceplots
 
 warnings.filterwarnings("ignore")
@@ -63,6 +65,29 @@ def parse_hyperparams(cfg: DictConfig):
     }
     return hyperparams
 
+def get_backbone_latent_size(backbone):
+    if backbone == 'resnet18':
+        model = resnet18(pretrained=True)
+    elif backbone == 'resnet34':
+        model = resnet34(pretrained=True)
+    elif backbone == 'resnet50':
+        model = resnet50(pretrained=True)
+    elif backbone == 'resnet101':
+        model = resnet101(pretrained=True)
+    elif backbone == 'resnet152':
+        model = resnet152(pretrained=True)
+    else:
+        raise ValueError(f"Image backbone {backbone} not recognized.")
+    
+    if 'resnet' in backbone:
+        model = nn.Sequential(*list(model.children())[:-1])
+        latent_dim = model[-2][-1].bn2.num_features
+    else:
+        pass # This is a placeholder for other backbones if needed
+    # delete the model to free memory
+    del model
+    return latent_dim
+
 def update_config_from_data(cfg: DictConfig, train_loader, c_names,
                             y_names, c_groups, csv_log_dir) -> DictConfig:
     """
@@ -89,28 +114,36 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             csv_log_dir = csv_log_dir
         )
         
+        # store in the config the size of the embeddings produced by the backbone
+        # check if type is dataset.encoder.encoder
+        if 'encoder' in cfg.dataset and 'type' in cfg.dataset.encoder.encoder:
+            backbone_latent_size = get_backbone_latent_size(cfg.dataset.encoder.encoder.type)
+        else:
+            backbone = cfg.dataset.encoder.type
+
         cfg.model.params.update(
             output_size = n_labels,
             c_names = c_names,
             y_names = y_names,
             task = cfg.dataset.metadata.task,
             c_groups = c_groups,
-            concept_loss_form=cfg.dataset.get('concept_loss_form', {
-                '_target_': 'torch.nn.BCELoss'})
+            concept_loss_form = cfg.dataset.get('concept_loss_form', {'_target_': 'torch.nn.BCELoss'}),
+            backbone_latent_size = cfg.dataset.latent_size
         )
 
         # if we want to extract the embeddings it means that we are NOT 
-        # fine-tuning a pre-trained model during training.
-        # This means that we just need a linear encoder
+        # fine-tuning a pre-trained backbone during training.
+        # This means that we just need a linear encoder.
         if cfg.extract_embeddings:
+            input_size = backbone_latent_size 
             cfg.model.params.encoder = {
                 '_target_': 'src.models.encoders.linear.LinearEncoder',
-                'output_size': cfg.dataset.latent_size,
+                'output_size': backbone_latent_size, # we do not want the linear layer to reduce the size of the embeddings
                 'activation': cfg.activation,
             }
         else:
             # On the other hand, if we are fine-tuning a pre-trained model,
-            # we need to set the encoder to the one defined in the dataset config
+            # we need to set the encoder to the one defined in the dataset config.
             cfg.model.params.encoder = cfg.dataset.encoder.encoder
 
         cfg.model.params.encoder.update(

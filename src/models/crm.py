@@ -19,7 +19,8 @@ class ConceptResidualModel(BaseModel):
                  c_groups=None,
                  hard_concepts=False,
                  encoder=None,
-                concept_loss_form=nn.BCELoss()
+                 concept_loss_form=nn.BCELoss(),
+                 backbone_latent_size=None
                  ):
         
         super().__init__(
@@ -41,14 +42,14 @@ class ConceptResidualModel(BaseModel):
         self.hard_concepts = hard_concepts
 
         self.bottleneck = pyc_nn.LinearConceptResidualBottleneck(
-            self.latent_size,
+            backbone_latent_size,
             self.c_names,
             self.residual_size,
         )
         self.y_predictor = nn.Sequential(
-            nn.Linear(len(c_names) + residual_size, self.latent_size),
+            nn.Linear(len(c_names) + residual_size, backbone_latent_size),
             getattr(nn, activation)(),
-            nn.Linear(latent_size, output_size),
+            nn.Linear(backbone_latent_size, output_size),
         )
 
         self.concept_loss_form = concept_loss_form

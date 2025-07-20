@@ -1,8 +1,8 @@
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from torch import nn
-from transformers import ViTModel, AutoModel
-#from torchvision.models import resnet34
+from transformers import AutoModel
+from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
 from tqdm import tqdm
 import torch.nn.functional as F
 
@@ -32,26 +32,42 @@ class EmbeddingExtractor:
             Converts a batch of binary label vectors to decimal values (for CelebA multi-label tasks).
     """
     def __init__(self, 
+                 cfg,
                  train_loader, 
                  val_loader, 
                  test_loader, 
                  device='cuda', 
                  celeba=False, 
-                 task_names=None):
-        
+                 task_names=None,
+                 extract_embeddings=True):
+
+        self.cfg = cfg
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.test_loader = test_loader
         self.device = device
         self.celeba = celeba
         self.task_names = task_names
+        self.img_backbone_name = cfg.img_backbone_name
+        self.extract_embeddings = extract_embeddings
 
-        # Load ViT model pre-trained on ImageNet
-        self.model = ViTModel.from_pretrained('google/vit-base-patch32-224-in21k')
+        if 'resnet' in self.img_backbone_name:
+            if self.img_backbone_name == 'resnet18':
+                self.model = resnet18(pretrained=True)
+            elif self.img_backbone_name == 'resnet34':
+                self.model = resnet34(pretrained=True)
+            elif self.img_backbone_name == 'resnet50':
+                self.model = resnet50(pretrained=True)
+            elif self.img_backbone_name == 'resnet101':
+                self.model = resnet101(pretrained=True)
+            elif self.img_backbone_name == 'resnet152':
+                self.model = resnet152(pretrained=True)
+            self.model = nn.Sequential(*list(self.model.children())[:-1])
+            # save the latent dimension of the backbone's output
+            self.latent_dim = self.model[-2][-1].bn2.num_features
+        else:
+            raise ValueError(f"Image backbone {self.img_backbone_name} not recognized.")
 
-        # Load ResNet34 model pre-trained on ImageNet
-        #self.model = resnet34(pretrained=True)
-        #self.model = nn.Sequential(*list(self.model.children())[:-1])
         self.model = self.model.to(self.device)
         self.model.eval()
 
@@ -62,31 +78,36 @@ class EmbeddingExtractor:
         labels = []
 
         with torch.no_grad():
-            #if not self.celeba:
+            i = 1
             for images, concepts, targets in tqdm(loader):
                 bsz = images.shape[0]
-                images = images.to(self.device)
-                # If the tensor has not the correct shape 
-                if images.shape[-1] != 224:
-                    images = F.interpolate(images, 
-                                            size=(224, 224), 
-                                            mode='bilinear', 
-                                            align_corners=False)
-                if images.shape[1] == 1:
-                    # Repeat the single channel 3 times to simulate RGB
-                    images = images.repeat(1, 3, 1, 1)  # (N, 3, H, W)
-                # Extract embeddings
-                outputs = self.model(images)
-                # Get the [CLS] token representation
-                outputs = outputs.last_hidden_state[:, 0, :]
-                outputs = outputs.flatten(start_dim=1)
-                embeddings.append(outputs.cpu())
+                if self.extract_embeddings:
+                    images = images.to(self.device)
+                    # If the tensor has not the correct shape 
+                    if images.shape[-1] != 224:
+                        images = F.interpolate(images, 
+                                                size=(224, 224), 
+                                                mode='bilinear', 
+                                                align_corners=False)
+                    if images.shape[1] == 1:
+                        # Repeat the single channel 3 times to simulate RGB
+                        images = images.repeat(1, 3, 1, 1)  # (N, 3, H, W)
+                    # Extract embeddings
+                    outputs = self.model(images)
+                    outputs = outputs.flatten(start_dim=1)
+                    embeddings.append(outputs.cpu())
+                else:
+                    # If embeddings are not extracted, just append the images
+                    embeddings.append(images.cpu())
                 if self.celeba:
                     targets = self._batch_binary_to_decimal_torch(
                         torch.stack([targets[:,i] for i in range(len(self.task_names))], dim=1)
                     )
                 labels.append(targets.cpu())
                 concepts_list.append(concepts.cpu())
+                if i % 3 == 0:
+                    break
+                i+=1
                 
         # Concatenate all embeddings and labels
         embeddings = torch.cat(embeddings, dim=0)
@@ -100,7 +121,8 @@ class EmbeddingExtractor:
 
     def _create_loader(self, embeddings, concepts, labels, batch_size):
         """Helper function to create a DataLoader from embeddings and labels."""
-        dataset = TensorDataset(embeddings, concepts, labels)
+        dataset = [{'x': e, 'c': c, 'y': l} 
+                   for e, c, l in zip(embeddings, concepts, labels)]
         return DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
     def _batch_binary_to_decimal_torch(self, binary_matrix):

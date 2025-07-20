@@ -21,7 +21,8 @@ class ConceptBottleneckModel(BaseModel):
                  latent_size = 128,
                  c_groups=None,
                  encoder=None,
-                 concept_loss_form=nn.BCELoss()
+                 concept_loss_form=nn.BCELoss(),
+                 backbone_latent_size=None,
                  ):
         
         super().__init__(
@@ -46,7 +47,7 @@ class ConceptBottleneckModel(BaseModel):
         c_activation = nn.Identity() if isinstance(concept_loss_form,
                                                  nn.CrossEntropyLoss) else nn.Sigmoid()
         self.bottleneck = pyc_nn.LinearConceptBottleneck(
-            self.latent_size,
+            backbone_latent_size,
             self.c_names,
             activation=c_activation,
         )
@@ -92,5 +93,3 @@ class ConceptBottleneckModel(BaseModel):
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         return loss
-
-

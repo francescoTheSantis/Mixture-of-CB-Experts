@@ -27,7 +27,8 @@ class ConceptMemoryReasoner(BaseModel):
                  conc_rec_weight=1.0,
                  hard_concepts=False,
                  encoder=None,
-                 concept_loss_form=nn.BCELoss()
+                 concept_loss_form=nn.BCELoss(),
+                 backbone_latent_size=None
                  ):
         super().__init__(
             output_size,
@@ -59,7 +60,7 @@ class ConceptMemoryReasoner(BaseModel):
         c_activation = nn.Identity() if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.Sigmoid()
 
         self.bottleneck = pyc_nn.LinearConceptBottleneck(
-            latent_size,
+            backbone_latent_size,
             self.c_names,
             activation=c_activation,
         )
@@ -78,7 +79,7 @@ class ConceptMemoryReasoner(BaseModel):
         )
         self.classifier_selector = nn.Sequential(
             pyc_nn.LinearConceptLayer(
-                latent_size,
+                backbone_latent_size,
                 [self.y_names, memory_size],
             ),
         )
