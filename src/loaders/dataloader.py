@@ -304,15 +304,20 @@ class loader(object):
             loaded_train = DataLoader(train_dataset, 
                                     batch_size=self.batch_size, 
                                     shuffle=True,
-                                    num_workers=self.num_workers)
+                                    num_workers=self.num_workers,
+                                    persistent_workers=True if self.num_workers > 0 else False,
+                                    pin_memory=True)
             loaded_val = DataLoader(val_dataset, 
                                     batch_size=self.batch_size, 
                                     shuffle=False,
-                                    num_workers=self.num_workers)
+                                    num_workers=self.num_workers,
+                                    persistent_workers=True if self.num_workers > 0 else False,
+                                    pin_memory=True)
             loaded_test = DataLoader(test_dataset, 
                                     batch_size=self.batch_size, 
                                     shuffle=False,
-                                    num_workers=self.num_workers)  
+                                    num_workers=self.num_workers,
+                                    persistent_workers=False if self.num_workers > 0 else False)
         if cfg.extract_embeddings:
             if self.name in ['cub', 'awa2', 'awa2_incomplete', 'cub_incomplete', 'mnist_addition', 'celeba']:
                 celeba_flag = True if self.name == 'celeba' else False

@@ -715,6 +715,9 @@ DEFAULT_UNC_MAP = [
     {0: 0.5, 1: 0.5, 2: 0.5, 3:0.75, 4:1.0},
 ]
 
+def identity(x):
+    return x
+
 ##########################################################
 ## Helper Functions
 ##########################################################
@@ -784,17 +787,17 @@ class CUBDataset(Dataset):
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(), #implicitly divides by 255
                 transforms.Normalize(mean = [0.5, 0.5, 0.5], std = [2, 2, 2]),
-                sample_transform or (lambda x: x),
+                sample_transform or identity
             ])
         else:
             self.sample_transform = transforms.Compose([
                 transforms.CenterCrop(image_size),
                 transforms.ToTensor(), #implicitly divides by 255
                 transforms.Normalize(mean = [0.5, 0.5, 0.5], std = [2, 2, 2]),
-                sample_transform or (lambda x: x),
+                sample_transform or identity
             ])
-        self.concept_transform = concept_transform or (lambda x: x)
-        self.label_transform = label_transform or (lambda x: x)
+        self.concept_transform = concept_transform or identity
+        self.label_transform = label_transform or identity
         self.uncertain_concept_labels = uncertain_concept_labels
         self.root = root
         self.path_transform = path_transform
