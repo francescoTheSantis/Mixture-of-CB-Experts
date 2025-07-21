@@ -14,7 +14,6 @@ from torch_concepts.data.awa2 import CONCEPT_GROUPS as awa2_concept_groups
 from torch_concepts.data.celeba import CelebADataset
 # from src.loaders.datasets.cebab import CEBaBDataset
 from torch.utils.data import DataLoader, random_split
-from env import DATA_PATH
 from src.loaders.preprocessing import EmbeddingExtractor, \
     TextEmbeddingExtractor
 import omegaconf
@@ -191,6 +190,8 @@ class loader(object):
         return concept_names, task_names, concept_groups
 
     def load_data(self, cfg=None):
+        DATA_PATH = cfg['data_path']
+
         # Load the data
         if self.name in ['xor', 'trigonometry', 'dot', 'checkmark']:
             dataset = ToyDataset(self.name, size=1000, random_state=42)
