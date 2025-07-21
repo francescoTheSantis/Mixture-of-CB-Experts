@@ -39,6 +39,9 @@ use_stored_dataset: False
 # using a pre-trained model.
 extract_embeddings: False
 
+# set this variable to the path where you store all the cached datasets
+data_path: ""
+
 wandb:
   # Set the params below if you want to use wandb as logger.
   # Set it to null if you do not want to use wandb.
