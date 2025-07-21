@@ -47,7 +47,7 @@ def main(cfg: DictConfig) -> None:
             torch.save(loaded_test, test_path)
 
     # Load the concept names and groups
-    c_names, y_names, c_groups = loader.get_names()
+    c_names, y_names, c_groups = loader.get_names(cfg)
 
     # Set the c_names and y_names in the config
     cfg = update_config_from_data(cfg, loaded_train, c_names, y_names, c_groups, csv_logger.log_dir)

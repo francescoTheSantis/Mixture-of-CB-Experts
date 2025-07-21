@@ -129,7 +129,9 @@ class loader(object):
                 self.incomplete_awa2_groups[k] = [x+cnt for x in list(range(len(self.incomplete_awa2_groups[k])))]
                 cnt += len(self.incomplete_awa2_groups[k])
 
-    def get_names(self):
+    def get_names(self, cfg):
+        DATA_PATH = cfg['data_path']
+
         # Get the concept names and task names
         if self.name in ['xor', 'trigonometry', 'dot', 'checkmark']:
             dataset = ToyDataset(self.name, size=1000, random_state=42)
@@ -355,7 +357,7 @@ if __name__ == '__main__':
     train_loader, val_loader, test_loader = E_extr.produce_loaders()
 
     # we save the train, validation and test loaders
-    data_path = os.path.join(DATA_PATH, 'stored_tensors', 'sst2')
+    data_path = os.path.join('', 'stored_tensors', 'sst2')
     os.makedirs(data_path, exist_ok=True)
     torch.save(train_loader, os.path.join(data_path, 'train.pt'))
     torch.save(val_loader, os.path.join(data_path, 'val.pt'))
