@@ -1,6 +1,6 @@
 defaults:
   - common
-  - /encoder: resnet
+  - /encoder: mnist_mlp
   - _self_
 
 loader: 
@@ -17,10 +17,3 @@ metadata:
 
 latent_size: 64
 
-encoder:
-  _target_: "src.models.encoders.MLPEncoder"
-  output_size: ${dataset.latent_size}
-  hidden_size: ${dataset.latent_size}
-  input_transform:
-    _target_: "src.models.encoders.MNISTTransform"
-    flatten: true

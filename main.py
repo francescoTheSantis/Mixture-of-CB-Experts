@@ -39,7 +39,7 @@ def main(cfg: DictConfig) -> None:
     # Otherwise, preprocess the data and then store the results
     else:
         print('Prepearing dataloaders...')
-        loaded_train, loaded_val, loaded_test = loader.load_data()
+        loaded_train, loaded_val, loaded_test = loader.load_data(cfg)
         if loader.extract_embeddings:
             os.makedirs(data_path, exist_ok=True)
             torch.save(loaded_train, train_path)

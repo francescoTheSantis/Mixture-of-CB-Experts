@@ -2,6 +2,3 @@ encoder:
   _target_: "src.models.encoders.resnet.ResNetEncoder"
   output_size: ${dataset.latent_size}
   type: ${img_backbone_name}
-  input_transform:
-    _target_: "src.models.encoders.transform.ImageTransform"
-    flatten: true

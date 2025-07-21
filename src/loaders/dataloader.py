@@ -2,11 +2,11 @@ from torch_concepts.data import ToyDataset
 import torch
 from torch import nn
 from torch_concepts.data.mnist import MNISTAddition
-from torch_concepts.data.cub import CUBDataset
-from torch_concepts.data.cub import SELECTED_CONCEPTS as cub_selected_concepts
-from torch_concepts.data.cub import CONCEPT_SEMANTICS as cub_concept_semantics
-from torch_concepts.data.cub import CLASS_NAMES as cub_class_names
-from torch_concepts.data.cub import CONCEPT_GROUP_MAP as cub_concept_groups
+from src.loaders.datasets.cub import CUBDataset
+from src.loaders.datasets.cub import SELECTED_CONCEPTS as cub_selected_concepts
+from src.loaders.datasets.cub import CONCEPT_SEMANTICS as cub_concept_semantics
+from src.loaders.datasets.cub import CLASS_NAMES as cub_class_names
+from src.loaders.datasets.cub import CONCEPT_GROUP_MAP as cub_concept_groups
 from torch_concepts.data.awa2 import AwA2Dataset
 from torch_concepts.data.awa2 import CONCEPT_SEMANTICS as awa2_concept_semantics
 from torch_concepts.data.awa2 import CLASS_NAMES as awa2_class_names
@@ -90,7 +90,7 @@ class loader(object):
         self.extract_embeddings = extract_embeddings
 
         self.transform = transforms.Compose([
-                transforms.Resize((224, 224)),
+                transforms.Resize((224, 224), antialias=False), # NOT COMMIT only for MPS
                 transforms.ToTensor(),
                 transforms.Normalize(            # Normalize using ImageNet stats
                     mean=[0.485, 0.456, 0.406],
@@ -239,7 +239,7 @@ class loader(object):
             val_dataset = CUBDataset(root=DATA_PATH, split='val', selected_concepts=self.selected_concept_idxes)
             test_dataset = CUBDataset(root=DATA_PATH, split='test', selected_concepts=self.selected_concept_idxes)
         elif self.name == 'celeba':
-            train_dataset = CelebADataset(root=DATA_PATH, split='train', 
+            train_dataset = CelebADataset(root=DATA_PATH, split='train',
                                           class_attributes=self.task_names,
                                           transform=self.transform,
                                           download=True)
@@ -310,27 +310,27 @@ class loader(object):
                                     batch_size=self.batch_size, 
                                     shuffle=False,
                                     num_workers=self.num_workers)  
-        
-        if self.name in ['cub', 'awa2', 'awa2_incomplete', 'cub_incomplete', 'mnist_addition', 'celeba']:
-            celeba_flag = True if self.name == 'celeba' else False
-            E_extr = EmbeddingExtractor(cfg,
-                                        loaded_train, 
-                                        loaded_val, 
-                                        loaded_test, 
-                                        self.device,
-                                        celeba_flag,
-                                        self.task_names,
-                                        self.extract_embeddings
-                                        )
-            
-        elif self.name in ['sst2', 'cebab']:
-            E_extr = TextEmbeddingExtractor(loaded_train,
+        if cfg.extract_embeddings:
+            if self.name in ['cub', 'awa2', 'awa2_incomplete', 'cub_incomplete', 'mnist_addition', 'celeba']:
+                celeba_flag = True if self.name == 'celeba' else False
+                E_extr = EmbeddingExtractor(cfg,
+                                            loaded_train,
                                             loaded_val,
                                             loaded_test,
                                             self.device,
-                                            self.extract_embeddings)
+                                            celeba_flag,
+                                            self.task_names,
+                                            self.extract_embeddings
+                                            )
+
+            elif self.name in ['sst2', 'cebab']:
+                E_extr = TextEmbeddingExtractor(loaded_train,
+                                                loaded_val,
+                                                loaded_test,
+                                                self.device,
+                                                self.extract_embeddings)
             
-        loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
+            loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
 
         return loaded_train, loaded_val, loaded_test
 

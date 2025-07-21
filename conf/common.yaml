@@ -4,7 +4,7 @@ defaults:
   - engine: engine
 
 ## Common parameters
-max_epochs: 500
+max_epochs: 1
 patience: 40
 gamma: 0.5
 lr_patience: 20

@@ -28,10 +28,12 @@ class ResNetEncoder(BaseEncoder):
             raise ValueError(f"Unsupported ResNet type: {type}")
 
         # Remove the final fully connected layer
-        self.resnet = nn.Sequential(*list(self.resnet.children())[:-1])
+        self.resnet.fc = nn.Identity()
 
     def forward(self, x):
         if self.input_transform is not None:
             x = self.input_transform(x)
         x = self.resnet(x)
+        if len(x.shape) > 3:
+            x
         return x
