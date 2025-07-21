@@ -9,7 +9,7 @@ params:
   memory_size: ${memory_size}
   conc_rec_weight: 0.1
   embedding_size: ${embedding_size}
-
+  hard_concepts: true
 
 metadata:
   name: cmr
