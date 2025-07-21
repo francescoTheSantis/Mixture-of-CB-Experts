@@ -12,7 +12,7 @@ from torch_concepts.data.awa2 import CONCEPT_SEMANTICS as awa2_concept_semantics
 from torch_concepts.data.awa2 import CLASS_NAMES as awa2_class_names
 from torch_concepts.data.awa2 import CONCEPT_GROUPS as awa2_concept_groups
 from torch_concepts.data.celeba import CelebADataset
-from src.loaders.datasets.cebab import CEBaBDataset
+# from src.loaders.datasets.cebab import CEBaBDataset
 from torch.utils.data import DataLoader, random_split
 from env import DATA_PATH
 from src.loaders.preprocessing import EmbeddingExtractor, \
