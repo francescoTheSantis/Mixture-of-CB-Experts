@@ -5,7 +5,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python>=3.10
+  - python>=3.10, <3.13
   - pytorch:pytorch>=2.1
   - torchvision>=0.17.1
   - pytorch:pytorch-cuda
@@ -16,6 +16,7 @@ dependencies:
   - matplotlib
   - opencv
   - pip
+  - transformers
   - pip:
     - wandb
     - sentence-transformers
