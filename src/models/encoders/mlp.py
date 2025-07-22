@@ -20,7 +20,8 @@ class MLPEncoder(BaseEncoder):
         self.mlp = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             getattr(nn, activation)(),
-            nn.Linear(hidden_size, output_size)
+            nn.Linear(hidden_size, output_size),
+            getattr(nn, activation)(),
         )
 
     def forward(self, x):
