@@ -15,5 +15,5 @@ metadata:
   name: mnist_addition
   data_type: image
 
-latent_size: 64
+latent_size: 256
 
