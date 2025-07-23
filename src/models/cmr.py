@@ -44,7 +44,7 @@ class ConceptMemoryReasoner(BaseModel):
         
         self.embedding_size = embedding_size
         self.latent_size = latent_size
-        self.task_penalty = task_penalty
+        self.task_penalty = task_penalty * 3 # BCE gives lower loss values
         self.c_names = list(c_names)
         self.int_prob = int_prob
         self.int_idxs = int_idxs
