@@ -17,8 +17,9 @@ class Trainer:
         self.wandb_logger = wandb_logger
         self.csv_logger = csv_logger
         self.model = model
-        self.epss = np.arange(0, 1.1, 0.1)
-        self.p_ints = np.arange(0, 1.1, 0.1)
+        self.model = self.model.to(self.cfg.gpus[0]) # Move the model to the GPU
+        self.epss = np.arange(0, 1.1, 0.25) # Noise levels for interventions
+        self.p_ints = np.arange(0, 1.1, 0.1) # Intervention probabilities
 
     def build_trainer(self):
         early_stopping = EarlyStopping(
@@ -102,7 +103,10 @@ class Trainer:
                     for batch in test_dataloader:
                         x, c, y = self.model.unpack_batch(batch)
                         # Move the data to the GPU
-                        x = x.to(self.cfg.gpus[0])
+                        if isinstance(x, dict):
+                            x = {k: v.to(self.cfg.gpus[0]) for k, v in x.items()}
+                        else:  
+                            x = x.to(self.cfg.gpus[0])
                         c = c.to(self.cfg.gpus[0])
                         y = y.to(self.cfg.gpus[0])
                         inputs = {'x':x, 'c':c, 'y':y}
@@ -115,15 +119,29 @@ class Trainer:
                     y = torch.cat(y_trues, dim=0)
                     y_preds = torch.cat(y_preds, dim=0)
                     y = y.cpu().numpy()
-                    if len(self.cfg.model.params.y_names)==1:
+                    if len(self.cfg.model.params.y_names)==1 and self.cfg.dataset.metadata.task != 'regression':
                         if self.model.model.__class__.__name__ in ['DeepConceptReasoner', 'ConceptMemoryReasoner']:
                             y_preds = (y_preds > 0.5).long().cpu().numpy()
                         else:
                             y_preds = (y_preds > 0.).long().cpu().numpy()
+                    if self.cfg.dataset.metadata.task == 'regression':
+                        y_preds = y_preds.squeeze().cpu().numpy()
                     else:
                         y_preds = y_preds.argmax(-1).cpu().numpy()
-                    task_f1, task_acc = f1_acc_metrics(y, y_preds)
-                    intervention_results = {'noise': round(eps,1), 'p_int': round(p_int,1), 'f1': round(task_f1,2), 'accuracy': round(task_acc,2)}
+
+                    if self.cfg.dataset.metadata.task == 'regression':
+                        task_f1, task_acc = 0, 0
+                        mse = np.mean((y - y_preds) ** 2)
+                    else:
+                        task_f1, task_acc = f1_acc_metrics(y, y_preds)
+                        mse = 0
+                    intervention_results = {
+                        'noise': round(eps,1), 
+                        'p_int': round(p_int,1), 
+                        'f1': round(task_f1,2), 
+                        'accuracy': round(task_acc,2),
+                        'mse': round(mse, 4)
+                    }
                     intervention_df = pd.concat([intervention_df, pd.DataFrame([intervention_results])], ignore_index=True)
         self.model.model.test_interventions = False
         return intervention_df

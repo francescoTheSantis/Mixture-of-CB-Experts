@@ -8,17 +8,24 @@ hydra:
       dir: output/everything_sweep/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 1, 2, 3, 4, 5
-      # implemented models: blackbox, cbm_linear, cbm_mlp, crm, cem, dcr, licem, cmr, m_licem
-      model: blackbox, m_licem, cbm_linear, cbm_mlp, cem, dcr, cmr
+      seed: 1, 2 #, 3, 4, 5
+      # implemented models: blackbox, cbm_linear, cbm_mlp, cem, dcr, licem, cmr, m_licem
+      model: blackbox, cbm_linear, cbm_mlp, cem, dcr, licem, cmr, m_licem
       # implemented toy datasets: xor, nor, xnor, dot, trigometry, checkmark 
-      # implemented image datasets: mnist_addition, cub, celeba, awa2
-      # implemented textual datasets: cebab (regression), dataset2 (regression), 
-      #                               dataset3 (numeric concepts and classification),
-      #                               dataset4 (numeric concepts and classification)
-      dataset: xor, cub, awa2, cub_incomplete, awa2_incomplete, mnist_addition
+      # implemented image datasets: mnist_addition, cub, celeba, awa2, awa2_incomplete, mnist_addition
+      # implemented textual datasets: cebab (regression)
+      dataset: xor, cub, awa2, mnist_addition, cebab
 
-#use_stored_dataset: True
-#extract_embeddings: True
+use_stored_dataset: true
+extract_embeddings: false
+
+max_epochs: 10
+
+img_backbone_name: resnet18
+text_backbone_name: bert-base-uncased
 
 gpus: [0]
+
+wandb:
+  entity: "francescothesantis-politecnico-di-torino"
+  project: "linear_memory_reasoner"

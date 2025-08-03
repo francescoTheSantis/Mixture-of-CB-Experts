@@ -1,6 +1,6 @@
 defaults:
   - common
-  - /encoder: resnet
+  - /encoder: mlp
   - _self_
 
 loader: 
@@ -14,13 +14,12 @@ metadata:
   lr: 0.0001
   name: mnist_addition
   data_type: image
+  concept_type: binary
 
 latent_size: 64
 
 encoder:
-  _target_: "src.models.encoders.MLPEncoder"
-  output_size: ${dataset.latent_size}
-  hidden_size: ${dataset.latent_size}
-  input_transform:
-    _target_: "src.models.encoders.MNISTTransform"
-    flatten: true
+  encoder:
+    input_transform:
+      _target_: "src.models.encoders.transform.MNISTTransform"
+      flatten: false

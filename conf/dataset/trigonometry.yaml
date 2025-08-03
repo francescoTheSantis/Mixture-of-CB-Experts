@@ -13,5 +13,6 @@ metadata:
   lr: 0.1
   name: trigonometry
   data_type: toy
-  
+  concept_type: binary
+
 latent_size: 8

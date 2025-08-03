@@ -12,7 +12,8 @@ metadata:
   lr: 0.01
   name: xnor
   data_type: toy
-  
+  concept_type: binary
+
 latent_size: 8
 
 hard_concepts: true

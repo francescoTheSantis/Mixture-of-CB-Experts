@@ -6,7 +6,7 @@ from src.utilities import set_seed, set_loggers
 import torch
 import os
 from env import CACHE
-from src.utilities import update_config_from_data
+from src.utilities import update_config_from_data, is_valid_experiment
 
 @hydra.main(config_path="conf", config_name="sweep")
 def main(cfg: DictConfig) -> None:
@@ -18,7 +18,10 @@ def main(cfg: DictConfig) -> None:
     set_seed(cfg.seed)
 
     ###### Load the data ######
-    data_path = os.path.join(str(CACHE), 'stored_tensors', cfg.dataset.metadata.name)
+    data_path = os.path.join(str(CACHE), 
+                             'stored_tensors', 
+                             'embeddings' if cfg.extract_embeddings else 'raw', # whether it contains embeddings or not
+                             cfg.dataset.metadata.name)
     train_path = f"{data_path}/train.pt"
     val_path = f"{data_path}/val.pt"
     test_path = f"{data_path}/test.pt"
@@ -29,8 +32,7 @@ def main(cfg: DictConfig) -> None:
     # If the data have been preprocessed and use_stored_dataset=True, load the preprocessed data
     if os.path.exists(train_path) and os.path.exists(val_path)\
                                   and os.path.exists(test_path)\
-                                  and cfg.use_stored_dataset\
-                                  and loader.extract_embeddings:
+                                  and cfg.use_stored_dataset:
         print('Loading pre-processed data...')
         loaded_train = torch.load(train_path)
         loaded_val = torch.load(val_path)
@@ -39,7 +41,7 @@ def main(cfg: DictConfig) -> None:
     # Otherwise, preprocess the data and then store the results
     else:
         print('Prepearing dataloaders...')
-        loaded_train, loaded_val, loaded_test = loader.load_data()
+        loaded_train, loaded_val, loaded_test = loader.load_data(cfg)
         if loader.extract_embeddings:
             os.makedirs(data_path, exist_ok=True)
             torch.save(loaded_train, train_path)
@@ -51,6 +53,10 @@ def main(cfg: DictConfig) -> None:
 
     # Set the c_names and y_names in the config
     cfg = update_config_from_data(cfg, loaded_train, c_names, y_names, c_groups, csv_logger.log_dir)
+
+    # Check whether it is a valid combination of dataset and model.
+    # Some models (e.g., dcr) cannot be executed on some datasets (e.g., cebab).
+    is_valid_experiment(cfg)    
 
     ###### Instantiate the model ######
     model = instantiate(cfg.engine)

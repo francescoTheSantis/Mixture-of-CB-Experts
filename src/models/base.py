@@ -73,15 +73,15 @@ class BaseModel(nn.Module):
     def encode(self, input):
         x = input['x']
         c_true = input['c']
-    
-        # If noise is provided, create a convex combination of the input and noise
-        if self.noise!=None:
-            eps = torch.randn_like(x)
-            x = eps * self.noise + x * (1-self.noise)
          
         # Pass the input through the encoder
         x = self.encoder(x)
 
+        # If noise is provided, create a convex combination of the input and noise
+        if self.noise!=None:
+            eps = torch.randn_like(x)
+            x = eps * self.noise + x * (1-self.noise)
+            
         if self.training or self.test_interventions:
             # intervene on the concepts according to the int_prob
             int_idxs = self.get_intervened_concepts_predictions(
@@ -118,7 +118,7 @@ class BaseModel(nn.Module):
             else:
                 y = y.flatten().float()
         elif self.task == 'regression':
-            raise NotImplementedError("Regression task is not implemented for concept-based loss.")
+            pass
         elif self.task == 'generation':
             # in case of generation, we assume y is a sequence of tokens
             y = y.flatten().long()
@@ -140,7 +140,7 @@ class BaseModel(nn.Module):
             task_loss = self.task_loss_form(y_hat.squeeze(), y)
         # concept loss
         concept_loss = 0
-        if isinstance(self.concept_loss_form, nn.BCELoss):
+        if isinstance(self.concept_loss_form, nn.BCELoss) or isinstance(self.concept_loss_form, nn.MSELoss):
             for i in range(c.shape[1]):
                 concept_loss += self.concept_loss_form(c_hat[:,i], c[:,i])
             concept_loss /= c.shape[1]

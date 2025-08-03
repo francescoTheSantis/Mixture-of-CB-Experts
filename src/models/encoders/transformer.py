@@ -23,8 +23,17 @@ class TransformerEncoder(BaseEncoder):
     def forward(self, x):
         if self.input_transform is not None:
             x = self.input_transform(x)
+
+        input_ids = x['input_ids']
+        attention_mask = x['attention_mask'].int()
+        token_type_ids = x['token_type_ids'].int()
+
         # Pass input through the Hugging Face transformer model
-        outputs = self.transformer(**x)
+        outputs = self.transformer(
+            input_ids=input_ids, 
+            attention_mask=attention_mask, 
+            token_type_ids=token_type_ids
+        )
         hidden_states = outputs.last_hidden_state  # Use the last hidden state
         x = hidden_states[:, 0, :]  # Use the [CLS] token representation
         return x

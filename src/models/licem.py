@@ -24,7 +24,8 @@ class LinearConceptEmbeddingModel(BaseModel):
                  hard_concepts=False,
                  encoder=None,
                  concept_loss_form=nn.BCELoss(),
-                 backbone_latent_size=None
+                 backbone_latent_size=None,
+                 concept_type='binary'
                  ):
 
         super().__init__(
@@ -36,6 +37,7 @@ class LinearConceptEmbeddingModel(BaseModel):
                  encoder
                  )
 
+        self.concept_type = concept_type
         self.embedding_size = embedding_size
         self.task_penalty = task_penalty
         self.c_names = list(c_names)
@@ -46,9 +48,9 @@ class LinearConceptEmbeddingModel(BaseModel):
         self.use_bias = use_bias
         self.y_names = list(y_names)
         self.hard_concepts = hard_concepts
-        self.concept_loss_form = concept_loss_form
-        c_activation = nn.Identity() if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.Sigmoid()
-
+        self.concept_loss_form = nn.BCELoss() if concept_type == 'binary' else nn.MSELoss()
+        c_activation = nn.Sigmoid() if isinstance(self.concept_loss_form,
+                                                   nn.BCELoss) else nn.Identity()
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             backbone_latent_size,
             self.c_names,

@@ -12,5 +12,6 @@ metadata:
   lr: 0.1
   name: checkmark
   data_type: toy
+  concept_type: binary
 
 latent_size: 8

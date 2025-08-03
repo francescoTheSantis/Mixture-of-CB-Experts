@@ -34,4 +34,5 @@ class ResNetEncoder(BaseEncoder):
         if self.input_transform is not None:
             x = self.input_transform(x)
         x = self.resnet(x)
+        x = x.view(x.size(0), -1) # Flatten the output
         return x

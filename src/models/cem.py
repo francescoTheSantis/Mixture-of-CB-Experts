@@ -23,6 +23,7 @@ class ConceptEmbeddingModel(BaseModel):
                  encoder=None,
                  concept_loss_form=nn.BCELoss(),
                  backbone_latent_size=None,
+                 concept_type='binary'
                  ):
 
         super().__init__(
@@ -34,6 +35,7 @@ class ConceptEmbeddingModel(BaseModel):
                  encoder
                  )
 
+        self.concept_type = concept_type
         self.embedding_size = embedding_size
         self.task_penalty = task_penalty
         self.c_names = list(c_names)

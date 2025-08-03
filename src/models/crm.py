@@ -20,7 +20,8 @@ class ConceptResidualModel(BaseModel):
                  hard_concepts=False,
                  encoder=None,
                  concept_loss_form=nn.BCELoss(),
-                 backbone_latent_size=None
+                 backbone_latent_size=None,
+                 concept_type='binary'
                  ):
         
         super().__init__(
@@ -32,6 +33,7 @@ class ConceptResidualModel(BaseModel):
                  encoder
                  )
 
+        self.concept_type = concept_type
         self.task_penalty = task_penalty
         self.c_names = list(c_names)
         self.int_prob = int_prob

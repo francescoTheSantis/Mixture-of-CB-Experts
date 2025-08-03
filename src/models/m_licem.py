@@ -30,7 +30,8 @@ class LinearMemoryReasoner(BaseModel):
                  cos_sim=False,
                  sampling=True,
                  concept_loss_form=nn.BCELoss(),
-                 backbone_latent_size=None
+                 backbone_latent_size=None,
+                 concept_type='binary'
                  ):
 
         super().__init__(
@@ -55,6 +56,7 @@ class LinearMemoryReasoner(BaseModel):
         self.negative_concepts = negative_concepts
         self.hard_concepts = hard_concepts
         self.weight_reg = weight_reg
+        self.concept_type = concept_type
 
         # Parameters specific for the LinearMemoryReasoner
         self.sampling = sampling
@@ -64,9 +66,10 @@ class LinearMemoryReasoner(BaseModel):
         self.intervene_on_selection = intervene_on_selection
         self.linear_classifier_selection = linear_classifier_selection
         self.cos_sim = cos_sim
-        self.concept_loss_form = concept_loss_form
-        c_activation = nn.Identity() if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.Sigmoid()
-
+        self.concept_loss_form = nn.BCELoss() if concept_type == 'binary' else nn.MSELoss()
+        c_activation = nn.Sigmoid() if isinstance(self.concept_loss_form,
+                                                   nn.BCELoss) else nn.Identity()
+        
         # If the user, with interventions, wants to modify both the selection of the linear classifier
         # and the execution of the linear classifier, we need to use the 
         # Concept embedding model to produce both concept predictions and embeddings.

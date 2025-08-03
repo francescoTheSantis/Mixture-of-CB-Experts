@@ -21,6 +21,7 @@ import omegaconf
 from torchvision import transforms
 import os
 import itertools
+from src.utilities import get_type_from_name
 
 class TextDataset(torch.utils.data.Dataset):
     def __init__(self, encoded_text):
@@ -261,7 +262,6 @@ class loader(object):
             train_dataset = AwA2Dataset(root=path, split='train', selected_concepts=self.selected_concept_idxes)
             val_dataset = AwA2Dataset(root=path, split='val', selected_concepts=self.selected_concept_idxes)
             test_dataset = AwA2Dataset(root=path, split='test', selected_concepts=self.selected_concept_idxes)
-
         elif self.name == 'sst2':
             from datasets import load_dataset
             from transformers import AutoTokenizer
@@ -311,25 +311,29 @@ class loader(object):
                                     shuffle=False,
                                     num_workers=self.num_workers)  
         
-        if self.name in ['cub', 'awa2', 'awa2_incomplete', 'cub_incomplete', 'mnist_addition', 'celeba']:
+        # We always modify the dataloaders since we want them to align with the batch that the engine is expecting.
+        if get_type_from_name(self.name) == 'image':
             celeba_flag = True if self.name == 'celeba' else False
-            E_extr = EmbeddingExtractor(cfg,
-                                        loaded_train, 
-                                        loaded_val, 
-                                        loaded_test, 
-                                        self.device,
-                                        celeba_flag,
-                                        self.task_names,
-                                        self.extract_embeddings
-                                        )
-            
-        elif self.name in ['sst2', 'cebab']:
-            E_extr = TextEmbeddingExtractor(loaded_train,
-                                            loaded_val,
-                                            loaded_test,
-                                            self.device,
-                                            self.extract_embeddings)
-            
+            E_extr = EmbeddingExtractor(
+                cfg,
+                loaded_train, 
+                loaded_val, 
+                loaded_test, 
+                self.device,
+                celeba_flag,
+                self.task_names,
+                self.extract_embeddings
+            )
+        else:
+            E_extr = TextEmbeddingExtractor(
+                cfg,
+                loaded_train,
+                loaded_val,
+                loaded_test,
+                self.device,
+                self.extract_embeddings
+            )
+
         loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
 
         return loaded_train, loaded_val, loaded_test

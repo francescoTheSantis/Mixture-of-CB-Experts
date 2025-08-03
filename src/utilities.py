@@ -25,6 +25,14 @@ def set_seed(seed: int):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
+def is_valid_experiment(cfg: DictConfig):
+    """ 
+    Check if the experiment is valid based on the dataset and model combination.
+    """
+    if cfg.dataset.metadata.name == 'cebab' and cfg.model.metadata.name in ['cem, dcr, cmr']:
+        raise ValueError(f"The experiment is not valid. Please check the configuration.\n\
+                         The combination of {cfg.dataset.metadata.name}, {cfg.model.metadata.name} cannot be executed.")
+
 def set_loggers(cfg):
     """ Set the loggers for the experiment """
     # Update the note in the config: if it is None, set it to an empty string
@@ -76,32 +84,50 @@ def get_backbone_latent_size(backbone):
         model = resnet101(pretrained=True)
     elif backbone == 'resnet152':
         model = resnet152(pretrained=True)
+    elif backbone == 'bert-base-uncased':
+        return 768  # BERT base model has 768 hidden size
     else:
         raise ValueError(f"Image backbone {backbone} not recognized.")
     
     if 'resnet' in backbone:
         model = nn.Sequential(*list(model.children())[:-1])
-        latent_dim = model[-2][-1].bn2.num_features
+        test = model(torch.randn((1,3,224,224)))
+        latent_dim = test.flatten(start_dim=1).shape[1]
     else:
         pass # This is a placeholder for other backbones if needed
     # delete the model to free memory
     del model
+    del test
+    torch.cuda.empty_cache()
     return latent_dim
+
+def get_type_from_name(dataset_name):
+    if dataset_name in ['mnist_addition', 'cub', 'cub_incomplete', 'awa2', 'awa2_incomplete', 'xor']:
+        return 'image'
+    else:
+        return 'text'
 
 def update_config_from_data(cfg: DictConfig, train_loader, c_names,
                             y_names, c_groups, csv_log_dir) -> DictConfig:
     """
     Update the config with the input size, output size, and concept names.
     """
-    x, c, y = next(iter(train_loader))
+    batch = next(iter(train_loader))
+
+    if get_type_from_name(cfg.dataset.metadata.name) == 'image':
+        x = batch['x']
+        data_type = 'image'
+    else:
+        x = batch['x']['input_ids']
+        data_type = 'text'
 
     if cfg.dataset.metadata.name != 'sst2':
         input_size = torch.prod(torch.tensor(x.shape[1:])).item()
     else:
         input_size = x.shape[-1]
         
-    concept_size = c.shape[1]
     n_labels = len(y_names)
+
     if c_groups is None or not isinstance(c_groups, dict):
         c_groups = c_groups
     else:
@@ -111,7 +137,8 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         cfg.engine.update(
             c_names = c_names,
             y_name = y_names,
-            csv_log_dir = csv_log_dir
+            csv_log_dir = csv_log_dir,
+            data_type = data_type,
         )
         
         # store in the config the size of the embeddings produced by the backbone
@@ -119,7 +146,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         if 'encoder' in cfg.dataset and 'type' in cfg.dataset.encoder.encoder:
             backbone_latent_size = get_backbone_latent_size(cfg.dataset.encoder.encoder.type)
         else:
-            backbone = cfg.dataset.encoder.type
+            backbone_latent_size = cfg.dataset.latent_size
 
         cfg.model.params.update(
             output_size = n_labels,
@@ -127,8 +154,10 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             y_names = y_names,
             task = cfg.dataset.metadata.task,
             c_groups = c_groups,
-            concept_loss_form = cfg.dataset.get('concept_loss_form', {'_target_': 'torch.nn.BCELoss'}),
-            backbone_latent_size = cfg.dataset.latent_size
+            #concept_loss_form = cfg.dataset.get('concept_loss_form', {'_target_': 'torch.nn.BCELoss'}),
+            backbone_latent_size = backbone_latent_size,
+            concept_type = cfg.dataset.metadata.concept_type
+
         )
 
         # if we want to extract the embeddings it means that we are NOT 
@@ -142,7 +171,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
                 'activation': cfg.activation,
             }
         else:
-            # On the other hand, if we are fine-tuning a pre-trained model,
+            # If we are fine-tuning a pre-trained model,
             # we need to set the encoder to the one defined in the dataset config.
             cfg.model.params.encoder = cfg.dataset.encoder.encoder
 

@@ -14,7 +14,7 @@ plt.style.use(['science', 'ieee', 'no-latex'])
 
 # List the paths containing the results
 paths = [
-    
+    "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-03_17-27-40"
 ]
 
 ###### Collect results regarding concept/task performance ######
@@ -105,20 +105,13 @@ marker_size = 14
 # If the experiment you run does not contain a model, just remove it from the dictionary.
 # If you want to add a new model, just add it to the dictionary.
 model_styles = {
-    'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:orange', 'size': marker_size},
-    'cbm_linear': {'marker': '*', 'name': 'CBM+Linear', 'color': 'tab:olive', 'size': marker_size},
+    'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:blue', 'size': marker_size},
+    'cbm_linear': {'marker': '*', 'name': 'CBM+Linear', 'color': 'tab:orange', 'size': marker_size},
     'cbm_mlp': {'marker': '^', 'name': 'CBM+MLP', 'color': 'tab:red', 'size': marker_size},
     'blackbox': {'marker': 'o', 'name': 'BlackBox', 'color': 'tab:purple', 'size': marker_size},
     'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:gray', 'size': marker_size},
-    'm_licem': {'marker': 's', 'name': 'M-LICEM', 'color': 'tab:blue', 'size': marker_size},
-    #'m_licem_sampling': {'marker': 'D', 'name': 'M-LICEM', 'color': 'tab:cyan', 'size': marker_size},
-    #'m_licem_int_sel_sampling': {'marker': 'X', 'name': 'M-LICEM+IntSel+Sampling', 'color': 'tab:green', 'size': marker_size},
-    #'m_licem_neg_weights': {'marker': '<', 'name': 'M-LICEM+NegWeights', 'color': 'tab:brown', 'size': marker_size},
-    #'m_licem_neg_weights_sampling': {'marker': '>', 'name': 'M-LICEM+NegWeights+Sampling', 'color': 'tab:olive', 'size': marker_size},
-    #'m_licem_neg_weights_int_sel_sampling': {'marker': '8', 'name': 'M-LICEM+NegWeights+IntSel+Sampling', 'color': 'tab:gray', 'size': marker_size},
-    #'m_licem_proto': {'marker': 'D', 'name': 'ProtoCBM', 'color': 'tab:green', 'size': marker_size},
-    #'m_licem_proto_int_sel': {'marker': 's', 'name': 'ProtoCBM+IntSel', 'color': 'tab:blue', 'size': marker_size},
+    'm_licem': {'marker': 's', 'name': 'M-LICEM', 'color': 'tab:green', 'size': marker_size}
 }
 
 # Define the custom order
@@ -127,11 +120,12 @@ custom_order = ['xor', \
                 #'dot', \
                 #'checkmark', \
                 #'trigonometry', \
-                'mnist_addition', \
+                #'mnist_addition', \
                 'cub', \
                 'awa2',
-                'awa2_incomplete',
-                'cub_incomplete'
+                #'awa2_incomplete',
+                #'cub_incomplete',
+                'cebab',
                 ]
 
 
@@ -140,10 +134,8 @@ custom_order = ['xor', \
 performance = performance[performance['model'].isin(model_styles.keys()) & \
                           performance['dataset'].isin(custom_order)]
 
-
 ######### Only for the LinearMemoryReasoner with seed=1, plot explanations #########
-plot_explanations(lmr_paths)
-
+#plot_explanations(lmr_paths)
 
 ########## Task & Concept Accuracy Plot ##########
 

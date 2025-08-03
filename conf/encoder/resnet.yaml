@@ -4,4 +4,4 @@ encoder:
   type: ${img_backbone_name}
   input_transform:
     _target_: "src.models.encoders.transform.ImageTransform"
-    flatten: true
+    flatten: false

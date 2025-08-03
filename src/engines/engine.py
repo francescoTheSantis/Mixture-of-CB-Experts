@@ -9,7 +9,6 @@ import torch.nn.functional as F
 
 from src.models.base import LogicModel, BaseModel
 
-
 class Engine(pl.LightningModule):
     """
     PyTorch Lightning module wrapper.
@@ -41,11 +40,12 @@ class Engine(pl.LightningModule):
                 c_names: Optional[list] = None,
                 y_name: Optional[str] = None,
                 csv_log_dir: Optional[str] = None,
+                data_type: Optional[str] = None
                 ):
         super(Engine, self).__init__()         
         self.model = model
         self.save_hyperparameters(ignore=["model"], logger=False)
-
+        self.data_type = data_type
         self.c_names = c_names
         self.y_name = y_name
         self.num_classes = len(y_name) if len(y_name)>1 else 2
@@ -56,6 +56,14 @@ class Engine(pl.LightningModule):
         self.concept_metric = Concept_Accuracy(task=self.model.task)
 
         self.csv_log_dir = csv_log_dir
+
+        # names of the concept and task metrics
+        if self.model.task in ['classification', 'generation']:
+            self.task_metric_name = 'task_acc'
+            self.concept_metric_name = 'concept_acc'
+        elif self.model.task == 'regression':
+            self.task_metric_name = 'task_mse'
+            self.concept_metric_name = 'concept_mse'
 
         # If we are using the LinearMemoryReasoner model,
         # we need to save the tensors required for the explanations.
@@ -73,32 +81,32 @@ class Engine(pl.LightningModule):
         return self.model(input)
 
     def unpack_batch(self, batch):
-        x = batch[0]
-        c = batch[1]
-        y = batch[2]
+        x = batch['x']
+        c = batch['c']
+        y = batch['y']
 
-        assert x.isnan().sum() == 0, "Input tensor contains NaN values"
-        assert c.isnan().sum() == 0, "Concept tensor contains NaN values"
-        assert y.isnan().sum() == 0, "Target tensor contains NaN values"
+        # assert x.isnan().sum() == 0, "Input tensor contains NaN values"
+        # assert c.isnan().sum() == 0, "Concept tensor contains NaN values"
+        # assert y.isnan().sum() == 0, "Target tensor contains NaN values"
 
         return x, c, y
 
     def shared_step(self, batch):
-        x, c, y = self.unpack_batch(batch)
-        # If the concepts are in a sequence, we need to flatten it
-        # TODO: remove and manage otherwise if we finetune the LLM encoder
-        if c.dim() == 3:
-            c = c.view(c.size(0)*c.size(1), -1)
-            x = x.view(x.size(0)*x.size(1), -1)
-            y = y.view(y.size(0)*y.size(1), -1)
 
-        inputs = {'x':x, 'c':c, 'y':y.float()}
+        # batch['x'] will be a tensor for image and toy datasets,
+        # and a dict for text datasets.
+        inputs = {
+            'x': batch['x'],
+            'c': batch['c'],
+            'y': batch['y'].float()
+        }
+
         # model forward
         model_output = self.forward(inputs)
         # Compute loss
         y_output, c_output = self.model.filter_output_for_loss(*model_output)
-        loss = self.model.loss(y_output, y, c_output, c)
-        return loss, model_output, y, c
+        loss = self.model.loss(y_output, inputs['y'], c_output, inputs['c'])
+        return loss, model_output, inputs['y'], inputs['c']
 
     def training_step(self, batch, batch_idx):
         self.model.global_step = self.global_step
@@ -106,10 +114,10 @@ class Engine(pl.LightningModule):
         self.log("train_loss", loss)
         output_x_metrics = self.model.filter_output_for_metrics(*model_output)
         task_acc = self.task_metric(output_x_metrics[0], y) #TODO: check we have an output list for all models
-        self.log('train_task_acc', task_acc)
+        self.log(f'train_{self.task_metric_name}', task_acc)
         if self.model.has_concepts:
             concept_acc = self.concept_metric(output_x_metrics[1], c)
-            self.log('train_concept_acc', concept_acc)
+            self.log(f'train_{self.concept_metric_name}', concept_acc)
         # If the name of the class is LinearMemoryReasoner,
         # compute the selection entropy
         if self.model.__class__.__name__ == 'LinearMemoryReasoner':
@@ -126,10 +134,10 @@ class Engine(pl.LightningModule):
         self.log("val_loss", loss)
         y_output, c_output = self.model.filter_output_for_metrics(*model_output)
         task_acc = self.task_metric(y_output, y)
-        self.log('val_task_acc', task_acc)
+        self.log(f'val_{self.task_metric_name}', task_acc)
         if self.model.has_concepts:
             concept_acc = self.concept_metric(c_output, c)
-            self.log('val_concept_acc', concept_acc)
+            self.log(f'val_{self.concept_metric_name}', concept_acc)
         # If the name of the class is LinearMemoryReasoner,
         # compute the selection entropy
         if self.model.__class__.__name__ == 'LinearMemoryReasoner':
@@ -146,10 +154,10 @@ class Engine(pl.LightningModule):
         y_output, c_output = self.model.filter_output_for_metrics(*model_output)
         self.log("test_loss", loss)
         task_acc = self.task_metric(y_output, y)
-        self.log('test_task_acc', task_acc)
+        self.log(f'test_{self.task_metric_name}', task_acc)
         if self.model.has_concepts:
             concept_acc = self.concept_metric(c_output, c)
-            self.log('test_concept_acc', concept_acc)
+            self.log(f'test_{self.concept_metric_name}', concept_acc)
 
         # If the name of the class is LinearMemoryReasoner,
         # update the tensors required for the explanations.
@@ -173,10 +181,12 @@ class Engine(pl.LightningModule):
             if self.num_classes > 2:
                 # If the number of classes is greater than 1, we need to take the argmax
                 self.y_preds = torch.cat(self.y_preds, dim=0).argmax(-1)
-            else:
+            elif self.num_classes == 1 and not isinstance(self.model.task_loss_form, nn.MSELoss):
                 # If the number of classes is 1, we just discretize the predictions
                 # to get the predicted labels.
                 self.y_preds = (torch.cat(self.y_preds, dim=0) > 0.5).long()
+            else:
+                self.y_preds = (torch.cat(self.y_preds, dim=0)).long()
 
             # Convert the tensors to pandas dfs
             c_preds = pd.DataFrame(self.c_preds.cpu().numpy(), columns=self.c_names)
@@ -184,10 +194,14 @@ class Engine(pl.LightningModule):
 
             # Create a list of names for the y_preds and y_trues to create 
             # a pandas containing the list of predicted and true labels
-            y_preds = pd.DataFrame(F.one_hot(self.y_preds.cpu(), self.num_classes).squeeze().numpy(),
-                                   columns=self.class_names)
-            y_trues = pd.DataFrame(F.one_hot(self.y_trues.long().cpu(), self.num_classes).squeeze().numpy(),
-                                   columns=self.class_names)
+            if isinstance(self.model.task_loss_form, nn.MSELoss):
+                y_preds = pd.DataFrame(self.y_preds.cpu().numpy(), columns=[self.y_name])
+                y_trues = pd.DataFrame(self.y_trues.cpu().numpy(), columns=[self.y_name])
+            else:
+                y_preds = pd.DataFrame(F.one_hot(self.y_preds.cpu(), self.num_classes).squeeze().numpy(),
+                                    columns=self.class_names)
+                y_trues = pd.DataFrame(F.one_hot(self.y_trues.long().cpu(), self.num_classes).squeeze().numpy(),
+                                    columns=self.class_names)
 
             # Store the pandas dfs
             c_preds.to_csv(f"{self.csv_log_dir}/c_preds.csv", index=False)

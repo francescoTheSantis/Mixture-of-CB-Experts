@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 from torch import nn
 from transformers import AutoModel
 from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
@@ -9,27 +9,7 @@ import torch.nn.functional as F
 class EmbeddingExtractor:
     """
     Extracts image embeddings using a pre-trained backbone (Vision Transformer) and 
-    produces DataLoaders containing the respective embeddings instead of the original image.
-
-    Args:
-        train_loader (DataLoader): DataLoader for the training set, yielding (images, concepts, targets).
-        val_loader (DataLoader): DataLoader for the validation set.
-        test_loader (DataLoader): DataLoader for the test set.
-        device (str, optional): Device to run the model.
-        celeba (bool, optional): If True, it means the dataset that has been preprocessed is CelebA and applies special label processing.
-        task_names (list, optional): List of task names for multi-task settings (used with CelebA). Default is None.
-
-    Methods:
-        produce_loaders(selected_concepts=None, task_names=None):
-            Processes all splits and returns new DataLoaders with embeddings (instead of images), concepts, and labels.
-
-    Private Methods:
-        _extract_embeddings(loader):
-            Extracts embeddings, concepts, and labels from a given DataLoader.
-        _create_loader(embeddings, concepts, labels, batch_size):
-            Creates a DataLoader from embeddings, concepts, and labels.
-        _batch_binary_to_decimal_torch(binary_matrix):
-            Converts a batch of binary label vectors to decimal values (for CelebA multi-label tasks).
+    produces DataLoaders containing the respective embeddings instead of the original images.
     """
     def __init__(self, 
                  cfg,
@@ -78,7 +58,6 @@ class EmbeddingExtractor:
         labels = []
 
         with torch.no_grad():
-            i = 1
             for images, concepts, targets in tqdm(loader):
                 bsz = images.shape[0]
                 if self.extract_embeddings:
@@ -105,9 +84,6 @@ class EmbeddingExtractor:
                     )
                 labels.append(targets.cpu())
                 concepts_list.append(concepts.cpu())
-                if i % 3 == 0:
-                    break
-                i+=1
                 
         # Concatenate all embeddings and labels
         embeddings = torch.cat(embeddings, dim=0)
@@ -171,80 +147,106 @@ class TextEmbeddingExtractor:
             Extracts embeddings, concepts, and labels from a given DataLoader.
     """
     def __init__(self,
+                 cfg,
                  train_loader,
                  val_loader,
                  test_loader,
                  device='cuda',
-                 task_names=None,
-                 model_name="mistralai/Mistral-7B-v0.1"):
+                 extract_embeddings=None,
+                 task_names=None):
         # Load a pre-trained text model (e.g., Mistral)
+        self.cfg = cfg
+        self.model_name = cfg.text_backbone_name
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.test_loader = test_loader
         self.device = device
+        self.extract_embeddings = extract_embeddings
         self.task_names = task_names
 
-        self.model = AutoModel.from_pretrained(model_name,
-                                               torch_dtype=torch.bfloat16)
+        self.model = AutoModel.from_pretrained(self.model_name, torch_dtype=torch.bfloat16)
 
     def _extract_embeddings(self, loader):
         embeddings = []
         attention_masks = []
         labels = []
         input_ids = []
+        token_type_ids = []
+        concepts = []
 
         self.model = self.model.to(self.device)
         self.model.eval()
         with torch.no_grad():
             for batch in tqdm(loader, desc="Extracting embeddings"):
-                batch = {k: v.to(self.device) for k, v in batch.items()}
-                outputs = self.model(input_ids=batch["input_ids"],
-                                attention_mask=batch["attention_mask"])
-                emb = outputs.last_hidden_state  # shape: (B, L, D)
+                if self.extract_embeddings:
+                    outputs = self.model(
+                        input_ids=batch['x']["input_ids"],
+                        token_type_ids=batch['x']["token_type_ids"],
+                        attention_mask=batch['x']["attention_mask"]
+                    )
+                    emb = outputs.last_hidden_state  # shape: (B, L, D)
+                    # Use the [CLS] token representation. This is useful to reduce the overall number of
+                    # parameters of the model while preserving expressivity in the embeddings.
+                    emb = emb[:, 0, :]  # shape: (B, D)
+                    embeddings.append(emb.cpu())
+                else:
+                    # If the embedding is not produced, then the input of the model will be
+                    # the raw text input.
+                    input_ids.append(batch['x']["input_ids"].cpu())
+                    attention_masks.append(batch['x']["attention_mask"].cpu())
+                    token_type_ids.append(batch['x']["token_type_ids"].cpu())
 
-                embeddings.append(emb.cpu())
-                attention_masks.append(batch["attention_mask"].cpu())
-                input_ids.append(batch["input_ids"].cpu())
+                # append the remaining fields
+                concepts.append(batch['c'].cpu())
                 if "label" in batch:
                     labels.append(batch["label"].cpu())
+                else:
+                    labels.append(batch['y'].cpu())
 
             # Stack everything
-            embeddings = torch.cat(embeddings, dim=0)
-            attention_masks = torch.cat(attention_masks, dim=0)
+            if self.extract_embeddings:
+                input = torch.cat(embeddings, dim=0)
+            else:
+                input_ids = torch.cat(input_ids, dim=0)
+                attention_masks = torch.cat(attention_masks, dim=0)
+                token_type_ids = torch.cat(token_type_ids, dim=0)
+                input = {
+                    "input_ids": input_ids,
+                    "attention_mask": attention_masks,
+                    "token_type_ids": token_type_ids
+                }
+            concepts = torch.cat(concepts, dim=0)
             labels = torch.cat(labels, dim=0) if labels else None
-            input_ids = torch.cat(input_ids, dim=0)
 
-        return embeddings, attention_masks, labels, input_ids
+        return input, concepts, labels
 
 
-    def _create_loader(self, embeddings, attention_masks, labels, input_ids,
-                       batch_size, shuffle=False):
+    def _create_loader(self, x, c, y, batch_size, use_custom_format=False):
         """Helper function to create a DataLoader from embeddings and labels."""
-
-        dataset = TextEmbeddingDataset(embeddings, attention_masks,
-                                   labels, input_ids)
-        return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+        if use_custom_format:
+            # TODO: implement a custom dataset format
+            dataset = TextEmbeddingDataset(embeddings, attention_masks, labels, input_ids)
+            return DataLoader(dataset, batch_size=batch_size)
+        else:
+            dataset = [{'x': {'input_ids': input_ids.long(), 'attention_mask': attention_mask, 'token_type_ids': token_type_ids}, 'c': _c, 'y': _y} 
+                            for input_ids, attention_mask, token_type_ids, _c, _y in zip(x['input_ids'], x['attention_mask'], x['token_type_ids'], c, y)]
+            return DataLoader(dataset, batch_size=batch_size)
 
     def produce_loaders(self, selected_concepts=None, task_names=None):
         """Produces new DataLoaders with embeddings instead of raw text."""
-        (train_embeddings, train_attention_masks, train_labels,
-         train_input_ids) = self._extract_embeddings(self.train_loader)
-        (val_embeddings, val_attention_masks, val_labels,
-         val_input_ids) = self._extract_embeddings(self.val_loader)
-        (test_embeddings, test_attention_masks, test_labels,
-         test_input_ids) = self._extract_embeddings(self.test_loader)
+        (train_embeddings, train_concepts, train_labels) = self._extract_embeddings(self.train_loader)
+        (val_embeddings, val_concepts, val_labels) = self._extract_embeddings(self.val_loader)
+        (test_embeddings, test_concepts, test_labels) = self._extract_embeddings(self.test_loader)
 
         batch_size = self.train_loader.batch_size
 
-        train_loader = self._create_loader(train_embeddings, train_attention_masks,
-                                           train_labels, train_input_ids, batch_size, shuffle=True)
-        val_loader = self._create_loader(val_embeddings, val_attention_masks,
-                                         val_labels, val_input_ids, batch_size)
-        test_loader = self._create_loader(test_embeddings, test_attention_masks,
-                                          test_labels, test_input_ids, batch_size)
+        use_custom_format = True if self.cfg.dataset.metadata.name == 'sst2' else False
+
+        train_loader = self._create_loader(train_embeddings, train_concepts, train_labels, batch_size, use_custom_format) # be sure to shuffle the data prior to this step
+        val_loader = self._create_loader(val_embeddings, val_concepts, val_labels, batch_size, use_custom_format)
+        test_loader = self._create_loader(test_embeddings, test_concepts, test_labels, batch_size, use_custom_format)
 
         return train_loader, val_loader, test_loader
-
 
 class TextEmbeddingDataset(torch.utils.data.Dataset):
     def __init__(self, embeddings, attention_mask, labels, input_ids):
