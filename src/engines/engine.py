@@ -48,8 +48,8 @@ class Engine(pl.LightningModule):
         self.data_type = data_type
         self.c_names = c_names
         self.y_name = y_name
-        self.num_classes = len(y_name) if len(y_name)>1 else 2
-        self.class_names = y_name if len(y_name)>1 else ['0','1']
+        self.num_classes = len(y_name) #if len(y_name)>1 else 2
+        self.class_names = y_name # if len(y_name)>1 else ['0','1']
 
         self.task_metric = Task_Accuracy(logic_reasoning=self.model._logic_model_checker(),
                                          task=self.model.task)
@@ -198,10 +198,14 @@ class Engine(pl.LightningModule):
                 y_preds = pd.DataFrame(self.y_preds.cpu().numpy(), columns=[self.y_name])
                 y_trues = pd.DataFrame(self.y_trues.cpu().numpy(), columns=[self.y_name])
             else:
-                y_preds = pd.DataFrame(F.one_hot(self.y_preds.cpu(), self.num_classes).squeeze().numpy(),
-                                    columns=self.class_names)
-                y_trues = pd.DataFrame(F.one_hot(self.y_trues.long().cpu(), self.num_classes).squeeze().numpy(),
-                                    columns=self.class_names)
+                if self.num_classes == 1:
+                    y_preds = pd.DataFrame(self.y_preds.long().cpu().numpy(), columns=[self.y_name])
+                    y_trues = pd.DataFrame(self.y_trues.long().cpu().numpy(), columns=[self.y_name])
+                else:
+                    y_preds = pd.DataFrame(F.one_hot(self.y_preds.cpu(), self.num_classes).squeeze().numpy(),
+                                        columns=self.class_names)
+                    y_trues = pd.DataFrame(F.one_hot(self.y_trues.long().cpu(), self.num_classes).squeeze().numpy(),
+                                        columns=self.class_names)
 
             # Store the pandas dfs
             c_preds.to_csv(f"{self.csv_log_dir}/c_preds.csv", index=False)
