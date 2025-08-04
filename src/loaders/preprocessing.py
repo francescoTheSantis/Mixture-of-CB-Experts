@@ -18,8 +18,8 @@ class EmbeddingExtractor:
                  test_loader, 
                  device='cuda', 
                  celeba=False, 
-                 task_names=None,
-                 extract_embeddings=True):
+                 task_names=None
+                 ):
 
         self.cfg = cfg
         self.train_loader = train_loader
@@ -29,7 +29,6 @@ class EmbeddingExtractor:
         self.celeba = celeba
         self.task_names = task_names
         self.img_backbone_name = cfg.img_backbone_name
-        self.extract_embeddings = extract_embeddings
 
         if 'resnet' in self.img_backbone_name:
             if self.img_backbone_name == 'resnet18':
@@ -60,24 +59,20 @@ class EmbeddingExtractor:
         with torch.no_grad():
             for images, concepts, targets in tqdm(loader):
                 bsz = images.shape[0]
-                if self.extract_embeddings:
-                    images = images.to(self.device)
-                    # If the tensor has not the correct shape 
-                    if images.shape[-1] != 224:
-                        images = F.interpolate(images, 
-                                                size=(224, 224), 
-                                                mode='bilinear', 
-                                                align_corners=False)
-                    if images.shape[1] == 1:
-                        # Repeat the single channel 3 times to simulate RGB
-                        images = images.repeat(1, 3, 1, 1)  # (N, 3, H, W)
-                    # Extract embeddings
-                    outputs = self.model(images)
-                    outputs = outputs.flatten(start_dim=1)
-                    embeddings.append(outputs.cpu())
-                else:
-                    # If embeddings are not extracted, just append the images
-                    embeddings.append(images.cpu())
+                images = images.to(self.device)
+                # If the tensor has not the correct shape
+                if images.shape[-1] != 224:
+                    images = F.interpolate(images,
+                                            size=(224, 224),
+                                            mode='bilinear',
+                                            align_corners=False)
+                if images.shape[1] == 1:
+                    # Repeat the single channel 3 times to simulate RGB
+                    images = images.repeat(1, 3, 1, 1)  # (N, 3, H, W)
+                # Extract embeddings
+                outputs = self.model(images)
+                outputs = outputs.flatten(start_dim=1)
+                embeddings.append(outputs.cpu())
                 if self.celeba:
                     targets = self._batch_binary_to_decimal_torch(
                         torch.stack([targets[:,i] for i in range(len(self.task_names))], dim=1)
