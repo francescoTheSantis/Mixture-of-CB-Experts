@@ -301,15 +301,20 @@ class loader(object):
             loaded_train = DataLoader(train_dataset, 
                                     batch_size=self.batch_size, 
                                     shuffle=True,
-                                    num_workers=self.num_workers)
+                                    num_workers=self.num_workers,
+                                    persistent_workers=True if self.num_workers > 0 else False,
+                                    pin_memory=True)
             loaded_val = DataLoader(val_dataset, 
                                     batch_size=self.batch_size, 
                                     shuffle=False,
-                                    num_workers=self.num_workers)
+                                    num_workers=self.num_workers,
+                                    persistent_workers=True if self.num_workers > 0 else False,
+                                    pin_memory=True)
             loaded_test = DataLoader(test_dataset, 
                                     batch_size=self.batch_size, 
                                     shuffle=False,
-                                    num_workers=self.num_workers)  
+                                    num_workers=self.num_workers,
+                                    persistent_workers=False if self.num_workers > 0 else False)
         
         # We always modify the dataloaders since we want them to align with the batch that the engine is expecting.
         if get_type_from_name(self.name) == 'image':
