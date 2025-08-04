@@ -11,6 +11,7 @@ output/
 wandb_entity.txt
 debugging.yaml
 sweep_extract_emb.yaml
+backup/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
