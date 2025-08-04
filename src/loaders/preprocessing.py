@@ -58,7 +58,10 @@ class EmbeddingExtractor:
         labels = []
 
         with torch.no_grad():
-            for images, concepts, targets in tqdm(loader):
+            for batch in tqdm(loader):
+                images = batch['x']#.to(self.device)
+                concepts = batch['c']#.to(self.device)
+                targets = batch['y']#.to(self.device)
                 bsz = images.shape[0]
                 if self.extract_embeddings:
                     images = images.to(self.device)

@@ -296,27 +296,30 @@ class loader(object):
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
 
-        if self.name not in ['cebab']:
-            loaded_train = DataLoader(train_dataset, 
+        if get_type_from_name(self.name) != 'text':
+            loaded_train =DataLoader(train_dataset, 
                                     batch_size=self.batch_size, 
                                     shuffle=True,
                                     num_workers=self.num_workers,
                                     persistent_workers=True if self.num_workers > 0 else False,
-                                    pin_memory=True)
+                                    pin_memory=True,
+                                    collate_fn=self._custom_collate_fn)
             loaded_val = DataLoader(val_dataset, 
                                     batch_size=self.batch_size, 
                                     shuffle=False,
                                     num_workers=self.num_workers,
                                     persistent_workers=True if self.num_workers > 0 else False,
-                                    pin_memory=True)
+                                    pin_memory=True,
+                                    collate_fn=self._custom_collate_fn)
             loaded_test = DataLoader(test_dataset, 
                                     batch_size=self.batch_size, 
                                     shuffle=False,
                                     num_workers=self.num_workers,
-                                    persistent_workers=False if self.num_workers > 0 else False)
+                                    persistent_workers=False if self.num_workers > 0 else False,
+                                    collate_fn=self._custom_collate_fn)
         
         # We always modify the dataloaders since we want them to align with the batch that the engine is expecting.
-        if get_type_from_name(self.name) == 'image':
+        if get_type_from_name(self.name) == 'image' and self.extract_embeddings:
             celeba_flag = True if self.name == 'celeba' else False
             E_extr = EmbeddingExtractor(
                 cfg,
@@ -328,7 +331,8 @@ class loader(object):
                 self.task_names,
                 self.extract_embeddings
             )
-        else:
+            loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
+        elif get_type_from_name(self.name) == 'text':
             E_extr = TextEmbeddingExtractor(
                 cfg,
                 loaded_train,
@@ -337,11 +341,22 @@ class loader(object):
                 self.device,
                 self.extract_embeddings
             )
-
-        loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
+            loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
 
         return loaded_train, loaded_val, loaded_test
 
+    def _custom_collate_fn(self, batch):
+        """
+        Custom collate function to handle different data types in the batch.
+        """
+        batch_dict = {}
+        for idx, key in enumerate(['x', 'c', 'y']):
+            values = [item[idx] for item in batch]
+            if isinstance(values[0], torch.Tensor):
+                batch_dict[key] = torch.stack(values)
+            else:
+                batch_dict[key] = torch.tensor(values)
+        return batch_dict
 
 if __name__ == '__main__':
     print("\nSST2 dataset")

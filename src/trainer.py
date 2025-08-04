@@ -17,7 +17,7 @@ class Trainer:
         self.wandb_logger = wandb_logger
         self.csv_logger = csv_logger
         self.model = model
-        self.model = self.model.to(self.cfg.gpus[0]) # Move the model to the GPU
+        #self.model = self.model.to(self.cfg.gpus[0]) # Move the model to the GPU
         #self.epss = np.arange(0, 1.1, 0.25) # Noise levels for interventions
         self.epss = [0]
         self.p_ints = np.arange(0, 1.1, 0.1) # Intervention probabilities

@@ -16,3 +16,8 @@ metadata:
   concept_type: binary
 
 latent_size: 128
+
+# The loader returns transformed images
+encoder:
+  encoder:
+    input_transform: null

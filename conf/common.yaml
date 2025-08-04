@@ -4,14 +4,14 @@ defaults:
   - engine: engine
 
 ## Common parameters
-max_epochs: 500
-patience: 40
+max_epochs: 100
+patience: 20
 gamma: 0.5
-lr_patience: 20
+lr_patience: 10
 gpus: [0]
 seed: 1
 activation: LeakyReLU
-num_workers: 0
+num_workers: 2
 
 ## These parameters can be overridden by the dataset config
 latent_size: 64

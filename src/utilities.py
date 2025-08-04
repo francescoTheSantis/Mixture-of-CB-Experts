@@ -107,12 +107,28 @@ def get_type_from_name(dataset_name):
     else:
         return 'text'
 
+def get_batch_from_loader(train_loader, device):
+    with torch.cuda.device(device if device != 'cpu' else 'cpu'):
+        # Temporarily set default tensor type to CPU to avoid automatic GPU allocation
+        original_default_tensor_type = torch.get_default_dtype()
+        if device == 'cpu':
+            torch.set_default_tensor_type('torch.FloatTensor')
+        
+        batch = next(iter(train_loader))
+        
+        # Restore original tensor type
+        torch.set_default_dtype(original_default_tensor_type)
+    return batch
+
 def update_config_from_data(cfg: DictConfig, train_loader, c_names,
                             y_names, c_groups, csv_log_dir) -> DictConfig:
     """
     Update the config with the input size, output size, and concept names.
     """
-    batch = next(iter(train_loader))
+    # Create a temporary dataloader that loads data directly to the specified device
+    # or force CPU loading to avoid automatic GPU allocation
+    device = cfg.gpus[0]
+    batch = get_batch_from_loader(train_loader, device)
 
     if get_type_from_name(cfg.dataset.metadata.name) == 'image':
         x = batch['x']
@@ -126,6 +142,12 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
     else:
         input_size = x.shape[-1]
         
+    # Clean up GPU memory
+    del batch
+    del x
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
     n_labels = len(y_names)
 
     if c_groups is None or not isinstance(c_groups, dict):
@@ -154,7 +176,6 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             y_names = y_names,
             task = cfg.dataset.metadata.task,
             c_groups = c_groups,
-            #concept_loss_form = cfg.dataset.get('concept_loss_form', {'_target_': 'torch.nn.BCELoss'}),
             backbone_latent_size = backbone_latent_size,
             concept_type = cfg.dataset.metadata.concept_type
 

@@ -18,6 +18,11 @@ metadata:
 
 latent_size: 128
 
+# The loader returns transformed images
+encoder:
+  encoder:
+    input_transform: null
+
 # We generated the Awa2 incomplete dataset following the same procedure as in the paper: https://arxiv.org/pdf/2504.17921v1.
 # More precisely, selecting the following concepts:
 # “black”, “gray”, “stripes”, “hairless”, “flippers”, “paws”, “plains”, “fierce”, “solitary” 

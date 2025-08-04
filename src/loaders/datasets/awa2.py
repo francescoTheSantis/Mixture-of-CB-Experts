@@ -13,14 +13,11 @@ The data can be downloaded from: https://cvml.ista.ac.at/AwA2/
 """
 import numpy as np
 import os
-import sklearn
 import torch
 import torchvision.transforms as transforms
 
-from functools import reduce
 from PIL import Image
-from pytorch_lightning import seed_everything
-from torch.utils.data import Dataset, Subset, DataLoader
+from torch.utils.data import Dataset
 
 ########################################################
 ## GENERAL DATASET GLOBAL VARIABLES
@@ -234,7 +231,7 @@ class AwA2Dataset(Dataset):
         self.root = root
         self.training_augment = training_augment
         self.split = split
-        self.concept_transform = concept_transform or (lambda x: x)
+        self.concept_transform = concept_transform or identity_transform
         self.name = 'AwA2'
 
         if not os.path.exists(self.root):
@@ -375,6 +372,9 @@ class AwA2Dataset(Dataset):
     def __len__(self):
         return len(self.img_paths)
 
+def identity_transform(x):
+    """Identity transformation function that returns input unchanged."""
+    return x
 
 def get_transform_awa2(
     train,
@@ -400,7 +400,7 @@ def get_transform_awa2(
     scale = 256.0/224.0
     sample_transform = (
         sample_transform if sample_transform is not None
-        else (lambda x: x)
+        else identity_transform
     )
     if (not train) or (not augment_data):
         # Resizes the image to a slightly larger square then crops the center.

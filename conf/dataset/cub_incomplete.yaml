@@ -18,6 +18,11 @@ metadata:
 
 latent_size: 256
 
+# The loader returns transformed images
+encoder:
+  encoder:
+    input_transform: null
+    
 # We generated the CUB incomplete dataset following the same procedure as in the paper: https://arxiv.org/pdf/2504.17921v1.
 # More precisely, selecting the concepts belonging to the following groups:
 # [“has_bill_shape”, “has_head_pattern”, “has_breast_colour”, “has_bill_length”, “has_wing_shape”, “has_tail_pattern”, “has_bill_color”]
