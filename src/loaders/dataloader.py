@@ -2,15 +2,15 @@ from torch_concepts.data import ToyDataset
 import torch
 from torch import nn
 from torch_concepts.data.mnist import MNISTAddition
-from torch_concepts.data.cub import CUBDataset
-from torch_concepts.data.cub import SELECTED_CONCEPTS as cub_selected_concepts
-from torch_concepts.data.cub import CONCEPT_SEMANTICS as cub_concept_semantics
-from torch_concepts.data.cub import CLASS_NAMES as cub_class_names
-from torch_concepts.data.cub import CONCEPT_GROUP_MAP as cub_concept_groups
-from torch_concepts.data.awa2 import AwA2Dataset
-from torch_concepts.data.awa2 import CONCEPT_SEMANTICS as awa2_concept_semantics
-from torch_concepts.data.awa2 import CLASS_NAMES as awa2_class_names
-from torch_concepts.data.awa2 import CONCEPT_GROUPS as awa2_concept_groups
+from src.loaders.datasets.cub import CUBDataset
+from src.loaders.datasets.cub import SELECTED_CONCEPTS as cub_selected_concepts
+from src.loaders.datasets.cub import CONCEPT_SEMANTICS as cub_concept_semantics
+from src.loaders.datasets.cub import CLASS_NAMES as cub_class_names
+from src.loaders.datasets.cub import CONCEPT_GROUP_MAP as cub_concept_groups
+from src.loaders.datasets.awa2 import AwA2Dataset
+from src.loaders.datasets.awa2 import CONCEPT_SEMANTICS as awa2_concept_semantics
+from src.loaders.datasets.awa2 import CLASS_NAMES as awa2_class_names
+from src.loaders.datasets.awa2 import CONCEPT_GROUPS as awa2_concept_groups
 from torch_concepts.data.celeba import CelebADataset
 from src.loaders.datasets.cebab import CEBaBDataset
 from torch.utils.data import DataLoader, random_split

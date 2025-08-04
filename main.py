@@ -8,7 +8,7 @@ import os
 from env import CACHE
 from src.utilities import update_config_from_data, is_valid_experiment
 
-@hydra.main(config_path="conf", config_name="sweep")
+@hydra.main(config_path="conf", config_name="debugging")
 def main(cfg: DictConfig) -> None:
 
     # Initialize the wandb logger
@@ -42,11 +42,10 @@ def main(cfg: DictConfig) -> None:
     else:
         print('Prepearing dataloaders...')
         loaded_train, loaded_val, loaded_test = loader.load_data(cfg)
-        if loader.extract_embeddings:
-            os.makedirs(data_path, exist_ok=True)
-            torch.save(loaded_train, train_path)
-            torch.save(loaded_val, val_path)
-            torch.save(loaded_test, test_path)
+        os.makedirs(data_path, exist_ok=True)
+        torch.save(loaded_train, train_path)
+        torch.save(loaded_val, val_path)
+        torch.save(loaded_test, test_path)
 
     # Load the concept names and groups
     c_names, y_names, c_groups = loader.get_names()
