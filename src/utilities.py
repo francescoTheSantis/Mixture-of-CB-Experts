@@ -144,14 +144,8 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         # store in the config the size of the embeddings produced by the backbone
         # check if type is dataset.encoder.encoder
         if 'encoder' in cfg.dataset and 'type' in cfg.dataset.encoder.encoder:
-            if 'resnet' in cfg.dataset.encoder.encoder['type']:
-                backbone_latent_size = get_backbone_latent_size(cfg.dataset.encoder.encoder.type)
-            elif 'mlp' in cfg.dataset.encoder.encoder['type']:
-                backbone_latent_size = cfg.dataset.encoder.encoder.output_size
-            else:
-                raise ValueError(f"Encoder type {cfg.dataset.encoder.encoder.type} not recognized.")
+            backbone_latent_size = get_backbone_latent_size(cfg.dataset.encoder.encoder.type)
         else:
-            backbone_latent_size = cfg.dataset.latent_size
             backbone_latent_size = cfg.dataset.latent_size
 
         cfg.model.params.update(

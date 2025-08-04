@@ -1,6 +1,5 @@
 from torch_concepts.data import ToyDataset
 import torch
-from torch import nn
 from torch_concepts.data.mnist import MNISTAddition
 from src.loaders.datasets.cub import CUBDataset
 from src.loaders.datasets.cub import SELECTED_CONCEPTS as cub_selected_concepts
@@ -11,18 +10,10 @@ from src.loaders.datasets.awa2 import AwA2Dataset
 from src.loaders.datasets.awa2 import CONCEPT_SEMANTICS as awa2_concept_semantics
 from src.loaders.datasets.awa2 import CLASS_NAMES as awa2_class_names
 from src.loaders.datasets.awa2 import CONCEPT_GROUPS as awa2_concept_groups
-from src.loaders.datasets.cub import CUBDataset
-from src.loaders.datasets.cub import SELECTED_CONCEPTS as cub_selected_concepts
-from src.loaders.datasets.cub import CONCEPT_SEMANTICS as cub_concept_semantics
-from src.loaders.datasets.cub import CLASS_NAMES as cub_class_names
-from src.loaders.datasets.cub import CONCEPT_GROUP_MAP as cub_concept_groups
-from src.loaders.datasets.awa2 import AwA2Dataset
-from src.loaders.datasets.awa2 import CONCEPT_SEMANTICS as awa2_concept_semantics
-from src.loaders.datasets.awa2 import CLASS_NAMES as awa2_class_names
-from src.loaders.datasets.awa2 import CONCEPT_GROUPS as awa2_concept_groups
 from torch_concepts.data.celeba import CelebADataset
-# from src.loaders.datasets.cebab import CEBaBDataset
+from src.loaders.datasets.cebab import CEBaBDataset
 from torch.utils.data import DataLoader, random_split
+from env import DATA_PATH
 from src.loaders.preprocessing import EmbeddingExtractor, \
     TextEmbeddingExtractor
 import omegaconf
@@ -99,7 +90,7 @@ class loader(object):
         self.extract_embeddings = extract_embeddings
 
         self.transform = transforms.Compose([
-                transforms.Resize((224, 224), antialias=False), # NOT COMMIT only for MPS
+                transforms.Resize((224, 224)),
                 transforms.ToTensor(),
                 transforms.Normalize(            # Normalize using ImageNet stats
                     mean=[0.485, 0.456, 0.406],
@@ -138,9 +129,7 @@ class loader(object):
                 self.incomplete_awa2_groups[k] = [x+cnt for x in list(range(len(self.incomplete_awa2_groups[k])))]
                 cnt += len(self.incomplete_awa2_groups[k])
 
-    def get_names(self, cfg):
-        DATA_PATH = cfg['data_path']
-
+    def get_names(self):
         # Get the concept names and task names
         if self.name in ['xor', 'trigonometry', 'dot', 'checkmark']:
             dataset = ToyDataset(self.name, size=1000, random_state=42)
@@ -200,8 +189,6 @@ class loader(object):
         return concept_names, task_names, concept_groups
 
     def load_data(self, cfg=None):
-        DATA_PATH = cfg['data_path']
-
         # Load the data
         if self.name in ['xor', 'trigonometry', 'dot', 'checkmark']:
             dataset = ToyDataset(self.name, size=1000, random_state=42)
@@ -252,7 +239,7 @@ class loader(object):
             val_dataset = CUBDataset(root=DATA_PATH, split='val', selected_concepts=self.selected_concept_idxes)
             test_dataset = CUBDataset(root=DATA_PATH, split='test', selected_concepts=self.selected_concept_idxes)
         elif self.name == 'celeba':
-            train_dataset = CelebADataset(root=DATA_PATH, split='train',
+            train_dataset = CelebADataset(root=DATA_PATH, split='train', 
                                           class_attributes=self.task_names,
                                           transform=self.transform,
                                           download=True)
@@ -316,15 +303,9 @@ class loader(object):
                                     num_workers=self.num_workers,
                                     persistent_workers=True if self.num_workers > 0 else False,
                                     pin_memory=True)
-                                    num_workers=self.num_workers,
-                                    persistent_workers=True if self.num_workers > 0 else False,
-                                    pin_memory=True)
             loaded_val = DataLoader(val_dataset, 
                                     batch_size=self.batch_size, 
                                     shuffle=False,
-                                    num_workers=self.num_workers,
-                                    persistent_workers=True if self.num_workers > 0 else False,
-                                    pin_memory=True)
                                     num_workers=self.num_workers,
                                     persistent_workers=True if self.num_workers > 0 else False,
                                     pin_memory=True)
@@ -382,7 +363,7 @@ if __name__ == '__main__':
     train_loader, val_loader, test_loader = E_extr.produce_loaders()
 
     # we save the train, validation and test loaders
-    data_path = os.path.join('', 'stored_tensors', 'sst2')
+    data_path = os.path.join(DATA_PATH, 'stored_tensors', 'sst2')
     os.makedirs(data_path, exist_ok=True)
     torch.save(train_loader, os.path.join(data_path, 'train.pt'))
     torch.save(val_loader, os.path.join(data_path, 'val.pt'))
