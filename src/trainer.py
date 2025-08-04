@@ -125,7 +125,7 @@ class Trainer:
                             y_preds = (y_preds > 0.5).long().cpu().numpy()
                         else:
                             y_preds = (y_preds > 0.).long().cpu().numpy()
-                    if self.cfg.dataset.metadata.task == 'regression':
+                    elif self.cfg.dataset.metadata.task == 'regression':
                         y_preds = y_preds.squeeze().cpu().numpy()
                     else:
                         y_preds = y_preds.argmax(-1).cpu().numpy()

@@ -14,8 +14,11 @@ plt.style.use(['science', 'ieee', 'no-latex'])
 
 # List the paths containing the results
 paths = [
-    "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-03_17-27-40"
+    "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-04_11-22-22"
 ]
+
+result_figs = "figs"
+os.makedirs(result_figs, exist_ok=True)
 
 ###### Collect results regarding concept/task performance ######
 
@@ -43,11 +46,19 @@ for exp in exps_path:
                 result = pd.read_csv(file, header=0)
 
             # Select the last row of the dataframe where we test the model
-            d['task'] = result['test_task_acc'].iloc[-1]
+            # if 'test_task_acc' and 'test_concept_acc' are not in the dataframe, skip the experiment
+            if 'test_task_acc' not in result.columns:
+                d['task'] = result['test_task_mse'].iloc[-1]
+            else:
+                d['task'] = result['test_task_acc'].iloc[-1]
+
             if conf['model']['metadata']['name']=='blackbox':
                 d['concept'] = 0
             else:
-                d['concept'] = result['test_concept_acc'].iloc[-1]
+                if 'test_concept_acc' not in result.columns:
+                    d['concept'] = result['test_concept_mse'].iloc[-1]
+                else:
+                    d['concept'] = result['test_concept_acc'].iloc[-1]
 
             print(d)
             
@@ -120,7 +131,7 @@ custom_order = ['xor', \
                 #'dot', \
                 #'checkmark', \
                 #'trigonometry', \
-                #'mnist_addition', \
+                'mnist_addition', \
                 'cub', \
                 'awa2',
                 #'awa2_incomplete',
@@ -128,14 +139,16 @@ custom_order = ['xor', \
                 'cebab',
                 ]
 
-
 # Filter the performance dataframe to keep only the models in model_styles 
 # and datasets in custom_order.
 performance = performance[performance['model'].isin(model_styles.keys()) & \
                           performance['dataset'].isin(custom_order)]
 
 ######### Only for the LinearMemoryReasoner with seed=1, plot explanations #########
-#plot_explanations(lmr_paths)
+try:
+    plot_explanations(lmr_paths)
+except Exception as e:
+    print(f"Error plotting explanations: {e}")
 
 ########## Task & Concept Accuracy Plot ##########
 
@@ -171,7 +184,7 @@ merged_stats['dataset'] = pd.Categorical(merged_stats['dataset'], categories=cus
 
 fig, axes = plt.subplots(1, len(merged_stats['dataset'].unique()), figsize=(15, 4), sharey=False, sharex=True)
 
-for idx, dataset in enumerate(merged_stats['dataset'].unique()):
+for idx, dataset in enumerate(custom_order):
     if len(merged_stats['dataset'].unique()) == 1:
         ax = axes
     else:
@@ -188,9 +201,15 @@ for idx, dataset in enumerate(merged_stats['dataset'].unique()):
     ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
     ax.minorticks_off()
     ax.grid(True, zorder=0)
-    if idx == 0:
+    if dataset not in ['cebab']:
         ax.set_ylabel('Task Acc', fontdict=label_font)
-    ax.set_xlabel('Concept Acc', fontdict=label_font)
+    else:
+        ax.set_ylabel('Task MSE', fontdict=label_font)
+
+    if dataset not in ['cebab']:
+        ax.set_xlabel('Concept Acc', fontdict=label_font)
+    else:
+        ax.set_xlabel('Concept MSE', fontdict=label_font)
 
 # Create custom legend handles
 custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=(style['size']-3), label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in model_styles.values()]
@@ -307,70 +326,6 @@ for exp in exps_path:
 performance = performance[performance['model'].isin(model_styles.keys()) & \
                           performance['dataset'].isin(custom_order)]
 
-
-########## Intervention plots ########## 
-
-def plot_intervention_results(df, metric='accuracy', title_font=None, label_font=None, tick_font=None, legend_font=None):
-    unique_noises = [0, 0.1, 0.2, 0.4, 0.6, 0.8, 1]
-    unique_datasets = custom_order
-    n_cols = len(unique_noises)
-    n_rows = len(unique_datasets)
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows), sharex=True, sharey='row')
-    
-    for i, dataset in enumerate(unique_datasets):
-        for j, noise in enumerate(unique_noises):
-            ax = axes[i, j] if n_rows > 1 else axes[j]
-            data = df[(df['noise'] == noise) & (df['dataset'] == dataset)]
-            grouped_data = data.groupby(['p_int', 'model']).agg(
-                mean_metric=(metric, 'mean'),
-                std_metric=(metric, 'std')
-            ).reset_index().fillna(0)
-            for model in grouped_data['model'].unique():
-                model_data = grouped_data[grouped_data['model'] == model]
-                style = model_styles.get(model, {'marker': 'o', 'color': 'black', 'size': 10, 'name': model})
-                ax.plot(model_data['p_int'], model_data['mean_metric'], color=style['color'], linestyle='-', alpha=0.5)
-                ax.scatter(model_data['p_int'], model_data['mean_metric'], marker=style['marker'], color=style['color'], s=style['size']**2, label=style['name'], edgecolor='black', alpha=0.5)
-                ax.fill_between(model_data['p_int'], model_data['mean_metric'] - model_data['std_metric'], model_data['mean_metric'] + model_data['std_metric'], color=style['color'], alpha=0.2)
-            if i == 0:
-                ax.set_title(r'$\theta$'+f'={noise}', fontsize=title_font['size'])
-            if i == n_rows - 1:
-                ax.set_xlabel('$p_{int}$', fontsize=label_font['size'])
-            if j == 0:
-                ax.set_ylabel(f'{get_df_name(dataset)}', fontsize=label_font['size'])
-            ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
-            ax.minorticks_off()
-            ax.grid(True)
-            ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{x:.2f}'))
-    
-    # Create a single legend below the plots
-    handles, labels = [], []
-    for ax in axes.flatten():
-        for handle, label in zip(*ax.get_legend_handles_labels()):
-            if label not in labels:
-                handles.append(handle)
-                labels.append(label)
-    for handle in handles:
-        handle.set_alpha(1)  # Remove transparency from legend markers
-
-    # Create custom legend handles
-    custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=style['size']+10, label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in model_styles.values()]
-
-    # Create a single legend below the plots
-    fig.legend(handles=custom_handles, loc='lower center', ncol=len(custom_handles), fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.08))
-
-    plt.tight_layout()
-    plt.savefig('figs/intervention.pdf')
-    plt.show()
-
-# Call the function with the desired metric and font properties
-legend_font = {'size': 44}
-title_font = {'size': 44, 'weight': 'bold'}
-label_font = {'size': 44}
-tick_font = {'size': 30}
-plot_intervention_results(performance, metric='accuracy', title_font=title_font, label_font=label_font, tick_font=tick_font, legend_font=legend_font)
-
-
-
 ########## Intervention ID plots ##########
 
 def plot_intervention_results(df, metric='accuracy', title_font=None, label_font=None, tick_font=None, legend_font=None):
@@ -397,8 +352,10 @@ def plot_intervention_results(df, metric='accuracy', title_font=None, label_font
             ax.set_xlabel('$p_{int}$', fontsize=label_font['size'])
             if j == 0:
                 ax.set_title(f'{get_df_name(dataset)}', fontsize=label_font['size'])
-            if i == 0:
+            if dataset not in ['cebab']:
                 ax.set_ylabel('Task Acc', fontsize=label_font['size'])
+            else:
+                ax.set_ylabel('Task MSE', fontsize=label_font['size'])
             ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
             ax.minorticks_off()
             ax.grid(True)
@@ -439,3 +396,68 @@ title_font = {'size': 36, 'weight': 'bold'}
 label_font = {'size': 44}
 tick_font = {'size': 28}
 plot_intervention_results(performance, metric='accuracy', title_font=title_font, label_font=label_font, tick_font=tick_font, legend_font=legend_font)
+
+
+
+
+# ########## Intervention plots ########## 
+
+# def plot_intervention_results(df, metric='accuracy', title_font=None, label_font=None, tick_font=None, legend_font=None):
+#     unique_noises = [0, 0.1, 0.2, 0.4, 0.6, 0.8, 1]
+#     unique_datasets = custom_order
+#     n_cols = len(unique_noises)
+#     n_rows = len(unique_datasets)
+#     fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows), sharex=True, sharey='row')
+    
+#     for i, dataset in enumerate(unique_datasets):
+#         for j, noise in enumerate(unique_noises):
+#             ax = axes[i, j] if n_rows > 1 else axes[j]
+#             data = df[(df['noise'] == noise) & (df['dataset'] == dataset)]
+#             grouped_data = data.groupby(['p_int', 'model']).agg(
+#                 mean_metric=(metric, 'mean'),
+#                 std_metric=(metric, 'std')
+#             ).reset_index().fillna(0)
+#             for model in grouped_data['model'].unique():
+#                 model_data = grouped_data[grouped_data['model'] == model]
+#                 style = model_styles.get(model, {'marker': 'o', 'color': 'black', 'size': 10, 'name': model})
+#                 ax.plot(model_data['p_int'], model_data['mean_metric'], color=style['color'], linestyle='-', alpha=0.5)
+#                 ax.scatter(model_data['p_int'], model_data['mean_metric'], marker=style['marker'], color=style['color'], s=style['size']**2, label=style['name'], edgecolor='black', alpha=0.5)
+#                 ax.fill_between(model_data['p_int'], model_data['mean_metric'] - model_data['std_metric'], model_data['mean_metric'] + model_data['std_metric'], color=style['color'], alpha=0.2)
+#             if i == 0:
+#                 ax.set_title(r'$\theta$'+f'={noise}', fontsize=title_font['size'])
+#             if i == n_rows - 1:
+#                 ax.set_xlabel('$p_{int}$', fontsize=label_font['size'])
+#             if j == 0:
+#                 ax.set_ylabel(f'{get_df_name(dataset)}', fontsize=label_font['size'])
+#             ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
+#             ax.minorticks_off()
+#             ax.grid(True)
+#             ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{x:.2f}'))
+    
+#     # Create a single legend below the plots
+#     handles, labels = [], []
+#     for ax in axes.flatten():
+#         for handle, label in zip(*ax.get_legend_handles_labels()):
+#             if label not in labels:
+#                 handles.append(handle)
+#                 labels.append(label)
+#     for handle in handles:
+#         handle.set_alpha(1)  # Remove transparency from legend markers
+
+#     # Create custom legend handles
+#     custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=style['size']+10, label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in model_styles.values()]
+
+#     # Create a single legend below the plots
+#     fig.legend(handles=custom_handles, loc='lower center', ncol=len(custom_handles), fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.08))
+
+#     plt.tight_layout()
+#     plt.savefig('figs/intervention.pdf')
+#     plt.show()
+
+# # Call the function with the desired metric and font properties
+# legend_font = {'size': 44}
+# title_font = {'size': 44, 'weight': 'bold'}
+# label_font = {'size': 44}
+# tick_font = {'size': 30}
+# plot_intervention_results(performance, metric='accuracy', title_font=title_font, label_font=label_font, tick_font=tick_font, legend_font=legend_font)
+
