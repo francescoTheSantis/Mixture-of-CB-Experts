@@ -14,7 +14,9 @@ plt.style.use(['science', 'ieee', 'no-latex'])
 
 # List the paths containing the results
 paths = [
-    "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-04_11-22-22"
+    "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-04_17-58-25",
+    "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-05_17-40-29",
+    "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-06_12-02-37",
 ]
 
 result_figs = "figs"
@@ -311,7 +313,7 @@ for exp in exps_path:
     result_file = os.path.join(exp, 'logs/experiment_metrics/version_0/interventions.csv')        
     if os.path.exists(conf_file) and os.path.exists(result_file):
         with open(result_file, 'r') as file:
-            d = pd.read_csv(result_file)[['noise','p_int','f1','accuracy']]
+            d = pd.read_csv(result_file)[['noise','p_int','f1','accuracy','mse']]
         
         with open(conf_file, 'r') as file:
             conf = yaml.safe_load(file)
@@ -339,6 +341,10 @@ def plot_intervention_results(df, metric='accuracy', title_font=None, label_font
         for j, noise in enumerate(unique_noises):
             ax = axes[i] #axes[i, j] if n_rows > 1 else axes[j]
             data = df[(df['noise'] == noise) & (df['dataset'] == dataset)]
+            if dataset in ['cebab']:
+                metric = 'mse'
+            else:
+                metric = 'accuracy'
             grouped_data = data.groupby(['p_int', 'model']).agg(
                 mean_metric=(metric, 'mean'),
                 std_metric=(metric, 'std')

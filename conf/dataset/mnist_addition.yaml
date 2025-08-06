@@ -1,6 +1,6 @@
 defaults:
   - common
-  - /encoder: mlp
+  - /encoder: resnet
   - _self_
 
 loader: 
