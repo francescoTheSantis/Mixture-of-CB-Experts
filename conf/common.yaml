@@ -11,7 +11,7 @@ lr_patience: 10
 gpus: [0]
 seed: 1
 activation: LeakyReLU
-num_workers: 2
+num_workers: 8
 
 ## These parameters can be overridden by the dataset config
 latent_size: 64

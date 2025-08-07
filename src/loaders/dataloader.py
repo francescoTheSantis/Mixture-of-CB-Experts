@@ -175,7 +175,7 @@ class loader(object):
             from transformers import AutoTokenizer
             # For SST2, we use the concept names as the task names
             concept_names = ['negative', 'positive']
-            tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+            tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1") # TODO: switch to Llama
             # get the list of all tokens
             task_names = [f"w_{i}" for i in range(len(tokenizer.get_vocab().keys()))] # simple keys were not working
             concept_groups = None

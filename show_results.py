@@ -17,6 +17,7 @@ paths = [
     "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-04_17-58-25",
     "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-05_17-40-29",
     "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-06_12-02-37",
+    "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-06_14-54-02"
 ]
 
 result_figs = "figs"

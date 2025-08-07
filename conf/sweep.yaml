@@ -8,23 +8,20 @@ hydra:
       dir: output/everything_sweep/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 1, 2 #, 3, 4, 5
-      # implemented models: blackbox, cbm_linear, cbm_mlp, cem, dcr, licem, cmr, m_licem
-      model: blackbox, cbm_linear, cbm_mlp, cem, dcr, licem, cmr, m_licem
+      seed: 2 #1, 2, 3, 4, 5
       # implemented toy datasets: xor, nor, xnor, dot, trigometry, checkmark 
       # implemented image datasets: mnist_addition, cub, celeba, awa2, awa2_incomplete, mnist_addition
       # implemented textual datasets: cebab (regression)
-      dataset: xor, cub, awa2, mnist_addition, cebab
+      dataset: xor, cub, cebab, mnist_addition, awa2
+      # implemented models: blackbox, cbm_linear, cbm_mlp, cem, dcr, licem, cmr, m_licem
+      model: blackbox, cbm_linear, cem, dcr, cmr, m_licem
 
-use_stored_dataset: true
+use_stored_dataset: false
 extract_embeddings: false
 
-max_epochs: 10
+max_epochs: 100
 
-img_backbone_name: resnet18
-text_backbone_name: bert-base-uncased
-
-gpus: [0]
+gpus: [1] # Select the device to run the experiment on
 
 wandb:
   entity: "francescothesantis-politecnico-di-torino"

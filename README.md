@@ -23,3 +23,12 @@
     ```
 
 **NOTE:** To modify training settings, datasets, or models, update the corresponding files in the `conf/` directory before running experiments.
+
+
+
+
+**TODO**:
+- [ ] double check results (fra)
+- [ ] generative (gabri)
+- [ ] celeba (fra)
+- [ ] ablation cub: reduce # concepts while monitoring accuracy (all models\blackbox) (fra)
