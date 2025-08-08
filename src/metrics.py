@@ -24,13 +24,17 @@ class Task_Accuracy(Metric):
             preds = torch.argmax(preds, dim=1)
         elif self.task == 'classification':
             if len(preds.squeeze().shape) > 1:
+                # if the output is 2d we always take the argmax
                 preds = torch.argmax(preds, dim=1)
             else:
+                # if we are in binary classification we consider only positive preds
                 if self.logic_reasoning:
                     # if the output is a logic rule we do not apply an activation function,
                     # and we assume that the positive values are greater than 0.5
                     preds = preds.squeeze() > 0.5
                 else:
+                    # if the output is a standard prediction since we don't have
+                    # a sigmoid function we consider positive values
                     preds = preds.squeeze() > 0.
         else:
             raise NotImplementedError(f"Task {self.task} not implemented for Task_Accuracy metric.")

@@ -4,6 +4,8 @@ import torch
 from torch.optim import AdamW
 import numpy as np
 import pandas as pd
+from torch.utils.data import RandomSampler, DataLoader
+
 from src.metrics import f1_acc_metrics
 from tqdm import tqdm
 from src.models.m_licem import LinearMemoryReasoner
@@ -72,7 +74,19 @@ class Trainer:
         self.model.scheduler = self.scheduler
 
     def train(self, train_dataloader, val_dataloader, ckpt_path=None):
-        self.trainer.fit(self.model, 
+        if isinstance(train_dataloader.sampler, torch.utils.data.sampler.SequentialSampler):
+            # Recreate the DataLoader with a random sampler
+            new_sampler = RandomSampler(train_dataloader.dataset)
+            train_dataloader = DataLoader(
+                dataset=train_dataloader.dataset,
+                batch_size=train_dataloader.batch_size,
+                sampler=new_sampler,
+                num_workers=train_dataloader.num_workers,
+                collate_fn=train_dataloader.collate_fn,
+                drop_last=train_dataloader.drop_last,
+                pin_memory=train_dataloader.pin_memory
+            )
+        self.trainer.fit(self.model,
                          train_dataloader, 
                          val_dataloader, ckpt_path=ckpt_path)
 
