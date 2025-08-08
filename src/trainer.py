@@ -53,6 +53,8 @@ class Trainer:
             gradient_clip_val=1.0,
             val_check_interval=getattr(self.cfg, 'val_check_interval', 1.0),
         )
+        if getattr(self.cfg, 'accumulate_grad', 1) > 1:
+            print(f"Gradient accumulated for {self.cfg.accumulate_grad} batches")
 
         # Optimizer
         self.optimizer = AdamW(self.model.parameters(), 
