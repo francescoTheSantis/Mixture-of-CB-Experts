@@ -48,6 +48,7 @@ class Trainer:
             logger=loggers,
             devices=self.cfg.gpus,  
             accelerator="auto",
+            accumulate_grad_batches=getattr(self.cfg, 'accumulate_grad', 1),
             enable_progress_bar=True,
             gradient_clip_val=1.0,
             val_check_interval=getattr(self.cfg, 'val_check_interval', 1.0),
