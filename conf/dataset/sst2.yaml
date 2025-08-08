@@ -12,7 +12,7 @@ metadata:
   name: sst2
   data_type: text
 
-latent_size: 4096
+latent_size: 256
 
 encoder:
   _target_: "src.models.encoders.IdentityEncoder"
