@@ -1,8 +1,7 @@
-encoder:
-  _target_: "src.models.encoders.mlp.MLPEncoder"
-  output_size: ${dataset.latent_size}
-  hidden_size: ${dataset.latent_size}
-  type: mlp
-  input_transform:
-    _target_: "src.models.encoders.transform.MNISTTransform"
-    flatten: true
+_target_: "src.models.encoders.mlp.MLPEncoder"
+output_size: ${dataset.latent_size}
+hidden_size: ${dataset.latent_size}
+type: mlp
+input_transform:
+  _target_: "src.models.encoders.transform.MNISTTransform"
+  flatten: true

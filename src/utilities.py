@@ -25,6 +25,14 @@ def set_seed(seed: int):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
+def is_valid_experiment(cfg: DictConfig):
+    """ 
+    Check if the experiment is valid based on the dataset and model combination.
+    """
+    if cfg.dataset.metadata.name == 'cebab' and cfg.model.metadata.name in ['cem', 'dcr', 'cmr']:
+        raise ValueError(f"The experiment is not valid. Please check the configuration.\n\
+                         The combination of {cfg.dataset.metadata.name}, {cfg.model.metadata.name} cannot be executed.")
+
 def set_loggers(cfg):
     """ Set the loggers for the experiment """
     # Update the note in the config: if it is None, set it to an empty string
@@ -81,11 +89,14 @@ def get_backbone_latent_size(backbone):
     
     if 'resnet' in backbone:
         model = nn.Sequential(*list(model.children())[:-1])
-        latent_dim = model[-2][-1].bn2.num_features
+        test = model(torch.randn((1,3,224,224)))
+        latent_dim = test.flatten(start_dim=1).shape[1]
     else:
         pass # This is a placeholder for other backbones if needed
     # delete the model to free memory
     del model
+    del test
+    torch.cuda.empty_cache()
     return latent_dim
 
 def update_config_from_data(cfg: DictConfig, train_loader, c_names,
@@ -115,14 +126,14 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         )
         
         # store in the config the size of the embeddings produced by the backbone
-        # check if type is dataset.encoder.encoder
-        if 'encoder' in cfg.dataset and 'type' in cfg.dataset.encoder.encoder:
-            if 'resnet' in cfg.dataset.encoder.encoder['type']:
-                backbone_latent_size = get_backbone_latent_size(cfg.dataset.encoder.encoder.type)
-            elif 'mlp' in cfg.dataset.encoder.encoder['type']:
-                backbone_latent_size = cfg.dataset.encoder.encoder.output_size
+        # check if type is dataset.encoder
+        if 'encoder' in cfg.dataset and 'type' in cfg.dataset.encoder:
+            if 'resnet' in cfg.dataset.encoder['type']:
+                backbone_latent_size = get_backbone_latent_size(cfg.dataset.encoder.type)
+            elif 'mlp' in cfg.dataset.encoder['type']:
+                backbone_latent_size = cfg.dataset.encoder.output_size
             else:
-                raise ValueError(f"Encoder type {cfg.dataset.encoder.encoder.type} not recognized.")
+                raise ValueError(f"Encoder type {cfg.dataset.encoder.type} not recognized.")
         else:
             backbone_latent_size = cfg.dataset.latent_size
 
@@ -149,7 +160,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         else:
             # On the other hand, if we are fine-tuning a pre-trained model,
             # we need to set the encoder to the one defined in the dataset config.
-            cfg.model.params.encoder = cfg.dataset.encoder.encoder
+            cfg.model.params.encoder = cfg.dataset.encoder
 
         cfg.model.params.encoder.update(
             input_size = input_size,

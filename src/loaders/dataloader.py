@@ -264,7 +264,6 @@ class loader(object):
             train_dataset = AwA2Dataset(root=path, split='train', selected_concepts=self.selected_concept_idxes)
             val_dataset = AwA2Dataset(root=path, split='val', selected_concepts=self.selected_concept_idxes)
             test_dataset = AwA2Dataset(root=path, split='test', selected_concepts=self.selected_concept_idxes)
-
         elif self.name == 'sst2':
             from datasets import load_dataset
             from transformers import AutoTokenizer
@@ -301,7 +300,7 @@ class loader(object):
             raise ValueError(f"Dataset {self.name} not recognized.")
 
         if self.name not in ['cebab']:
-            loaded_train = DataLoader(train_dataset, 
+            loaded_train = DataLoader(train_dataset,
                                     batch_size=self.batch_size, 
                                     shuffle=True,
                                     num_workers=self.num_workers,
@@ -337,13 +336,27 @@ class loader(object):
                                                 loaded_test,
                                                 self.device,
                                                 self.extract_embeddings)
-            
+
             loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
 
         return loaded_train, loaded_val, loaded_test
 
+    def _custom_collate_fn(self, batch):
+        """
+        Custom collate function to handle different data types in the batch.
+        """
+        batch_dict = {}
+        for idx, key in enumerate(['x', 'c', 'y']):
+            values = [item[idx] for item in batch]
+            if isinstance(values[0], torch.Tensor):
+                batch_dict[key] = torch.stack(values)
+            else:
+                batch_dict[key] = torch.tensor(values)
+        return batch_dict
 
 if __name__ == '__main__':
+    DATA_PATH = "/Users/gabrieleciravegna/Code/datasets/"
+
     print("\nSST2 dataset")
     sst2_datasets = loader(
         name='sst2',
@@ -363,7 +376,7 @@ if __name__ == '__main__':
     train_loader, val_loader, test_loader = E_extr.produce_loaders()
 
     # we save the train, validation and test loaders
-    data_path = os.path.join('', 'stored_tensors', 'sst2')
+    data_path = os.path.join(DATA_PATH, 'stored_tensors', 'sst2')
     os.makedirs(data_path, exist_ok=True)
     torch.save(train_loader, os.path.join(data_path, 'train.pt'))
     torch.save(val_loader, os.path.join(data_path, 'val.pt'))

@@ -13,9 +13,7 @@ warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
 # List the paths containing the results
-paths = [
-    
-]
+paths = ["/users/gabrieleciravegna/Code/Linear-Memory-Reasoner/multirun/results_logic_problems"]
 
 ###### Collect results regarding concept/task performance ######
 
@@ -61,7 +59,10 @@ for exp in exps_path:
             pass
 
 
-######### Dataset and model styles #########
+######### Only for the PredCBM with seed=1, plot explanations #########
+plot_explanations(lmr_paths)
+
+########## Task & Concept Accuracy Plot ##########
 
 def get_df_name(df):
     if df=='xor':
@@ -135,7 +136,7 @@ custom_order = ['xor', \
                 ]
 
 
-# Filter the performance dataframe to keep only the models in model_styles 
+# Filter the performance dataframe to keep only the models in model_styles
 # and datasets in custom_order.
 performance = performance[performance['model'].isin(model_styles.keys()) & \
                           performance['dataset'].isin(custom_order)]
@@ -316,7 +317,7 @@ performance = performance[performance['model'].isin(model_styles.keys()) & \
                           performance['dataset'].isin(custom_order)]
 
 
-########## Intervention plots ########## 
+########## Intervention plots ##########
 
 def plot_intervention_results(df, metric='accuracy', title_font=None, label_font=None, tick_font=None, legend_font=None):
     unique_noises = [0, 0.1, 0.2, 0.4, 0.6, 0.8, 1]
@@ -324,7 +325,7 @@ def plot_intervention_results(df, metric='accuracy', title_font=None, label_font
     n_cols = len(unique_noises)
     n_rows = len(unique_datasets)
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows), sharex=True, sharey='row')
-    
+
     for i, dataset in enumerate(unique_datasets):
         for j, noise in enumerate(unique_noises):
             ax = axes[i, j] if n_rows > 1 else axes[j]
@@ -349,7 +350,7 @@ def plot_intervention_results(df, metric='accuracy', title_font=None, label_font
             ax.minorticks_off()
             ax.grid(True)
             ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{x:.2f}'))
-    
+
     # Create a single legend below the plots
     handles, labels = [], []
     for ax in axes.flatten():

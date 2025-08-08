@@ -8,7 +8,7 @@ import os
 from env import CACHE
 from src.utilities import update_config_from_data
 
-@hydra.main(config_path="conf", config_name="sweep")
+@hydra.main(config_path="conf", config_name="gabri")
 def main(cfg: DictConfig) -> None:
 
     # Initialize the wandb logger
@@ -18,7 +18,10 @@ def main(cfg: DictConfig) -> None:
     set_seed(cfg.seed)
 
     ###### Load the data ######
-    data_path = os.path.join(str(CACHE), 'stored_tensors', cfg.dataset.metadata.name)
+    data_path = os.path.join(str(cfg['data_path']),
+                             'stored_tensors',
+                             'embeddings' if cfg.extract_embeddings else 'raw', # whether it contains embeddings or not
+                             cfg.dataset.metadata.name)
     train_path = f"{data_path}/train.pt"
     val_path = f"{data_path}/val.pt"
     test_path = f"{data_path}/test.pt"
@@ -67,9 +70,12 @@ def main(cfg: DictConfig) -> None:
     # Test the model on the test-set
     trainer.test(loaded_test)
 
-    if model.model.has_concepts:
+    if cfg.dataset.loader.name in ["xor", 'or', 'nor', 'and', 'nand', 'xnor']:
+        trainer.plot_results(loaded_test)
+
+    if model.model.has_concepts and False:
         ###### Perform Intervetions ######
-        intervention_df = trainer.interventions(loaded_test)
+        intervention_df = trainer.interventions(loaded_test, verbose=False)
         log_dir = csv_logger.log_dir
         intervention_df.to_csv(f"{log_dir}/interventions.csv", index=False)
 

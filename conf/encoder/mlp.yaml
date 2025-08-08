@@ -1,5 +1,4 @@
-encoder:
-  _target_: "src.models.encoders.mlp.MLPEncoder"
-  output_size: ${dataset.latent_size}
-  hidden_size: ${dataset.latent_size}
-  activation: ${activation}
+_target_: "src.models.encoders.mlp.MLPEncoder"
+output_size: ${dataset.latent_size}
+hidden_size: ${dataset.latent_size}
+activation: ${activation}
