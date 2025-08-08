@@ -38,6 +38,17 @@ def main(cfg: DictConfig) -> None:
                                   and loader.extract_embeddings:
         print('Loading pre-processed data...')
         loaded_train = torch.load(train_path)
+        # Recreate the DataLoader with a random sampler and cfg attributes
+        new_sampler = RandomSampler(loaded_train.dataset)
+        loaded_train = DataLoader(
+            dataset=loaded_train.dataset,
+            batch_size=getattr(cfg.dataset, 'batch_size', loaded_train.batch_size),
+            sampler=new_sampler,
+            num_workers=getattr(cfg, 'num_workers', 0),
+            collate_fn=loaded_train.collate_fn,
+            drop_last=loaded_train.drop_last,
+            pin_memory=loaded_train.pin_memory
+        )
         loaded_val = torch.load(val_path)
         loaded_test = torch.load(test_path)
 
@@ -66,7 +77,7 @@ def main(cfg: DictConfig) -> None:
     trainer.build_trainer()
 
     # Train the model
-    trainer.train(loaded_train, loaded_val)
+    trainer.train(loaded_train, loaded_val, cfg)
 
     ###### Test ######
     # Test the model on the test-set
