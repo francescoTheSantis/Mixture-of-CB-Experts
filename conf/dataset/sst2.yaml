@@ -18,6 +18,7 @@ encoder:
   _target_: "src.models.encoders.identity.IdentityEncoder"
   input_size: 4096
   output_size: 4096
+  type: identity
 
 concept_loss_form:
   _target_: "torch.nn.CrossEntropyLoss"

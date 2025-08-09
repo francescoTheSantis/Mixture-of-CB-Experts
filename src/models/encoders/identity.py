@@ -11,7 +11,7 @@ class IdentityEncoder(BaseEncoder):
         input_transform (callable, optional): A function to transform the input data before encoding.
     """
 
-    def __init__(self, input_size, output_size, input_transform=None):
+    def __init__(self, input_size, output_size, input_transform=None, **kwargs):
         super().__init__(input_size, output_size, input_transform)
         assert input_size == output_size, ("Input size must match output size "
                                            "for IdentityEncoder.")
