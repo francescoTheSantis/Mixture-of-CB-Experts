@@ -183,9 +183,9 @@ class TextEmbeddingExtractor:
             for batch in tqdm(loader, desc="Extracting embeddings"):
                 if self.extract_embeddings:
                     outputs = self.model(
-                        input_ids=batch['x']["input_ids"],
-                        token_type_ids=batch['x']["token_type_ids"],
-                        attention_mask=batch['x']["attention_mask"]
+                        input_ids=batch['x']["input_ids"].to(self.model.device).long(),
+                        token_type_ids=batch['x']["token_type_ids"].to(self.model.device).long(),
+                        attention_mask=batch['x']["attention_mask"].to(self.model.device).long()
                     )
                     emb = outputs.last_hidden_state  # shape: (B, L, D)
                     # Use the [CLS] token representation. This is useful to reduce the overall number of
@@ -231,8 +231,11 @@ class TextEmbeddingExtractor:
             dataset = TextEmbeddingDataset(embeddings, attention_masks, labels, input_ids)
             return DataLoader(dataset, batch_size=batch_size)
         else:
-            dataset = [{'x': {'input_ids': input_ids.long(), 'attention_mask': attention_mask, 'token_type_ids': token_type_ids}, 'c': _c, 'y': _y} 
-                            for input_ids, attention_mask, token_type_ids, _c, _y in zip(x['input_ids'], x['attention_mask'], x['token_type_ids'], c, y)]
+            if self.extract_embeddings:
+                dataset = [{'x': _x.float(), 'c': _c, 'y': _y} for _x, _c, _y in zip(x, c, y)]
+            else:
+                dataset = [{'x': {'input_ids': input_ids.long(), 'attention_mask': attention_mask, 'token_type_ids': token_type_ids}, 'c': _c, 'y': _y} 
+                                for input_ids, attention_mask, token_type_ids, _c, _y in zip(x['input_ids'], x['attention_mask'], x['token_type_ids'], c, y)]
             return DataLoader(dataset, batch_size=batch_size)
 
     def produce_loaders(self, selected_concepts=None, task_names=None):

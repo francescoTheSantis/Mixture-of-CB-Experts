@@ -134,7 +134,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         x = batch['x']
         data_type = 'image'
     else:
-        x = batch['x']['input_ids']
+        x = batch['x'] if cfg.extract_embeddings else batch['x']['input_ids']
         data_type = 'text'
 
     if cfg.dataset.metadata.name != 'sst2':
