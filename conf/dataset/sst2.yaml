@@ -15,7 +15,7 @@ metadata:
 latent_size: 256
 
 encoder:
-  _target_: "src.models.encoders.IdentityEncoder"
+  _target_: "src.models.encoders.identity.IdentityEncoder"
   input_size: 4096
   output_size: 4096
 

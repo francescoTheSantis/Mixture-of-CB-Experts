@@ -70,6 +70,7 @@ def main(cfg: DictConfig) -> None:
 
     ###### Instantiate the model ######
     model = instantiate(cfg.engine)
+    print(model)
 
     ###### Training ######
     # Initialize the trainer
@@ -77,7 +78,7 @@ def main(cfg: DictConfig) -> None:
     trainer.build_trainer()
 
     # Train the model
-    trainer.train(loaded_train, loaded_val, cfg)
+    trainer.train(loaded_train, loaded_val)
 
     ###### Test ######
     # Test the model on the test-set

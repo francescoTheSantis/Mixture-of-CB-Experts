@@ -130,7 +130,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         if 'encoder' in cfg.dataset and 'type' in cfg.dataset.encoder:
             if 'resnet' in cfg.dataset.encoder['type']:
                 backbone_latent_size = get_backbone_latent_size(cfg.dataset.encoder.type)
-            elif 'mlp' in cfg.dataset.encoder['type']:
+            elif 'mlp' in cfg.dataset.encoder['type'] or 'identity' in cfg.dataset.encoder['type']:
                 backbone_latent_size = cfg.dataset.encoder.output_size
             else:
                 raise ValueError(f"Encoder type {cfg.dataset.encoder.type} not recognized.")
@@ -150,7 +150,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         # if we want to extract the embeddings it means that we are NOT 
         # fine-tuning a pre-trained backbone during training.
         # This means that we just need a linear encoder.
-        if cfg.extract_embeddings:
+        if cfg.extract_embeddings and cfg.dataset.metadata.name != 'sst2':
             input_size = backbone_latent_size 
             cfg.model.params.encoder = {
                 '_target_': 'src.models.encoders.linear.LinearEncoder',
