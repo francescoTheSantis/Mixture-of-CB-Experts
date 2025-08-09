@@ -133,6 +133,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             elif 'mlp' in cfg.dataset.encoder['type'] or 'identity' in cfg.dataset.encoder['type']:
                 backbone_latent_size = cfg.dataset.encoder.output_size
             else:
+                print('mlp' in cfg.dataset.encoder['type'] or 'identity' in cfg.dataset.encoder['type'])
                 raise ValueError(f"Encoder type {cfg.dataset.encoder.type} not recognized.")
         else:
             backbone_latent_size = cfg.dataset.latent_size
