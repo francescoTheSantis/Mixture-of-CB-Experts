@@ -22,8 +22,8 @@ def set_seed(seed: int):
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+#    torch.cuda.manual_seed(seed)
+#    torch.cuda.manual_seed_all(seed)
 
 def is_valid_experiment(cfg: DictConfig):
     """ 
@@ -96,7 +96,7 @@ def get_backbone_latent_size(backbone):
     # delete the model to free memory
     del model
     del test
-    torch.cuda.empty_cache()
+    # torch.cuda.empty_cache()
     return latent_dim
 
 def update_config_from_data(cfg: DictConfig, train_loader, c_names,
