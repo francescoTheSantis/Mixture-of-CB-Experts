@@ -130,7 +130,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         if 'encoder' in cfg.dataset and 'type' in cfg.dataset.encoder:
             if 'resnet' in cfg.dataset.encoder['type']:
                 backbone_latent_size = get_backbone_latent_size(cfg.dataset.encoder.type)
-            elif 'mlp' in cfg.dataset.encoder['type'] or 'identity' in cfg.dataset.encoder['type']:
+                elif 'mlp' in cfg.dataset.encoder['type'] or 'identity' in cfg.dataset.encoder['type']:
                 backbone_latent_size = cfg.dataset.encoder.output_size
             else:
                 raise ValueError(f"Encoder type {cfg.dataset.encoder.type} not recognized.")
