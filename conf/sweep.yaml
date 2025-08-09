@@ -16,13 +16,6 @@ hydra:
       # implemented models: blackbox, cbm_linear, cbm_mlp, cem, dcr, licem, cmr, m_licem
       model: blackbox, cbm_linear, cem, dcr, cmr, m_licem
 
-use_stored_dataset: false
-extract_embeddings: false
-
-max_epochs: 100
-
-gpus: [1] # Select the device to run the experiment on
-
 wandb:
   entity: "francescothesantis-politecnico-di-torino"
   project: "linear_memory_reasoner"

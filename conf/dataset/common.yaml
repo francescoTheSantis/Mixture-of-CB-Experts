@@ -4,6 +4,7 @@ loader:
   batch_size: ${batch_size}
   device: ${gpus}
   extract_embeddings: ${extract_embeddings}
+  concept_percentage: ${concept_percentage}
 
 latent_size: ${latent_size}
 hard_concepts: false

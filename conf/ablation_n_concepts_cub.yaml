@@ -1,0 +1,14 @@
+defaults:
+  - common
+  - _self_
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+      dir: output/cub_ablation/${now:%Y-%m-%d_%H-%M-%S}
+  sweeper:
+    params:
+      seed: 1, 2, 3, 4, 5
+      dataset: cub
+      concept_percentage: 1.0, 0.8, 0.6, 0.4, 0.2
+      model: blackbox, cbm_linear, cem, dcr, cmr, m_licem

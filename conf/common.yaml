@@ -4,14 +4,14 @@ defaults:
   - engine: engine
 
 ## Common parameters
+gpus: [0]
 max_epochs: 100
 patience: 20
 gamma: 0.5
 lr_patience: 10
-gpus: [0]
 seed: 1
 activation: LeakyReLU
-num_workers: 8
+num_workers: 0
 
 ## These parameters can be overridden by the dataset config
 latent_size: 64
@@ -30,6 +30,11 @@ memory_size: 8
 ## Pre-trained backbones
 img_backbone_name: resnet18
 text_backbone_name: bert-base-uncased
+
+# Parameter that controls the % of selected groups. Valid only for cub dataset. 
+# Variations of this parameter will have no effect on other concepts. 
+# If set to null, all groups will be selected.
+concept_percentage: Null
 
 # Set this parameter to True if you want to use the stored, preprocessed dataset,
 # otherwise it will be preprocessed from scratch and saved in the cache. 

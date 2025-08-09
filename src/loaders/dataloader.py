@@ -21,6 +21,7 @@ from torchvision import transforms
 import os
 import itertools
 from src.utilities import get_type_from_name
+import random
 
 class TextDataset(torch.utils.data.Dataset):
     def __init__(self, encoded_text):
@@ -39,35 +40,6 @@ CUB_CONCEPT_NAMES = [x for i, x in enumerate(cub_concept_semantics) if i in cub_
 class loader(object):
     """
     Data loader class to manage loading, preprocessing, and batching of various datasets from PyC.
-
-    Args:
-        name (str): Name of the dataset to load.
-        batch_size (int): Number of samples per batch in DataLoader.
-        num_workers (int): Number of worker threads for loading data.
-        device (str or ListConfig): Device identifier (e.g. 'cuda', 'cpu') or omegaconf ListConfig.
-        selected_concepts (list, optional): Subset of concept names to use, if applicable.
-        class_attributes (list, optional): List of class attribute names used for tasks (especially for CelebA).
-
-    Attributes:
-        name (str): Dataset name.
-        batch_size (int): Batch size for DataLoaders.
-        num_workers (int): Number of workers for DataLoader.
-        device (str): Device to run on.
-        selected_concepts (list): Selected concept names.
-        task_names (list): Class attribute names used for task labels.
-        concept_groups (dict or None): Mapping of concepts to groups, if available.
-        transform (torchvision.transforms.Compose): Image preprocessing transformations.
-
-    Methods:
-        get_names():
-            Returns concept names, task names, and concept groups corresponding to the dataset.
-            Raises ValueError if dataset name is not recognized.
-
-        load_data():
-            Loads the dataset splits (train, validation, test) and returns DataLoaders.
-            Applies transformations, splits data as needed, and optionally applies embedding extraction
-            for certain datasets.
-            Raises ValueError if dataset name is not recognized.
     """
     def __init__(self,
                  name,
@@ -76,6 +48,7 @@ class loader(object):
                  device,
                  selected_concepts=None,
                  selected_concept_groups=None,
+                 concept_percentage=None,
                  class_attributes=None,
                  extract_embeddings=True
                  ):
@@ -88,6 +61,7 @@ class loader(object):
         self.task_names = class_attributes
         self.concept_groups = None
         self.extract_embeddings = extract_embeddings
+        self.concept_percentage = concept_percentage
 
         self.transform = transforms.Compose([
                 transforms.Resize((224, 224)),
@@ -97,6 +71,24 @@ class loader(object):
                     std=[0.229, 0.224, 0.225]
                 )
             ])
+
+        if self.name == 'cub' and self.concept_percentage is not None:
+            # Randomly select the concepts according to the concept_percentage %
+            selected_concepts = random.sample(CUB_CONCEPT_NAMES, int(len(CUB_CONCEPT_NAMES) * self.concept_percentage))
+            # Select the indexes that matches the selected concept names
+            self.selected_concept_idxes = [CUB_CONCEPT_NAMES.index(x) for x in selected_concepts]
+            # Filter the group according to the selected concepts
+            self.incomplete_cub_groups = {}
+            for k, v in cub_concept_groups.items():
+                idxs = []
+                for idx in self.selected_concept_idxes:
+                    if idx in v:
+                        idxs.append(idx)
+                if len(idxs) > 0:
+                    self.incomplete_cub_groups[k] = idxs
+
+            # Store in the same format as cub_incomplete
+            self.CUB_CONCEPT_NAMES = selected_concepts
 
         if self.selected_concept_groups != None and self.name == 'cub_incomplete':
             # Select the group that matches the selected group names
@@ -146,7 +138,7 @@ class loader(object):
             concept_names = train_dataset.concept_names
             task_names = train_dataset.task_names
             concept_groups = None
-        elif self.name == 'cub':
+        elif self.name == 'cub' and self.concept_percentage is None:
             concept_names = CUB_CONCEPT_NAMES
             task_names = cub_class_names
             concept_groups = cub_concept_groups
@@ -167,7 +159,7 @@ class loader(object):
             concept_names = self.selected_concepts
             task_names = awa2_class_names
             concept_groups = self.incomplete_awa2_groups
-        elif self.name == 'cub_incomplete':
+        elif self.name == 'cub_incomplete' or (self.name == 'cub' and self.concept_percentage is not None):
             concept_names = self.CUB_CONCEPT_NAMES
             task_names = cub_class_names
             concept_groups = self.incomplete_cub_groups
@@ -230,11 +222,11 @@ class loader(object):
             val_size = len(train_dataset) - train_size
             train_dataset, val_dataset = random_split(train_dataset, 
                                               [train_size, val_size])
-        elif self.name == 'cub':
+        elif self.name == 'cub' and self.concept_percentage is None:
             train_dataset = CUBDataset(root=DATA_PATH, split='train')
             val_dataset = CUBDataset(root=DATA_PATH, split='val')
             test_dataset = CUBDataset(root=DATA_PATH, split='test')
-        elif self.name == 'cub_incomplete':
+        elif self.name == 'cub_incomplete' or (self.name == 'cub' and self.concept_percentage is not None):
             train_dataset = CUBDataset(root=DATA_PATH, split='train', selected_concepts=self.selected_concept_idxes)
             val_dataset = CUBDataset(root=DATA_PATH, split='val', selected_concepts=self.selected_concept_idxes)
             test_dataset = CUBDataset(root=DATA_PATH, split='test', selected_concepts=self.selected_concept_idxes)
