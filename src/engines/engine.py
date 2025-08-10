@@ -153,7 +153,7 @@ class Engine(pl.LightningModule):
 
         # If the name of the class is LinearMemoryReasoner,
         # update the tensors required for the explanations.
-        if self.model.__class__.__name__ == 'LinearMemoryReasoner':
+        if self.model.__class__.__name__ == 'LinearMemoryReasoner' and False:
             self.pred_CBMs.append(model_output[2])
             self.c_trues.append(c)
             self.c_preds.append(c_output)

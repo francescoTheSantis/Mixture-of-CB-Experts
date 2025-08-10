@@ -7,6 +7,7 @@ import random
 from omegaconf import DictConfig, OmegaConf, open_dict
 from time import time
 from pytorch_lightning.loggers import WandbLogger, CSVLogger
+from pytorch_lightning import seed_everything
 import pandas as pd
 import matplotlib.pyplot as plt
 from torch import nn
@@ -22,6 +23,7 @@ def set_seed(seed: int):
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    seed_everything(seed, workers=True)
 #    torch.cuda.manual_seed(seed)
 #    torch.cuda.manual_seed_all(seed)
 
