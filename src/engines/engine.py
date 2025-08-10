@@ -59,7 +59,7 @@ class Engine(pl.LightningModule):
 
         # If we are using the LinearMemoryReasoner model,
         # we need to save the tensors required for the explanations.
-        if self.model.__class__.__name__ == 'LinearMemoryReasoner':
+        if self.model.__class__.__name__ == 'LinearMemoryReasoner' and False:
             self.pred_CBMs = []
             self.c_trues = []
             self.c_preds = []
@@ -164,7 +164,7 @@ class Engine(pl.LightningModule):
     def on_test_epoch_end(self):
         # If the name of the class is LinearMemoryReasoner,
         # store the tensors required for the explanations.
-        if self.model.__class__.__name__ == 'LinearMemoryReasoner':
+        if self.model.__class__.__name__ == 'LinearMemoryReasoner' and False:
             # Concatenate the tensors
             self.pred_CBMs = torch.cat(self.pred_CBMs, dim=0)
             self.c_trues = torch.cat(self.c_trues, dim=0)
