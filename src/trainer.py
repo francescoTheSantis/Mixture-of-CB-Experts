@@ -24,17 +24,17 @@ class Trainer:
 
     def build_trainer(self):
         early_stopping = EarlyStopping(
-            monitor='val_loss', 
+            monitor='val_task_acc',
             patience=self.cfg.patience, 
             verbose=True,
-            mode='min'
+            mode='max'
         )
 
         checkpoint_callback = ModelCheckpoint(
-            monitor='val_loss', 
+            monitor='val_task_acc',
             filename='best_model', 
             save_top_k=1, 
-            mode='min', 
+            mode='max',
             verbose=True
         )
 
