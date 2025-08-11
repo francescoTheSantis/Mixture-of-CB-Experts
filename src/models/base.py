@@ -106,7 +106,6 @@ class BaseModel(nn.Module):
         Check the type and shape of y and y_hat before computing the task loss.
         This is useful to ensure that the task loss function receives the correct input format.
         """
-
         # Check if the model is a logic-based model
         logic_model_check = self._logic_model_checker()
         # Check y type and shape before task loss computation
@@ -123,7 +122,10 @@ class BaseModel(nn.Module):
             # in case of generation, we assume y is a sequence of tokens
             # not in DCR/CMR with the BCELoss where we use one-hot encoding
             if logic_model_check and self.output_size > 1:
+                invalid_rows = y.squeeze() == -100
+                y = torch.where(y != -100, y, 0)
                 y = F.one_hot(y.flatten().long(), num_classes=self.output_size).float()
+                y[invalid_rows] = -1
             else:
                 y = y.flatten().long()
         else:
@@ -141,7 +143,8 @@ class BaseModel(nn.Module):
                 task_loss += self.task_loss_form(y_hat[:,:,i].squeeze(), y)
             task_loss /= y_hat.shape[-1]
         else:
-            task_loss = self.task_loss_form(y_hat.squeeze(), y)
+            mask = y != -1
+            task_loss = self.task_loss_form(y_hat[mask].squeeze(), y[mask].squeeze())
         # concept loss
         concept_loss = 0
         if isinstance(self.concept_loss_form, nn.BCELoss):
