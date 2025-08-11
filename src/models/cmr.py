@@ -56,8 +56,7 @@ class ConceptMemoryReasoner(BaseModel):
 
         self.memory_size = memory_size
         self.rec_weight = conc_rec_weight
-        self.concept_loss_form = concept_loss_form
-        c_activation = nn.Identity() if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.Sigmoid()
+        c_activation = nn.Sigmoid()
 
         self.bottleneck = pyc_nn.LinearConceptBottleneck(
             backbone_latent_size,
@@ -85,6 +84,8 @@ class ConceptMemoryReasoner(BaseModel):
         )
 
         self.task_loss_form = nn.BCELoss()
+        self.concept_loss_form = nn.BCELoss()
+
 
 
     def _conc_recon(self, concept_weights, c_true, y_true):
@@ -116,6 +117,9 @@ class ConceptMemoryReasoner(BaseModel):
 
         y_true = input['y'] if self.training else None
 
+        c_true = torch.where(c_true < 0,
+                             torch.zeros_like(c_true, device=c_true.device),
+                             c_true)
         c_emb, c_dict = self.bottleneck(
             latent,
             c_true=c_true,

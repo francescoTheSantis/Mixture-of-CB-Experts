@@ -50,8 +50,7 @@ class DeepConceptReasoner(BaseModel):
         self.semantic = semantic
         self.temperature = temperature
         self.hard_concepts = hard_concepts
-        self.concept_loss_form = concept_loss_form
-        c_activation = nn.Identity() if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.Sigmoid()
+        c_activation = nn.Sigmoid()
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             backbone_latent_size,
@@ -67,10 +66,14 @@ class DeepConceptReasoner(BaseModel):
         )
 
         self.task_loss_form = nn.BCELoss()
+        self.concept_loss_form = nn.BCELoss()
 
     def forward(self, input):
         x, c_true, int_idxs = self.encode(input)
 
+        c_true = torch.where(c_true < 0,
+                             torch.zeros_like(c_true, device=c_true.device),
+                             c_true)
         c_emb, c_dict = self.bottleneck(
             x,
             c_true=c_true,

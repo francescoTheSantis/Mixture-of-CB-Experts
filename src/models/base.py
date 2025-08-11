@@ -121,7 +121,11 @@ class BaseModel(nn.Module):
             raise NotImplementedError("Regression task is not implemented for concept-based loss.")
         elif self.task == 'generation':
             # in case of generation, we assume y is a sequence of tokens
-            y = y.flatten().long()
+            # not in DCR/CMR with the BCELoss where we use one-hot encoding
+            if logic_model_check and self.output_size > 1:
+                y = F.one_hot(y.flatten().long(), num_classes=self.output_size).float()
+            else:
+                y = y.flatten().long()
         else:
             raise ValueError(f"Unknown task type: {self.task}. Supported tasks are 'classification', 'regression', and 'generation'.")
         return y, y_hat
