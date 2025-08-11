@@ -148,8 +148,9 @@ class BaseModel(nn.Module):
         # concept loss
         concept_loss = 0
         if isinstance(self.concept_loss_form, nn.BCELoss):
+            mask = (c != -100)[:, 0]
             for i in range(c.shape[1]):
-                concept_loss += self.concept_loss_form(c_hat[:,i], c[:,i])
+                concept_loss += self.concept_loss_form(c_hat[mask][:,i], c[mask][:,i])
             concept_loss /= c.shape[1]
         elif isinstance(self.concept_loss_form, nn.CrossEntropyLoss):
             concept_loss = self.concept_loss_form(c_hat, c.argmax(-1))
