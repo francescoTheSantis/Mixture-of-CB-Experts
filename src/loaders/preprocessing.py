@@ -60,7 +60,6 @@ class EmbeddingExtractor:
         concepts_list = []
         labels = []
 
-        cnt = 0
         with torch.no_grad():
             for batch in tqdm(loader):
                 images = batch['x']#.to(self.device)
@@ -96,10 +95,6 @@ class EmbeddingExtractor:
                     )
                 labels.append(targets.cpu())
                 concepts_list.append(concepts.cpu())
-
-                if cnt > 1:
-                    break
-                cnt += 1
                 
         # Concatenate all embeddings and labels
         embeddings = torch.cat(embeddings, dim=0)
