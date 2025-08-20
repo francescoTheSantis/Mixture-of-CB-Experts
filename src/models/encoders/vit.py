@@ -1,6 +1,7 @@
 from torch import nn
 from src.models.encoders.base import BaseEncoder
 from src.models.encoders.transform import ImageTransform
+import transformers
 
 class VitEncoder(BaseEncoder):
     def __init__(self, input_size, output_size, input_transform=None, model_name='google/vit-base-patch32-224-in21k'):

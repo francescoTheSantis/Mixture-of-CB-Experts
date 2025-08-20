@@ -7,4 +7,3 @@ loader:
   concept_percentage: ${concept_percentage}
 
 latent_size: ${latent_size}
-hard_concepts: false

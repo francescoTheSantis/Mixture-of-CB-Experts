@@ -1,7 +1,6 @@
 params:
   activation: ${activation}
   latent_size: ${dataset.latent_size}
-  hard_concepts: ${dataset.hard_concepts}
 
   # The decoder can be overridden by the dataset configuration
   encoder:

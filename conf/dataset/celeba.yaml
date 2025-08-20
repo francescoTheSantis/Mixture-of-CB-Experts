@@ -1,6 +1,5 @@
 defaults:
   - common
-  - /encoder: resnet
   - _self_
 
 loader:

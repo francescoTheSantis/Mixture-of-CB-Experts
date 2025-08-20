@@ -1,6 +1,5 @@
 defaults:
   - common
-  - /encoder: mlp
   - _self_
 
 

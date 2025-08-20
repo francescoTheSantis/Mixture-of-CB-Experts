@@ -45,6 +45,9 @@ class EmbeddingExtractor:
             self.model = nn.Sequential(*list(self.model.children())[:-1])
             # save the latent dimension of the backbone's output
             self.latent_dim = self.model[-2][-1].bn2.num_features
+        elif 'vit' in self.img_backbone_name:
+            self.model = AutoModel.from_pretrained(self.img_backbone_name)
+            self.latent_dim = self.model.config.hidden_size
         else:
             raise ValueError(f"Image backbone {self.img_backbone_name} not recognized.")
 
@@ -57,13 +60,14 @@ class EmbeddingExtractor:
         concepts_list = []
         labels = []
 
+        cnt = 0
         with torch.no_grad():
             for batch in tqdm(loader):
                 images = batch['x']#.to(self.device)
                 concepts = batch['c']#.to(self.device)
                 targets = batch['y']#.to(self.device)
                 bsz = images.shape[0]
-                if self.extract_embeddings:
+                if self.extract_embeddings and not self.cfg.dataset.metadata.name=='xor':
                     images = images.to(self.device)
                     # If the tensor has not the correct shape 
                     if images.shape[-1] != 224:
@@ -74,9 +78,14 @@ class EmbeddingExtractor:
                     if images.shape[1] == 1:
                         # Repeat the single channel 3 times to simulate RGB
                         images = images.repeat(1, 3, 1, 1)  # (N, 3, H, W)
+
                     # Extract embeddings
                     outputs = self.model(images)
-                    outputs = outputs.flatten(start_dim=1)
+
+                    if 'vit' in self.cfg.img_backbone_name:
+                        outputs = outputs.last_hidden_state[:, 0, :]  # Shape: (batch_size, hidden_size)
+                    else:
+                        outputs = outputs.flatten(start_dim=1)
                     embeddings.append(outputs.cpu())
                 else:
                     # If embeddings are not extracted, just append the images
@@ -87,6 +96,10 @@ class EmbeddingExtractor:
                     )
                 labels.append(targets.cpu())
                 concepts_list.append(concepts.cpu())
+
+                if cnt > 1:
+                    break
+                cnt += 1
                 
         # Concatenate all embeddings and labels
         embeddings = torch.cat(embeddings, dim=0)
@@ -169,6 +182,12 @@ class TextEmbeddingExtractor:
 
         self.model = AutoModel.from_pretrained(self.model_name, torch_dtype=torch.bfloat16)
 
+    #Mean Pooling - Take attention mask into account for correct averaging
+    def _mean_pooling(self, model_output, attention_mask):
+        token_embeddings = model_output[0] #First element of model_output contains all token embeddings
+        input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+        return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+
     def _extract_embeddings(self, loader):
         embeddings = []
         attention_masks = []
@@ -187,10 +206,20 @@ class TextEmbeddingExtractor:
                         token_type_ids=batch['x']["token_type_ids"].to(self.model.device).long(),
                         attention_mask=batch['x']["attention_mask"].to(self.model.device).long()
                     )
-                    emb = outputs.last_hidden_state  # shape: (B, L, D)
-                    # Use the [CLS] token representation. This is useful to reduce the overall number of
-                    # parameters of the model while preserving expressivity in the embeddings.
-                    emb = emb[:, 0, :]  # shape: (B, D)
+                    if 'sentence-transformers' not in self.model_name:
+                        emb = outputs.last_hidden_state  # shape: (B, L, D)
+                        # Use the [CLS] token representation. This is useful to reduce the overall number of
+                        # parameters of the model while preserving expressivity in the embeddings.
+                        emb = emb[:, 0, :]  # shape: (B, D)
+                    else:
+                        # Perform pooling
+                        emb = self._mean_pooling(
+                            outputs, 
+                            batch['x']["attention_mask"].to(self.model.device).long()
+                        )
+
+                        # Normalize embeddings
+                        emb = F.normalize(emb, p=2, dim=1)
                     embeddings.append(emb.cpu())
                 else:
                     # If the embedding is not produced, then the input of the model will be

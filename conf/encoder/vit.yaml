@@ -1,0 +1,7 @@
+encoder:
+  _target_: "src.models.encoders.vit.VitEncoder"
+  output_size: ${dataset.latent_size}
+  type: ${img_backbone_name}
+  input_transform:
+    _target_: "src.models.encoders.transform.ImageTransform"
+    flatten: false

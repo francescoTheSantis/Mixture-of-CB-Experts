@@ -1,6 +1,5 @@
 defaults:
   - common
-  - /encoder: mlp
   - _self_
 
 loader: 
@@ -15,5 +14,3 @@ metadata:
   concept_type: binary
  
 latent_size: 8
-
-hard_concepts: true

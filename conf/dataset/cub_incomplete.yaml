@@ -1,6 +1,5 @@
 defaults:
   - common
-  - /encoder: resnet
   - _self_
 
 loader: 
@@ -17,11 +16,6 @@ metadata:
   concept_type: binary
 
 latent_size: 256
-
-# The loader returns transformed images
-encoder:
-  encoder:
-    input_transform: null
     
 # We generated the CUB incomplete dataset following the same procedure as in the paper: https://arxiv.org/pdf/2504.17921v1.
 # More precisely, selecting the concepts belonging to the following groups:

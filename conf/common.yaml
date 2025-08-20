@@ -4,11 +4,11 @@ defaults:
   - engine: engine
 
 ## Common parameters
-gpus: [0]
-max_epochs: 100
-patience: 20
+gpus: [1]
+max_epochs: 1 #500
+patience: 50
 gamma: 0.5
-lr_patience: 10
+lr_patience: 25
 seed: 1
 activation: LeakyReLU
 num_workers: 0
@@ -20,6 +20,7 @@ batch_size: 128
 ## Shared Concept-based model parameters
 task_penalty: 0.1
 int_prob: 0.25
+hard_concepts: True
 
 ## Shared Concept-embedding based model
 embedding_size: 16
@@ -28,8 +29,8 @@ embedding_size: 16
 memory_size: 8
 
 ## Pre-trained backbones
-img_backbone_name: resnet18
-text_backbone_name: bert-base-uncased
+img_backbone_name: google/vit-large-patch16-224-in21k
+text_backbone_name: sentence-transformers/all-MiniLM-L6-v2
 
 # Parameter that controls the % of selected groups. Valid only for cub dataset. 
 # Variations of this parameter will have no effect on other concepts. 

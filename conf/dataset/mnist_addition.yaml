@@ -1,6 +1,5 @@
 defaults:
   - common
-  - /encoder: resnet
   - _self_
 
 loader: 
@@ -17,9 +16,3 @@ metadata:
   concept_type: binary
 
 latent_size: 128
-
-encoder:
-  encoder:
-    input_transform:
-      _target_: "src.models.encoders.transform.MNISTTransform"
-      flatten: false

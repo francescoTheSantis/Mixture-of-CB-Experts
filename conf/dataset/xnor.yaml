@@ -1,6 +1,5 @@
 defaults:
   - common
-  - /encoder: mlp
   - _self_
 
 loader: 
@@ -9,11 +8,9 @@ loader:
 # Dataset parameters
 metadata:
   task: classification
-  lr: 0.01
+  lr: 0.05
   name: xnor
   data_type: toy
   concept_type: binary
 
 latent_size: 8
-
-hard_concepts: true

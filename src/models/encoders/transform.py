@@ -26,6 +26,31 @@ class ImageTransform(nn.Module):
         return x
 
 
+class VitTransform(nn.Module):
+    """
+    A simple image transformation module that can be used to preprocess images
+    before passing them to the ViT encoder.
+
+    Args:
+        input_size (int): Size of the input images (assumed square).
+    """
+
+    def __init__(self, flatten=False):
+        super().__init__()
+        self.transform = torchvision.transforms.Compose([
+            torchvision.transforms.Resize((224, 224)),
+            torchvision.transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                                                std=[0.5, 0.5, 0.5])
+        ])
+        self.flatten = flatten
+
+    def forward(self, x):
+        x = self.transform(x)
+        if self.flatten:
+            x = x.view(x.size(0), -1)
+        return x
+
+
 class MNISTTransform(nn.Module):
     """
     A simple transformation module for MNIST data.
@@ -36,6 +61,7 @@ class MNISTTransform(nn.Module):
         super().__init__()
         self.transform = torchvision.transforms.Compose([
             torchvision.transforms.Normalize((0.1307,), (0.3081,)),
+            torchvision.transforms.Resize((224, 224))
         ])
         self.flatten = flatten
 

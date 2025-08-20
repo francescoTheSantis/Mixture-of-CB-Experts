@@ -11,6 +11,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from torch import nn
 from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
+import transformers
 import scienceplots
 
 warnings.filterwarnings("ignore")
@@ -84,8 +85,15 @@ def get_backbone_latent_size(backbone):
         model = resnet101(pretrained=True)
     elif backbone == 'resnet152':
         model = resnet152(pretrained=True)
+    elif 'vit' in backbone:
+        model = transformers.ViTModel.from_pretrained(backbone)
     elif backbone == 'bert-base-uncased':
+        model = transformers.AutoModel.from_pretrained(backbone)
         return 768  # BERT base model has 768 hidden size
+    elif backbone == 'sentence-transformers/all-mpnet-base-v2':
+        return 768  # all-mpnet-base-v2 model has 768 hidden size
+    elif backbone == 'sentence-transformers/all-MiniLM-L6-v2':
+        return 384  # all-MiniLM-L6-v2 model has 384 hidden size
     else:
         raise ValueError(f"Image backbone {backbone} not recognized.")
     
@@ -93,8 +101,12 @@ def get_backbone_latent_size(backbone):
         model = nn.Sequential(*list(model.children())[:-1])
         test = model(torch.randn((1,3,224,224)))
         latent_dim = test.flatten(start_dim=1).shape[1]
+    elif 'vit' in backbone:
+        test = model(torch.randn((1,3,224,224)))
+        latent_dim = test.last_hidden_state[:, 0, :].shape[1]
     else:
-        pass # This is a placeholder for other backbones if needed
+        pass 
+    
     # delete the model to free memory
     del model
     del test
@@ -102,7 +114,7 @@ def get_backbone_latent_size(backbone):
     return latent_dim
 
 def get_type_from_name(dataset_name):
-    if dataset_name in ['mnist_addition', 'cub', 'cub_incomplete', 'awa2', 'awa2_incomplete', 'xor']:
+    if dataset_name in ['mnist_addition', 'cub', 'cub_incomplete', 'awa2', 'awa2_incomplete', 'xor', 'celeba']:
         return 'image'
     else:
         return 'text'
@@ -119,6 +131,72 @@ def get_batch_from_loader(train_loader, device):
         # Restore original tensor type
         torch.set_default_dtype(original_default_tensor_type)
     return batch
+
+def setup_encoder(cfg: DictConfig, input_size: int, backbone_latent_size: int) -> DictConfig:
+
+    type = None
+
+    # if we want to extract the embeddings it means that we are NOT 
+    # fine-tuning a pre-trained backbone during training.
+    # This means that we just need a linear encoder.
+    if cfg.extract_embeddings:
+        input_size = input_size if cfg.dataset.metadata.name != 'xor' else 2 
+        cfg.model.params.encoder = {
+            '_target_': 'src.models.encoders.mlp.MLPEncoder',
+            'output_size': backbone_latent_size, 
+            'activation': cfg.activation,
+        }
+    else:
+        backbone = cfg.img_backbone_name if get_type_from_name(cfg.dataset.metadata.name) == 'image' \
+                                            else cfg.text_backbone_name
+        
+        if cfg.dataset.metadata.data_type == 'toy':
+            target = 'src.models.encoders.mlp.MLPEncoder'
+            transform = None
+        else:
+            if 'vit' in backbone:
+                target = 'src.models.encoders.vit.VitEncoder'
+                transform = {
+                    '_target_': "src.models.encoders.transform.VitTransform",
+                    'flatten': False
+                }
+            elif 'resnet' in backbone:
+                target = 'src.models.encoders.resnet.ResNetEncoder'
+                transform = {
+                    '_target_': "src.models.encoders.transform.ImageTransform",
+                    'flatten': False
+                }
+            elif ('sentence-transformers' in backbone) or ('bert' in backbone):
+                target = 'src.models.encoders.transformer.TransformerEncoder'
+                transform = None
+                type = backbone
+
+        # If the dataset is mnist_addition, then perform its own preprocessing
+        if cfg.dataset.metadata.name == 'mnist_addition':
+            transform = {
+                '_target_': "src.models.encoders.transform.MNISTTransform",
+                'flatten': False
+            }
+
+        # If we are fine-tuning a pre-trained model,
+        # we need to set the encoder to the one defined in the dataset config.
+        cfg.model.params.encoder = {
+            '_target_': target,
+            'output_size': backbone_latent_size, # we do not want the linear layer to reduce the size of the embeddings
+            'input_transform' : transform,
+        } 
+
+    with open_dict(cfg):
+        cfg.model.params.encoder.update(
+            input_size = input_size,
+        )
+
+        if type != None:
+            cfg.model.params.encoder.update(
+                type = type
+            )
+
+    return cfg
 
 def update_config_from_data(cfg: DictConfig, train_loader, c_names,
                             y_names, c_groups, csv_log_dir) -> DictConfig:
@@ -155,6 +233,10 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
     else:
         c_groups = dict(c_groups)
 
+    backbone = cfg.img_backbone_name if get_type_from_name(cfg.dataset.metadata.name) == 'image' \
+                                        else cfg.text_backbone_name
+    backbone_latent_size = cfg.dataset.latent_size if cfg.extract_embeddings else get_backbone_latent_size(backbone)
+
     with open_dict(cfg):
         cfg.engine.update(
             c_names = c_names,
@@ -162,13 +244,8 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             csv_log_dir = csv_log_dir,
             data_type = data_type,
         )
-        
-        # store in the config the size of the embeddings produced by the backbone
-        # check if type is dataset.encoder.encoder
-        if 'encoder' in cfg.dataset and 'type' in cfg.dataset.encoder.encoder:
-            backbone_latent_size = get_backbone_latent_size(cfg.dataset.encoder.encoder.type)
-        else:
-            backbone_latent_size = cfg.dataset.latent_size
+
+        hard_concepts = cfg.hard_concepts if cfg.dataset.metadata.name != 'cebab' else False
 
         cfg.model.params.update(
             output_size = n_labels,
@@ -177,28 +254,11 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             task = cfg.dataset.metadata.task,
             c_groups = c_groups,
             backbone_latent_size = backbone_latent_size,
-            concept_type = cfg.dataset.metadata.concept_type
-
+            concept_type = cfg.dataset.metadata.concept_type,
+            hard_concepts = hard_concepts
         )
 
-        # if we want to extract the embeddings it means that we are NOT 
-        # fine-tuning a pre-trained backbone during training.
-        # This means that we just need a linear encoder.
-        if cfg.extract_embeddings:
-            input_size = backbone_latent_size 
-            cfg.model.params.encoder = {
-                '_target_': 'src.models.encoders.linear.LinearEncoder',
-                'output_size': backbone_latent_size, # we do not want the linear layer to reduce the size of the embeddings
-                'activation': cfg.activation,
-            }
-        else:
-            # If we are fine-tuning a pre-trained model,
-            # we need to set the encoder to the one defined in the dataset config.
-            cfg.model.params.encoder = cfg.dataset.encoder.encoder
-
-        cfg.model.params.encoder.update(
-            input_size = input_size,
-        )
+        cfg = setup_encoder(cfg, input_size, backbone_latent_size)
 
     return cfg
 
