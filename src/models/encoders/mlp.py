@@ -15,8 +15,7 @@ class MLPEncoder(BaseEncoder):
     def __init__(self, input_size, output_size, input_transform=None,
                  hidden_size=64, activation='ReLU', **kwargs):
         super().__init__(input_size, output_size, input_transform)
-        if input_transform is not None:
-            self.input_transform.flatten = True
+        
         self.mlp = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             getattr(nn, activation)(),

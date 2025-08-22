@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 import torch
 import numpy as np
 import ast 
+import pandas as pd
 
 class CEBaBDataset:
     def __init__(self, 
@@ -51,10 +52,15 @@ class CEBaBDataset:
             # The NaN values can be produced by the get_normalized_mean function if the dictionary 
             # is empty or if there is an error in the conversion.
             ds['review'] = ds.apply(lambda row: self.get_normalized_mean(row['review_label_distribution'], 'review', True), axis=1)
-            ds['food'] = ds.apply(lambda row: self.get_normalized_mean(row['food_aspect_label_distribution'], 'concept', True), axis=1)
-            ds['ambiance'] = ds.apply(lambda row: self.get_normalized_mean(row['ambiance_aspect_label_distribution'], 'concept', True), axis=1)
-            ds['service'] = ds.apply(lambda row: self.get_normalized_mean(row['service_aspect_label_distribution'], 'concept', True), axis=1)
-            ds['noise'] = ds.apply(lambda row: self.get_normalized_mean(row['noise_aspect_label_distribution'], 'concept', True), axis=1)
+            # ds['food'] = ds.apply(lambda row: self.get_normalized_mean(row['food_aspect_label_distribution'], 'concept', True), axis=1)
+            # ds['ambiance'] = ds.apply(lambda row: self.get_normalized_mean(row['ambiance_aspect_label_distribution'], 'concept', True), axis=1)
+            # ds['service'] = ds.apply(lambda row: self.get_normalized_mean(row['service_aspect_label_distribution'], 'concept', True), axis=1)
+            # ds['noise'] = ds.apply(lambda row: self.get_normalized_mean(row['noise_aspect_label_distribution'], 'concept', True), axis=1)
+            ds['food'] = ds.apply(lambda row: self.get_max_key(row['food_aspect_label_distribution']), axis=1)
+            ds['ambiance'] = ds.apply(lambda row: self.get_max_key(row['ambiance_aspect_label_distribution']), axis=1)
+            ds['service'] = ds.apply(lambda row: self.get_max_key(row['service_aspect_label_distribution']), axis=1)
+            ds['noise'] = ds.apply(lambda row: self.get_max_key(row['noise_aspect_label_distribution']), axis=1)
+
             # drop the original label distributions
             ds = ds[['description', 'review', 'food', 'ambiance', 'service', 'noise']]
 
@@ -66,6 +72,14 @@ class CEBaBDataset:
 
         # update the concept names to match the new columns
         self.concept_names = ['food', 'ambiance', 'service', 'noise']
+
+        # Expand the categocial concepts
+        ds_train, _ = self.expand_categorical_columns(ds_train, self.concept_names)
+        ds_val, _ = self.expand_categorical_columns(ds_val, self.concept_names)
+        ds_test, new_concept_names = self.expand_categorical_columns(ds_test, self.concept_names)
+
+        # update the concept names to match the new columns
+        self.concept_names = new_concept_names
 
         self.tokenizer = AutoTokenizer.from_pretrained(pre_trained_transformer)
 
@@ -105,6 +119,45 @@ class CEBaBDataset:
             return 2
         elif key=='Positive':
             return 3
+
+    def expand_categorical_columns(self, df, columns_to_expand, value_order=['Negative', 'unknown', 'Positive']):
+        """
+        Expand categorical columns into binary indicator columns with specified order.
+        """
+        
+        # Create a copy of the dataframe to work with
+        df_expanded = df.copy()
+        expanded_column_names = []
+        
+        # For each column, create binary indicator columns in the specified order
+        for col in columns_to_expand:
+            # Create binary columns for each value in the specified order
+            for value in value_order:
+                # Create column name in the format: columnname_value
+                new_col_name = f"{col}_{value.lower()}"
+                expanded_column_names.append(new_col_name)
+                # Create binary indicator: 1 if matches, 0 otherwise
+                df_expanded[new_col_name] = (df_expanded[col] == value).astype(int)
+            
+            # Drop the original column
+            df_expanded = df_expanded.drop(columns=[col])
+        
+        return df_expanded, expanded_column_names
+
+    def get_max_key(self, dictionary_str):
+        """
+        Given a dictionary in string format, return the key with the highest value.
+        """
+        if dictionary_str is None or dictionary_str == '':
+            return None
+        
+        try:
+            dictionary = ast.literal_eval(dictionary_str)
+            if not dictionary:
+                return None
+            return max(dictionary, key=dictionary.get)
+        except:
+            return None
 
     def get_normalized_mean(self, dictionary=None, type='review', normalize=False):
         """
@@ -153,7 +206,7 @@ class CEBaBDataset:
         return model_inputs
 
     def collator(self):
-        data_collator = CustomDataCollator()
+        data_collator = CustomDataCollator(concepts = self.concept_names)
         loaded_train = DataLoader(
             self.tokenized_train, 
             collate_fn=data_collator, 
@@ -178,9 +231,9 @@ class CEBaBDataset:
         return loaded_train, loaded_val, loaded_test
 
 class CustomDataCollator:
-    def __init__(self):
-        pass
-        
+    def __init__(self, concepts):
+        self.concept_names = concepts
+
     def __call__(self, batch):
 
         # transform the batch into a tensor
@@ -188,13 +241,19 @@ class CustomDataCollator:
         token_type_ids = torch.Tensor([example['token_type_ids'] for example in batch])
         attention_mask = torch.Tensor([example['attention_mask'] for example in batch])
         labels = torch.Tensor([example['review'] for example in batch])
-        food = torch.Tensor([example['food'] for example in batch])
-        ambiance = torch.Tensor([example['ambiance'] for example in batch])
-        service = torch.Tensor([example['service'] for example in batch])
-        noise = torch.Tensor([example['noise'] for example in batch])
+        
+        single_concepts = []
+        for concept in self.concept_names:
+            single_concepts.append(torch.Tensor([example[concept] for example in batch]))
+        
+        #food = torch.Tensor([example['food'] for example in batch])
+        #ambiance = torch.Tensor([example['ambiance'] for example in batch])
+        #service = torch.Tensor([example['service'] for example in batch])
+        #noise = torch.Tensor([example['noise'] for example in batch])
 
         # concatenate the concepts in the same tensor
-        concepts = torch.stack([food, ambiance, service, noise], dim=1)
+        #concepts = torch.stack([food, ambiance, service, noise], dim=1)
+        concepts = torch.stack(single_concepts, dim=1)
 
         return {
             'x': {

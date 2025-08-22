@@ -145,13 +145,16 @@ def setup_encoder(cfg: DictConfig, input_size: int, backbone_latent_size: int) -
             '_target_': 'src.models.encoders.mlp.MLPEncoder',
             'output_size': backbone_latent_size, 
             'activation': cfg.activation,
+            'input_transform': {
+                '_target_': 'src.models.encoders.transform.FlattenTransform',
+            }
         }
     else:
         backbone = cfg.img_backbone_name if get_type_from_name(cfg.dataset.metadata.name) == 'image' \
                                             else cfg.text_backbone_name
         
         if cfg.dataset.metadata.data_type == 'toy':
-            target = 'src.models.encoders.mlp.MLPEncoder'
+            target = 'src.models.encoders.linear.LinearEncoder'
             transform = None
         else:
             if 'vit' in backbone:
@@ -245,7 +248,8 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             data_type = data_type,
         )
 
-        hard_concepts = cfg.hard_concepts if cfg.dataset.metadata.name != 'cebab' else False
+        #hard_concepts = True if cfg.dataset.metadata.name=='xor' else cfg.hard_concepts #cfg.hard_concepts if cfg.dataset.metadata.name != 'cebab' else False
+        hard_concepts = cfg.hard_concepts
 
         cfg.model.params.update(
             output_size = n_labels,

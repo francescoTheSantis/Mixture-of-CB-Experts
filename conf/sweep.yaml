@@ -8,16 +8,19 @@ hydra:
       dir: output/everything_sweep/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 1, 2, 3, 4, 5
-      # implemented toy datasets: xor, nor, xnor, dot, trigometry, checkmark 
-      # implemented image datasets: mnist_addition, cub, cub_incomplete, celeba, awa2, awa2_incomplete, mnist_addition
-      # implemented textual datasets: cebab (regression)
-      dataset: xor, cub, mnist_addition, awa2, cebab
+      seed: 1, 2, 3
+      # implemented datasets:
+      # toy: xor, nor, xnor, dot, trigometry, checkmark 
+      # vision: mnist_addition, cub, cub_incomplete, celeba, awa2, awa2_incomplete, mnist_addition
+      # textual: cebab (regression), sst2 (text generation)
+      dataset: xor, cub, mnist_addition, cebab, awa2
       # implemented models: blackbox, cbm_linear, cbm_mlp, cem, dcr, licem, cmr, m_licem
-      model: blackbox, cbm_linear, cem, dcr, cmr, m_licem
+      model: m_licem, blackbox, cbm_linear, cem, dcr, cmr
 
-use_stored_dataset: True
-extract_embeddings: True
+use_stored_dataset: False
+extract_embeddings: False
+
+gpus: [1]
 
 wandb:
   entity: "francescothesantis-politecnico-di-torino"

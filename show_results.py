@@ -14,10 +14,7 @@ plt.style.use(['science', 'ieee', 'no-latex'])
 
 # List the paths containing the results
 paths = [
-    "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-04_17-58-25",
-    "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-05_17-40-29",
-    "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-06_12-02-37",
-    "/home/fdesantis/projects/Linear-Memory-Reasoner/output/everything_sweep/2025-08-06_14-54-02"
+    "",
 ]
 
 result_figs = "figs"
@@ -74,6 +71,9 @@ for exp in exps_path:
         except:
             pass
 
+# Count number of seeds
+num_seeds = performance['seed'].unique().max()
+print(f"Number of unique seeds: {num_seeds}")
 
 ######### Dataset and model styles #########
 
@@ -120,8 +120,8 @@ marker_size = 14
 # If you want to add a new model, just add it to the dictionary.
 model_styles = {
     'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:blue', 'size': marker_size},
-    'cbm_linear': {'marker': '*', 'name': 'CBM+Linear', 'color': 'tab:orange', 'size': marker_size},
-    'cbm_mlp': {'marker': '^', 'name': 'CBM+MLP', 'color': 'tab:red', 'size': marker_size},
+    'cbm_linear': {'marker': '*', 'name': 'CBM', 'color': 'tab:orange', 'size': marker_size},
+    #'cbm_mlp': {'marker': '^', 'name': 'CBM+MLP', 'color': 'tab:red', 'size': marker_size},
     'blackbox': {'marker': 'o', 'name': 'BlackBox', 'color': 'tab:purple', 'size': marker_size},
     'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:gray', 'size': marker_size},
@@ -140,6 +140,7 @@ custom_order = ['xor', \
                 #'awa2_incomplete',
                 #'cub_incomplete',
                 'cebab',
+                #'celeba'
                 ]
 
 # Filter the performance dataframe to keep only the models in model_styles 
@@ -148,10 +149,10 @@ performance = performance[performance['model'].isin(model_styles.keys()) & \
                           performance['dataset'].isin(custom_order)]
 
 ######### Only for the LinearMemoryReasoner with seed=1, plot explanations #########
-try:
-    plot_explanations(lmr_paths)
-except Exception as e:
-    print(f"Error plotting explanations: {e}")
+# try:
+#     plot_explanations(lmr_paths)
+# except Exception as e:
+#     print(f"Error plotting explanations: {e}")
 
 ########## Task & Concept Accuracy Plot ##########
 
@@ -174,6 +175,12 @@ concept_stats = concept_df.groupby(['model', 'dataset']).agg(
     std_accuracy_concept=('accuracy', 'std')
 ).reset_index().fillna(0)
 
+# If the dataset = 'cebab', then divide by 100
+task_stats.loc[task_stats['dataset'] == 'cebab', 'avg_accuracy_task'] /= 100
+task_stats.loc[task_stats['dataset'] == 'cebab', 'std_accuracy_task'] /= 100
+concept_stats.loc[concept_stats['dataset'] == 'cebab', 'avg_accuracy_concept'] /= 100
+concept_stats.loc[concept_stats['dataset'] == 'cebab', 'std_accuracy_concept'] /= 100
+
 # Merge the two DataFrames on 'model' and 'dataset'
 merged_stats = pd.merge(task_stats, concept_stats, on=['model', 'dataset'])
 
@@ -185,45 +192,45 @@ tick_font = {'size': 10}
 merged_stats = merged_stats.sort_values('dataset')
 merged_stats['dataset'] = pd.Categorical(merged_stats['dataset'], categories=custom_order, ordered=True)
 
-fig, axes = plt.subplots(1, len(merged_stats['dataset'].unique()), figsize=(15, 4), sharey=False, sharex=True)
+# fig, axes = plt.subplots(1, len(merged_stats['dataset'].unique()), figsize=(15, 4), sharey=False, sharex=True)
 
-for idx, dataset in enumerate(custom_order):
-    if len(merged_stats['dataset'].unique()) == 1:
-        ax = axes
-    else:
-        ax = axes[idx]
-    data = merged_stats[merged_stats['dataset'] == dataset]
-    for model in data['model']:
-        model_data = data[data['model'] == model]
-        style = model_styles[model]
-        ax.errorbar(model_data['avg_accuracy_concept'], model_data['avg_accuracy_task'],
-                    xerr=model_data['std_accuracy_concept'], yerr=model_data['std_accuracy_task'],
-                    fmt=style['marker'], label=style['name'], color=style['color'], markersize=style['size'],
-                    markeredgewidth=0.5, markeredgecolor='black', alpha=0.7)
-    ax.set_title(get_df_name(dataset), fontdict=title_font)
-    ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
-    ax.minorticks_off()
-    ax.grid(True, zorder=0)
-    if dataset not in ['cebab']:
-        ax.set_ylabel('Task Acc', fontdict=label_font)
-    else:
-        ax.set_ylabel('Task MSE', fontdict=label_font)
+# for idx, dataset in enumerate(custom_order):
+#     if len(merged_stats['dataset'].unique()) == 1:
+#         ax = axes
+#     else:
+#         ax = axes[idx]
+#     data = merged_stats[merged_stats['dataset'] == dataset]
+#     for model in data['model']:
+#         model_data = data[data['model'] == model]
+#         style = model_styles[model]
+#         ax.errorbar(model_data['avg_accuracy_concept'], model_data['avg_accuracy_task'],
+#                     xerr=model_data['std_accuracy_concept'], yerr=model_data['std_accuracy_task'],
+#                     fmt=style['marker'], label=style['name'], color=style['color'], markersize=style['size'],
+#                     markeredgewidth=0.5, markeredgecolor='black', alpha=0.7)
+#     ax.set_title(get_df_name(dataset), fontdict=title_font)
+#     ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
+#     ax.minorticks_off()
+#     ax.grid(True, zorder=0)
+#     if dataset not in ['cebab']:
+#         ax.set_ylabel('Task Acc', fontdict=label_font)
+#     else:
+#         ax.set_ylabel('Task MSE', fontdict=label_font)
 
-    if dataset not in ['cebab']:
-        ax.set_xlabel('Concept Acc', fontdict=label_font)
-    else:
-        ax.set_xlabel('Concept MSE', fontdict=label_font)
+#     if dataset not in ['cebab']:
+#         ax.set_xlabel('Concept Acc', fontdict=label_font)
+#     else:
+#         ax.set_xlabel('Concept MSE', fontdict=label_font)
 
-# Create custom legend handles
-custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=(style['size']-3), label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in model_styles.values()]
+# # Create custom legend handles
+# custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=(style['size']-3), label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in model_styles.values()]
 
-# Create a single legend below the plots
-fig.legend(handles=custom_handles, loc='lower center', ncol=(len(custom_handles) + 1) // 2, fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.15), columnspacing=1.0, handletextpad=0.5)
+# # Create a single legend below the plots
+# fig.legend(handles=custom_handles, loc='lower center', ncol=(len(custom_handles) + 1) // 2, fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.15), columnspacing=1.0, handletextpad=0.5)
 
-plt.tight_layout()
-plt.savefig('figs/performance.pdf')
+# plt.tight_layout()
+# plt.savefig('figs/performance.pdf')
 
-plt.show()
+# plt.show()
 
 
 
@@ -246,7 +253,8 @@ for i, row in pivot_table_avg.iterrows():
     d={}
     for j in pivot_table_std.columns:
         acc = row[j]*100
-        std = pivot_table_std.loc[i, j]*100
+        # From std to SE
+        std = 1.96 * (pivot_table_std.loc[i, j]*100) / num_seeds
         d[j] = f"{acc:.2f} ± {std:.2f}"
     # add a column to the final_table dataframe called row.name which contains d
     final_table = pd.concat([final_table, pd.DataFrame(d, index=[row.name])], axis=0)
@@ -285,7 +293,8 @@ for i, row in pivot_table_avg.iterrows():
     d={}
     for j in pivot_table_std.columns:
         acc = row[j]*100
-        std = pivot_table_std.loc[i, j]*100
+        # From std to SE
+        std = 1.96 * (pivot_table_std.loc[i, j]*100) / num_seeds
         d[j] = f"{acc:.2f} ± {std:.2f}"
     # add a column to the final_table dataframe called row.name which contains d
     final_table = pd.concat([final_table, pd.DataFrame(d, index=[row.name])], axis=0)
@@ -329,10 +338,10 @@ for exp in exps_path:
 performance = performance[performance['model'].isin(model_styles.keys()) & \
                           performance['dataset'].isin(custom_order)]
 
-########## Intervention ID plots ##########
+########## Intervention plots ##########
 
 def plot_intervention_results(df, metric='accuracy', title_font=None, label_font=None, tick_font=None, legend_font=None):
-    unique_noises = [0]
+    unique_noises = [0.0]
     unique_datasets = custom_order
     n_cols = len(unique_noises)
     n_rows = len(unique_datasets)
@@ -407,7 +416,7 @@ plot_intervention_results(performance, metric='accuracy', title_font=title_font,
 
 
 
-# ########## Intervention plots ########## 
+# # ########## Intervention plots ########## 
 
 # def plot_intervention_results(df, metric='accuracy', title_font=None, label_font=None, tick_font=None, legend_font=None):
 #     unique_noises = [0, 0.1, 0.2, 0.4, 0.6, 0.8, 1]

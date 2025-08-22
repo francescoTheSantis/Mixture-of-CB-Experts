@@ -11,4 +11,4 @@ metadata:
   lr: 0.001
   name: cebab
   data_type: text
-  concept_type: numeric 
+  concept_type: binary 

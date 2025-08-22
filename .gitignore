@@ -1,7 +1,6 @@
 figs/
 cache/
 _OLD/
-datasets/
 multirun/
 stored_results/
 test.yaml

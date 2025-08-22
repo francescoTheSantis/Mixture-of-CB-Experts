@@ -5,13 +5,13 @@ defaults:
 
 ## Common parameters
 gpus: [1]
-max_epochs: 1 #500
-patience: 50
+max_epochs: 100
+patience: 20
 gamma: 0.5
-lr_patience: 25
+lr_patience: 10
 seed: 1
 activation: LeakyReLU
-num_workers: 0
+num_workers: 5
 
 ## These parameters can be overridden by the dataset config
 latent_size: 64
@@ -29,8 +29,10 @@ embedding_size: 16
 memory_size: 8
 
 ## Pre-trained backbones
-img_backbone_name: google/vit-large-patch16-224-in21k
-text_backbone_name: sentence-transformers/all-MiniLM-L6-v2
+# Examples of pre-trained image backbones: resnet18, resnet34, ..., vit_large_patch16_224_in21k
+# Example of pre-trained text backbones: bert-base-uncased, ..., sentence-transformers/all-MiniLM-L6-v2
+img_backbone_name: resnet34 
+text_backbone_name: bert-base-uncased
 
 # Parameter that controls the % of selected groups. Valid only for cub dataset. 
 # Variations of this parameter will have no effect on other concepts. 

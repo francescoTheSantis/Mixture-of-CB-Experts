@@ -124,12 +124,12 @@ class loader(object):
     def get_names(self):
         # Get the concept names and task names
         if self.name in ['xor', 'trigonometry', 'dot', 'checkmark']:
-            dataset = ToyDataset(self.name, size=1000, random_state=42)
+            dataset = ToyDataset(self.name, size=1000)
             concept_names = dataset.concept_attr_names
             task_names = [self.name] #['0', '1']
             concept_groups = None
         elif self.name in ['or', 'xnor', 'nor']:
-            dataset = ToyDataset('xor', size=1000, random_state=42)
+            dataset = ToyDataset('xor', size=1000)
             concept_names = dataset.concept_attr_names
             task_names = [self.name]
             concept_groups = None
@@ -172,9 +172,9 @@ class loader(object):
             task_names = [f"w_{i}" for i in range(len(tokenizer.get_vocab().keys()))] # simple keys were not working
             concept_groups = None
         elif self.name == "cebab":
-            concept_names = ['food', 'ambience', 'service', 'noise']
+            concept_names = ['food_negative', 'food_unknown', 'food_positive', 'ambiance_negative', 'ambiance_unknown', 'ambiance_positive', 'service_negative', 'service_unknown', 'service_positive', 'noise_negative', 'noise_unknown', 'noise_positive']
             task_names = ['review']
-            concept_groups = None
+            concept_groups = {'food': [0,1,2], 'ambiance': [3,4,5], 'service': [6,7,8], 'noise': [9,10,11]}
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
         

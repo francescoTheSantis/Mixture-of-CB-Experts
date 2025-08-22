@@ -72,3 +72,8 @@ class MNISTTransform(nn.Module):
         else:
             x = x.repeat(1, 3, 1, 1) # Convert to 3 channels if using an ImageEncoder
         return x
+
+
+class FlattenTransform(nn.Module):
+    def forward(self, x):
+        return x.view(x.size(0), -1)
