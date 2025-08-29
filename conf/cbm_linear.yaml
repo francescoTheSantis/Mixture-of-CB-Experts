@@ -1,0 +1,13 @@
+defaults:
+  - common
+  - _self_
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+      dir: output/cbm_linear/${now:%Y-%m-%d_%H-%M-%S}
+  sweeper:
+    params:
+      seed: 1, 2, 3, 4, 5
+      dataset: xor, cub, mnist_addition, cebab, awa2, cub_incomplete, awa2_incomplete
+      model: cbm_linear

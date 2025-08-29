@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 from torch import nn
-from transformers import AutoModel
+from transformers import AutoProcessor, AutoModel
 from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
 from tqdm import tqdm
 import torch.nn.functional as F
@@ -45,7 +45,7 @@ class EmbeddingExtractor:
             self.model = nn.Sequential(*list(self.model.children())[:-1])
             # save the latent dimension of the backbone's output
             self.latent_dim = self.model[-2][-1].bn2.num_features
-        elif 'vit' in self.img_backbone_name:
+        elif 'vit' in self.img_backbone_name or 'dino' in self.img_backbone_name:
             self.model = AutoModel.from_pretrained(self.img_backbone_name)
             self.latent_dim = self.model.config.hidden_size
         else:
@@ -81,7 +81,7 @@ class EmbeddingExtractor:
                     # Extract embeddings
                     outputs = self.model(images)
 
-                    if 'vit' in self.cfg.img_backbone_name:
+                    if 'vit' in self.cfg.img_backbone_name or 'dino' in self.cfg.img_backbone_name:
                         outputs = outputs.last_hidden_state[:, 0, :]  # Shape: (batch_size, hidden_size)
                     else:
                         outputs = outputs.flatten(start_dim=1)

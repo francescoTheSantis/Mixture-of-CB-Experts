@@ -289,7 +289,7 @@ class loader(object):
             raise ValueError(f"Dataset {self.name} not recognized.")
 
         if get_type_from_name(self.name) != 'text':
-            loaded_train =DataLoader(train_dataset, 
+            loaded_train = DataLoader(train_dataset, 
                                     batch_size=self.batch_size, 
                                     shuffle=True,
                                     num_workers=self.num_workers,

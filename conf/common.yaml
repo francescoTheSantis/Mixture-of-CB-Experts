@@ -5,10 +5,10 @@ defaults:
 
 ## Common parameters
 gpus: [1]
-max_epochs: 100
-patience: 20
+max_epochs: 500
+patience: 50
+lr_patience: 25
 gamma: 0.5
-lr_patience: 10
 seed: 1
 activation: LeakyReLU
 num_workers: 5
@@ -20,19 +20,19 @@ batch_size: 128
 ## Shared Concept-based model parameters
 task_penalty: 0.1
 int_prob: 0.25
-hard_concepts: True
+hard_concepts: False
 
 ## Shared Concept-embedding based model
 embedding_size: 16
 
 ## Shared Concept Memory model
-memory_size: 8
+memory_size: 5
 
 ## Pre-trained backbones
-# Examples of pre-trained image backbones: resnet18, resnet34, ..., vit_large_patch16_224_in21k
+# Examples of pre-trained image backbones: resnet18, resnet34, google/vit-base-patch16-224, facebook/dinov2-base
 # Example of pre-trained text backbones: bert-base-uncased, ..., sentence-transformers/all-MiniLM-L6-v2
-img_backbone_name: resnet34 
-text_backbone_name: bert-base-uncased
+img_backbone_name: facebook/dinov2-base
+text_backbone_name: sentence-transformers/all-MiniLM-L6-v2
 
 # Parameter that controls the % of selected groups. Valid only for cub dataset. 
 # Variations of this parameter will have no effect on other concepts. 
@@ -41,19 +41,19 @@ concept_percentage: Null
 
 # Set this parameter to True if you want to use the stored, preprocessed dataset,
 # otherwise it will be preprocessed from scratch and saved in the cache. 
-use_stored_dataset: False
+use_stored_dataset: True
 
 # Set this variable to true if you want to preprocess the data 
 # using a pre-trained model.
-extract_embeddings: False
+extract_embeddings: True
 
 wandb:
   # Set the params below if you want to use wandb as logger.
   # Set it to null if you do not want to use wandb.
   #project: null # Set to your project name
   #entity: null # Set to your wandb entity name
-  entity: null
-  project: null
+  entity: "francescothesantis-politecnico-di-torino"
+  project: "linear_memory_reasoner"
 
 # The note will be appended to the group name in wandb 
 # and will be considered as an additional tag (for filtering).

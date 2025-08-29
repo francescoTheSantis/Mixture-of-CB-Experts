@@ -8,9 +8,16 @@ hydra:
       dir: output/cub_ablation/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 1, 2, 3, 4, 5
+      seed: 1, 2, 3
       dataset: cub
       concept_percentage: 1.0, 0.8, 0.6, 0.4, 0.2
-      model: blackbox, cbm_linear, cem, dcr, cmr, m_licem
+      model: cbm_linear, cem, dcr, cmr, licem, m_licem
 
-gpus: [0]
+gpus: [1]
+
+
+wandb:
+  # Set the params below if you want to use wandb as logger.
+  # Set it to null if you do not want to use wandb.
+  project: null 
+  entity: null

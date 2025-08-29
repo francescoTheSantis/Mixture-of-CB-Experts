@@ -1,0 +1,16 @@
+defaults:
+  - common
+  - _self_
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+      dir: output/memory_ablation/${now:%Y-%m-%d_%H-%M-%S}
+  sweeper:
+    params:
+      seed: 1, 2, 3
+      dataset: cub, cub_incomplete, awa2_incomplete
+      model: m_licem, pred_cbm, pred_cbm_local, cmr
+      memory_size: 1, 2, 3, 4, 5, 10, 20
+
+gpus: [1]

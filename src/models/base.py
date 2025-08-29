@@ -81,6 +81,7 @@ class BaseModel(nn.Module):
         if self.noise!=None:
             eps = torch.randn_like(x)
             x = eps * self.noise + x * (1-self.noise)
+            del eps
             
         if self.training or self.test_interventions:
             # intervene on the concepts according to the int_prob
@@ -151,35 +152,58 @@ class BaseModel(nn.Module):
         # combine the two losses by considering the task penalty regularization
         loss = concept_loss + self.task_penalty * task_loss
         return loss
-        
-    def get_intervened_concepts_predictions(self, labels, groups=None):
-        '''
-        Function to generate a mask for the intervention process.
-        The mask is generated based on the probability of intervention 
-        and the mismatch between predictions and labels.
-        '''
-        if groups is not None:
-            n_groups = len(groups)
-            # Generate a mask of shape Batch x n_groups
-            random_mask = torch.rand((labels.shape[0],n_groups), 
-                                     dtype=torch.float,
-                                     device=labels.device)
-            mask = (random_mask < self.int_prob)
-            mask = mask.int()
-            # Apply group-based intervention
-            group_mask = torch.zeros_like(labels, dtype=torch.int, device=labels.device)
-            for idx, (_, group) in enumerate(groups.items()):
-                group_mask[:, group] = mask[:, idx].unsqueeze(1).expand(-1, len(group))
-            mask = group_mask.int()
-        else:
-            # Generate a probability mask of the same shape
-            random_mask = torch.rand_like(labels, dtype=torch.float)
-            # Apply probability threshold only on mismatched elements
-            mask = (random_mask < self.int_prob)
-            mask = mask.int()
+            
+    # def get_intervened_concepts_predictions(self, labels, groups=None):
+    #     '''
+    #     Function to generate a mask for the intervention process.
+    #     The mask is generated based on the probability of intervention.
+    #     '''
+    #     with torch.no_grad():
+    #         if groups is not None:
+    #             # Create the final mask directly without intermediate tensors
+    #             mask = torch.zeros_like(labels, dtype=torch.int32, device=labels.device)
+    #             batch_size = labels.shape[0]
 
-        return mask
-    
+    #             # Process each group independently to avoid large intermediate tensors
+    #             for group_name, group_indices in groups.items():
+    #                 # Generate random values only for this group
+    #                 random_val = torch.rand(batch_size, device=labels.device, dtype=torch.float32)
+    #                 group_mask = (random_val < self.int_prob).int()
+                    
+    #                 # Apply mask directly to the group indices
+    #                 mask[:, group_indices] = group_mask.unsqueeze(1)
+                    
+    #                 # Clean up immediately
+    #                 del random_val, group_mask
+                
+    #             # Force GPU cache cleanup
+    #             if labels.device.type == 'cuda':
+    #                 torch.cuda.empty_cache()
+                
+    #             return mask
+    #         else:
+    #             # Generate mask directly for non-grouped case
+    #             random_values = torch.rand_like(labels, dtype=torch.float32)
+    #             mask = (random_values < self.int_prob).int()
+                
+    #             # Clean up
+    #             del random_values
+    #             if labels.device.type == 'cuda':
+    #                 torch.cuda.empty_cache()
+                
+    #             return mask
+
+    def get_intervened_concepts_predictions(self, labels, groups=None):
+        """
+        Generate the random mask to compute interventions.
+        Specifically, we randomly select rows in the batch whose concepts
+        will be replaced with their respective ground-truth values.
+        """
+        bsz = labels.shape[0]
+        n_concepts = labels.shape[1]
+
+        return (torch.rand(bsz, 1, device=labels.device) < self.int_prob).expand(bsz, n_concepts).int()
+
     def filter_output_for_loss(self, y_output, c_output=None):
         """
         Filter the output of the model for loss computation.

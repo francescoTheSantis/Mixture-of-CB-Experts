@@ -86,11 +86,14 @@ class Trainer:
         Perform interventions on the test set and return the dataframe containing the results.
         Interventional accuracy is computed for different levels of noise and intervention probability.
         """
-        intervention_df = pd.DataFrame(columns=['noise', 'p_int', 'f1', 'accuracy'])
+        # Pre-allocate list for better performance
+        intervention_results = []
+        
         # Set the model on the right device
         self.model = self.model.to(self.cfg.gpus[0])
         self.model.eval()
         self.model.model.test_interventions = True
+        
         with torch.no_grad():
             for eps in self.epss:
                 if verbose:
@@ -99,8 +102,11 @@ class Trainer:
                     y_preds = []
                     y_trues = []
                     self.model.model.noise = eps
+                    self.model.model.int_prob = p_int
+                    
                     for batch in test_dataloader:
                         x, c, y = self.model.unpack_batch(batch)
+                        
                         # Move the data to the GPU
                         if isinstance(x, dict):
                             x = {k: v.to(self.cfg.gpus[0]) for k, v in x.items()}
@@ -108,41 +114,64 @@ class Trainer:
                             x = x.to(self.cfg.gpus[0])
                         c = c.to(self.cfg.gpus[0])
                         y = y.to(self.cfg.gpus[0])
-                        inputs = {'x':x, 'c':c, 'y':y}
-                        self.model.model.int_prob = p_int
+                        
+                        inputs = {'x': x, 'c': c, 'y': y}
                         output = self.model.forward(inputs)
                         output = self.model.model.filter_output_for_metrics(*output)
-                        y_pred = output[0]
+                        
+                        # Move to CPU immediately and detach to free GPU memory
+                        y_pred = output[0].detach().cpu()
+                        y_cpu = y.detach().cpu()
+                        
                         y_preds.append(y_pred)
-                        y_trues.append(y)
-                    y = torch.cat(y_trues, dim=0)
+                        y_trues.append(y_cpu)
+                        
+                        # Clear GPU memory more aggressively
+                        del x, c, y, inputs, output, y_pred, y_cpu
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+
+                    # Concatenate outside the loop
+                    y = torch.cat(y_trues, dim=0).numpy()
                     y_preds = torch.cat(y_preds, dim=0)
-                    y = y.cpu().numpy()
+
+                    # Process predictions
                     if len(self.cfg.model.params.y_names)==1 and self.cfg.dataset.metadata.task != 'regression':
                         if self.model.model.__class__.__name__ in ['DeepConceptReasoner', 'ConceptMemoryReasoner']:
-                            y_preds = (y_preds > 0.5).long().cpu().numpy()
+                            y_preds = (y_preds > 0.5).long().numpy()
                         else:
-                            y_preds = (y_preds > 0.).long().cpu().numpy()
+                            y_preds = (y_preds > 0.).long().numpy()
                     elif self.cfg.dataset.metadata.task == 'regression':
-                        y_preds = y_preds.squeeze().cpu().numpy()
+                        y_preds = y_preds.squeeze().numpy()
                     else:
-                        y_preds = y_preds.argmax(-1).cpu().numpy()
+                        y_preds = y_preds.argmax(-1).numpy()
 
+                    # Calculate metrics
                     if self.cfg.dataset.metadata.task == 'regression':
                         task_f1, task_acc = 0, 0
                         mse = np.mean((y - y_preds) ** 2)
                     else:
                         task_f1, task_acc = f1_acc_metrics(y, y_preds)
                         mse = 0
-                    intervention_results = {
-                        'noise': round(eps,1), 
-                        'p_int': round(p_int,1), 
-                        'f1': round(task_f1,2), 
-                        'accuracy': round(task_acc,2),
+                    
+                    # Append to list instead of concatenating DataFrames
+                    intervention_results.append({
+                        'noise': round(eps, 1), 
+                        'p_int': round(p_int, 1), 
+                        'f1': round(task_f1, 2), 
+                        'accuracy': round(task_acc, 2),
                         'mse': round(mse, 4)
-                    }
-                    intervention_df = pd.concat([intervention_df, pd.DataFrame([intervention_results])], ignore_index=True)
+                    })
+                    
+                    # Clear variables to free memory
+                    del y, y_preds, y_trues
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+        
         self.model.model.test_interventions = False
+        
+        # Create DataFrame once at the end
+        intervention_df = pd.DataFrame(intervention_results)
         return intervention_df
 
     def plot_results(self, test_dataloader, verbose=True):

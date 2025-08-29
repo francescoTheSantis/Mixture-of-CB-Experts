@@ -22,6 +22,8 @@ def main(cfg: DictConfig) -> None:
                              'stored_tensors', 
                              'embeddings' if cfg.extract_embeddings else 'raw', # whether it contains embeddings or not
                              cfg.dataset.metadata.name)
+    data_path = data_path + f"_{cfg.dataset.loader.concept_percentage.replace('.', '')}" if cfg.dataset.loader.concept_percentage != None \
+                                                                        else data_path
     train_path = f"{data_path}/train.pt"
     val_path = f"{data_path}/val.pt"
     test_path = f"{data_path}/test.pt"

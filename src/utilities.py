@@ -11,6 +11,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from torch import nn
 from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
+from transformers import CLIPProcessor, CLIPModel
 import transformers
 import scienceplots
 
@@ -85,7 +86,7 @@ def get_backbone_latent_size(backbone):
         model = resnet101(pretrained=True)
     elif backbone == 'resnet152':
         model = resnet152(pretrained=True)
-    elif 'vit' in backbone:
+    elif 'vit' in backbone or 'dino' in backbone:
         model = transformers.ViTModel.from_pretrained(backbone)
     elif backbone == 'bert-base-uncased':
         model = transformers.AutoModel.from_pretrained(backbone)
@@ -101,7 +102,7 @@ def get_backbone_latent_size(backbone):
         model = nn.Sequential(*list(model.children())[:-1])
         test = model(torch.randn((1,3,224,224)))
         latent_dim = test.flatten(start_dim=1).shape[1]
-    elif 'vit' in backbone:
+    elif 'vit' in backbone or 'dino' in backbone:
         test = model(torch.randn((1,3,224,224)))
         latent_dim = test.last_hidden_state[:, 0, :].shape[1]
     else:

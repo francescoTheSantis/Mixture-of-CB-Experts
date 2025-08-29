@@ -3,8 +3,8 @@ cache/
 _OLD/
 multirun/
 stored_results/
+debugging/
 test.yaml
-baselines.yaml
 m_licems.yaml
 output/
 wandb_entity.txt
