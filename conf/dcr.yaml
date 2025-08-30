@@ -9,5 +9,5 @@ hydra:
   sweeper:
     params:
       seed: 1, 2, 3, 4, 5
-      dataset: xor, cub, mnist_addition, cebab, awa2, cub_incomplete, awa2_incomplete
+      dataset: cifar10, cifar100 #xor, cub, mnist_addition, cebab, awa2, cub_incomplete, awa2_incomplete
       model: dcr

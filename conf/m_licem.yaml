@@ -10,4 +10,4 @@ hydra:
     params:
       seed: 1, 2, 3, 4, 5
       dataset: xor, cub, mnist_addition, cebab, awa2, cub_incomplete, awa2_incomplete
-      model: m_licem
+      model: m_licem, m_licem_global

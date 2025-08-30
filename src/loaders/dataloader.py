@@ -12,6 +12,9 @@ from src.loaders.datasets.awa2 import CLASS_NAMES as awa2_class_names
 from src.loaders.datasets.awa2 import CONCEPT_GROUPS as awa2_concept_groups
 from torch_concepts.data.celeba import CelebADataset
 from src.loaders.datasets.cebab import CEBaBDataset
+from src.loaders.datasets.cifar.cifar10 import get_CIFAR10_CBM_dataloader
+from src.loaders.datasets.cifar.cifar100 import get_CIFAR100_CBM_dataloader
+
 from torch.utils.data import DataLoader, random_split
 from env import DATA_PATH
 from src.loaders.preprocessing import EmbeddingExtractor, \
@@ -175,6 +178,16 @@ class loader(object):
             concept_names = ['food_negative', 'food_unknown', 'food_positive', 'ambiance_negative', 'ambiance_unknown', 'ambiance_positive', 'service_negative', 'service_unknown', 'service_positive', 'noise_negative', 'noise_unknown', 'noise_positive']
             task_names = ['review']
             concept_groups = {'food': [0,1,2], 'ambiance': [3,4,5], 'service': [6,7,8], 'noise': [9,10,11]}
+        elif self.name in ['cifar10', 'cifar100']:
+            with open(f"{DATA_PATH}{self.name}/{self.name}_filtered.txt", "r") as file:
+                # Read the contents of the file
+                concept_list = [line.strip() for line in file]
+            concept_names = concept_list
+            with open(f"{DATA_PATH}{self.name}/{self.name}_classes.txt", "r") as file:
+                # Read the contents of the file
+                task_label_list = [line.strip() for line in file]            
+            task_names = task_label_list
+            concept_groups = None
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
         
@@ -285,6 +298,18 @@ class loader(object):
         elif self.name == "cebab":
             loader = CEBaBDataset(cfg.text_backbone_name, self.batch_size)
             loaded_train, loaded_val, loaded_test = loader.collator()
+        elif self.name == 'cifar10':
+            train_dataset, test_dataset = get_CIFAR10_CBM_dataloader(DATA_PATH)
+            # split the train in training and validation
+            train_size = int(0.9 * len(train_dataset))
+            val_size = len(train_dataset) - train_size
+            train_dataset, val_dataset = random_split(train_dataset, [train_size, val_size])
+        elif self.name == 'cifar100':
+            train_dataset, test_dataset = get_CIFAR100_CBM_dataloader(DATA_PATH)
+            # split the train in training and validation
+            train_size = int(0.9 * len(train_dataset))
+            val_size = len(train_dataset) - train_size
+            train_dataset, val_dataset = random_split(train_dataset, [train_size, val_size])
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
 

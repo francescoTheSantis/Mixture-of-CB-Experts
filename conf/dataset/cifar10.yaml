@@ -1,0 +1,17 @@
+defaults:
+  - common
+  - _self_
+  
+loader: 
+  name: cifar10
+  batch_size: 128
+
+# Dataset parameters
+metadata:
+  task: classification
+  lr: 0.0005
+  name: cifar10
+  data_type: image
+  concept_type: binary
+
+latent_size: 128

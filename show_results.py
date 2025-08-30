@@ -24,8 +24,10 @@ custom_order = ['xor', \
                 'awa2',
                 'awa2_incomplete',
                 'cub_incomplete',
-                'cebab',
-                #'celeba'
+                #'cebab',
+                #'celeba',
+                'cifar10',
+                'cifar100',
                 ]
 
 # Define a dictionary to associate marker, name, and color to each model.
@@ -41,8 +43,6 @@ model_styles = {
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:gray', 'size': marker_size},
     'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:cyan', 'size': marker_size},
     'm_licem': {'marker': 's', 'name': 'M-LICEM', 'color': 'tab:green', 'size': marker_size},
-    'pred_cbm': {'marker': 'P', 'name': 'Pred-CBM', 'color': 'tab:red', 'size': marker_size},
-    'pred_cbm_local': {'marker': 'P', 'name': 'Pred-CBM Local', 'color': 'tab:blue', 'size': marker_size}    
 }
 
 # Call the function with the desired metric and font properties
@@ -57,14 +57,15 @@ def main():
         # List the paths containing the results
         paths = [
             "/home/fdesantis/projects/Linear-Memory-Reasoner/output/blackbox/2025-08-25_18-52-25",
+            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/blackbox/2025-08-30_17-56-57",
             "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cbm_linear/2025-08-25_18-53-03",
+            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cbm_linear/2025-08-30_18-05-17",
             "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cem/2025-08-25_18-54-03",
+            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cem/2025-08-30_18-59-10",
             "/home/fdesantis/projects/Linear-Memory-Reasoner/output/licem/2025-08-25_22-13-17",
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/m_licem/2025-08-25_22-13-17",
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/pred_cbm/2025-08-25_22-13-17",
+            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/licem/2025-08-30_18-59-10",
             "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cmr/2025-08-26_19-02-12",
             "/home/fdesantis/projects/Linear-Memory-Reasoner/output/dcr/2025-08-26_19-02-21",
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/pred_cbm_local/2025-08-27_18-46-37"
         ]
 
         result_figs = "figs"
@@ -302,7 +303,8 @@ def main():
 
     try:
         paths = [
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/memory_ablation/2025-08-28_11-09-32",
+            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/memory_ablation/2025-08-29_18-14-44",
+            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/memory_ablation/2025-08-30_14-51-39"
         ]
 
         result_figs = "figs"

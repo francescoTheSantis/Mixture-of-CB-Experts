@@ -240,8 +240,25 @@ class LinearMemoryReasoner(BaseModel):
         
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
-        # L2 Regularization over weights
-        loss += self.weight_reg * self.equation_decoder(self.equation_memory.weight).norm(p=2)
+
+        # Collect all the parameters in the memory
+        params = self.equation_decoder(self.equation_memory.weight)
+
+        if self.bias == 'local':
+            weights = params[:,:-1,:]
+            bias = params[:,-1,:]
+        else:
+            weights = params
+            bias = None
+
+        # L1 Regularization over weights
+        loss += self.weight_reg * weights.abs().sum()
+        # L2 regularization over the bias (if used)
+        if self.bias == 'local':
+            loss += self.weight_reg * bias.pow(2).sum()
+        elif self.bias == 'global':
+            loss += self.weight_reg * self.bias_params.pow(2).sum()
+
         return loss
 
     def filter_output_for_metrics(self, y_output, c_output=None, predicted_cbm=None, distribution_over_memory=None):

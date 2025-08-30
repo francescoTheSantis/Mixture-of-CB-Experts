@@ -44,8 +44,11 @@ def get_df_name(df):
         return 'CUB200-Incomplete'
     elif df=='awa2_incomplete':
         return 'AWA2-Incomplete'
+    elif df=='cifar10':
+        return 'CIFAR10'
+    elif df=='cifar100':
+        return 'CIFAR100'
 
-        
 
 def plot_intervention_results(df, 
                                 metric='accuracy', 
