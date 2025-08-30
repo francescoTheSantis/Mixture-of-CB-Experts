@@ -15,6 +15,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
 from env import HOME, DATA_PATH
 
 
+CONCEPT_NAMES = ["first_digit", "second_digit", "addition", "subtraction", "multiplication", "division"]
+
+
 class ArithmeticMNISTDataset(Dataset):
     def __init__(
             self, 
@@ -77,13 +80,13 @@ class ArithmeticMNISTDataset(Dataset):
             flags = [1, 0, 0, 0]
         elif op == '-':
             result = a - b
-            flags = [0, 0, 0, 1]
+            flags = [0, 1, 0, 0]
         elif op == 'x':
             result = a * b
             flags = [0, 0, 1, 0]
         elif op == '/':
             result = a / b
-            flags = [0, 1, 0, 0]
+            flags = [0, 0, 0, 1]
 
         # Make a canvas to paste digits + operator
         canvas = Image.new("L", (84, 28), color=255)  # wide canvas
@@ -116,6 +119,7 @@ class ArithmeticMNISTDataset(Dataset):
         c = torch.tensor([a, b] + flags, dtype=torch.float32)
 
         return x, c, torch.tensor(result)
+
 
 def plot_sample(x, c, y, root, idx):
     """Plot a single dataset sample (image + concept tensor)."""

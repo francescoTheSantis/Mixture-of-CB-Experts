@@ -204,6 +204,11 @@ def setup_encoder(cfg: DictConfig, input_size: int, backbone_latent_size: int) -
 
     return cfg
 
+def allow_hard_concepts(dataset_name):
+    # Datasets that do not allow hard concepts so far: cebab, mnist_arithmetic.
+    return dataset_name in ['xor', 'cub', 'mnist_addition', 'awa2', 'cub_incomplete', 'awa2_incomplete', 'cifar10', 'cifar100']
+
+
 def update_config_from_data(cfg: DictConfig, train_loader, c_names,
                             y_names, c_groups, csv_log_dir) -> DictConfig:
     """
@@ -252,7 +257,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         )
 
         #hard_concepts = True if cfg.dataset.metadata.name=='xor' else cfg.hard_concepts #cfg.hard_concepts if cfg.dataset.metadata.name != 'cebab' else False
-        hard_concepts = cfg.hard_concepts
+        hard_concepts = cfg.hard_concepts if allow_hard_concepts(cfg.dataset.metadata.name) else False
 
         cfg.model.params.update(
             output_size = n_labels,
