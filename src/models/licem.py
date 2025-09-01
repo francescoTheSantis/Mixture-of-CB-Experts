@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch_concepts.nn as pyc_nn
 from src.models.base import BaseModel
 from torch_concepts.nn import functional as CF
+from torch_concepts.nn import concept_embedding_mixture
 
 class LinearConceptEmbeddingModel(BaseModel):
     def __init__(self, 
@@ -30,32 +31,32 @@ class LinearConceptEmbeddingModel(BaseModel):
 
         super().__init__(
                  output_size,
+                 c_names,
+                 y_names,
                  task,
+                 task_penalty,
+                 hard_concepts,
                  activation,
+                 int_prob,
+                 int_idxs,
+                 noise,
                  latent_size,
                  c_groups,
-                 encoder
+                 encoder,
+                 backbone_latent_size,
+                 concept_type
                  )
 
-        self.concept_type = concept_type
         self.embedding_size = embedding_size
-        self.task_penalty = task_penalty
-        self.c_names = list(c_names)
-        self.int_prob = int_prob
-        self.int_idxs = int_idxs
         self.has_concepts = True
-        self.noise = noise
         self.use_bias = use_bias
         self.y_names = list(y_names)
-        self.hard_concepts = hard_concepts
-        self.concept_loss_form = nn.BCELoss() if concept_type == 'binary' else nn.MSELoss()
-        c_activation = nn.Sigmoid() if isinstance(self.concept_loss_form,
-                                                   nn.BCELoss) else nn.Identity()
+
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             backbone_latent_size,
             self.c_names,
             embedding_size,
-            activation=c_activation,
+            activation=nn.Identity(),
         )
         # module predicting the concept importance for all concepts and tasks
         # input batch_size x concept_number x embedding_size
@@ -98,7 +99,12 @@ class LinearConceptEmbeddingModel(BaseModel):
             intervention_rate=1.,
         )
         c_pred = c_dict['c_int']
-        c_input = (c_pred > 0.5).float() if self.hard_concepts else c_pred
+
+        c_pred, input_concepts = self._process_concepts(c_pred, c_true, int_idxs)
+
+        # It is necessary to compute again since 
+        c_emb = self.bottleneck.linear(latent)
+        c_emb = concept_embedding_mixture(c_emb, input_concepts)
 
         # adding memory dimension to concept weights
         c_weights = self.concept_relevance(c_emb).unsqueeze(dim=1)
@@ -110,7 +116,7 @@ class LinearConceptEmbeddingModel(BaseModel):
             y_bias = self.bias_predictor(c_emb).unsqueeze(dim=1)
             self.__predicted_bias = y_bias
 
-        y_pred = CF.linear_equation_eval(c_weights, c_input, y_bias)
+        y_pred = CF.linear_equation_eval(c_weights, input_concepts, y_bias)
         return y_pred[:, :, 0], c_pred
     
     def loss(self, y_hat, y, c_hat=None, c=None):

@@ -7,12 +7,11 @@ params:
   task_penalty: ${task_penalty}
   int_prob: ${int_prob}
   memory_size: ${memory_size}
-  negative_concepts: False
   embedding_size: ${embedding_size}
   mc_approx: 10
-  weight_reg: 1e-4
+  weight_reg: 1e-5
   embedding_memory: True
-  intervene_on_selection: True
+  intervene_on_selection: False
   linear_classifier_selection: False
   sampling: True
   bias: local

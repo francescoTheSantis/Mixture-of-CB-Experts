@@ -12,18 +12,25 @@ class MLPEncoder(BaseEncoder):
         activation (str): Activation function to use in the MLP.
     """
 
-    def __init__(self, input_size, output_size, input_transform=None,
-                 hidden_size=64, activation='ReLU', **kwargs):
+    def __init__(self, 
+                 input_size, 
+                 output_size, 
+                 input_transform=None,
+                 hidden_size=64, 
+                 activation='ReLU', 
+                 dropout=0.1,
+                 **kwargs):
         super().__init__(input_size, output_size, input_transform)
         
         self.mlp = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             getattr(nn, activation)(),
-            nn.Linear(hidden_size, output_size),
-            getattr(nn, activation)(),
+            nn.Dropout(dropout) if dropout is not None else nn.Identity(),
+            nn.Linear(hidden_size, output_size)
         )
 
     def forward(self, x):
         if self.input_transform is not None:
             x = self.input_transform(x)
         return self.mlp(x)
+

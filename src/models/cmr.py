@@ -3,8 +3,9 @@ import torch.nn as nn
 import torch_concepts.nn as pyc_nn
 from torch_concepts.nn import functional as CF
 from torch_concepts.semantic import CMRSemantic
+from torch_concepts.nn import concept_embedding_mixture
 
-from src.models.base import BaseModel, LogicModel
+from src.models.base import BaseModel
 from torch.nn import functional as F
 
 eps = 1e-8
@@ -33,38 +34,38 @@ class ConceptMemoryReasoner(BaseModel):
                  ):
         super().__init__(
             output_size,
+            c_names,
+            y_names,
             task,
+            task_penalty,
+            hard_concepts,
             activation,
+            int_prob,
+            int_idxs,
+            noise,
             latent_size,
             c_groups,
-            encoder
+            encoder,
+            backbone_latent_size,
+            concept_type
         )
 
         self.n_roles = 3
         self.memory_names = ['Positive', 'Negative', 'Irrelevant']
         
-        self.concept_type = concept_type
         self.embedding_size = embedding_size
-        self.latent_size = latent_size
         self.task_penalty = task_penalty * 3 # BCE gives lower loss values
-        self.c_names = list(c_names)
-        self.int_prob = int_prob
-        self.int_idxs = int_idxs
         self.has_concepts = True
-        self.noise = noise
         self.y_names = list(y_names)
         self._multi_class = len(self.y_names) > 1
-        self.hard_concepts = hard_concepts
 
         self.memory_size = memory_size
         self.rec_weight = conc_rec_weight
-        self.concept_loss_form = concept_loss_form
-        c_activation = nn.Identity() if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.Sigmoid()
 
         self.bottleneck = pyc_nn.LinearConceptBottleneck(
             backbone_latent_size,
             self.c_names,
-            activation=c_activation,
+            activation=nn.Identity(),
         )
 
         self.concept_memory = torch.nn.Embedding(
@@ -116,15 +117,16 @@ class ConceptMemoryReasoner(BaseModel):
     def forward(self, input):
         latent, c_true, int_idxs = self.encode(input)
 
-        y_true = input['y'] if self.training else None
-
-        c_emb, c_dict = self.bottleneck(
+        _, c_dict = self.bottleneck(
             latent,
             c_true=c_true,
             intervention_idxs=int_idxs,
             intervention_rate=1.,
         )
         c_pred = c_dict['c_int']
+
+        c_pred, input_concepts = self._process_concepts(c_pred, c_true, int_idxs)
+
         classifier_selector_logits = self.classifier_selector(latent)
         prob_per_classifier = torch.softmax(classifier_selector_logits, dim=-1)
         # softmax over roles and adding batch dimension to concept memory
@@ -134,8 +136,9 @@ class ConceptMemoryReasoner(BaseModel):
         # check
         concept_weights = (eps / 2 + concept_weights * (1 - eps/2)).softmax(dim=-1).unsqueeze(dim=0)
 
-        c_input = (c_pred > 0.5).float() if self.hard_concepts else c_pred
-        y_per_classifier = self.logic_rule_eval(concept_weights, c_input)
+        y_per_classifier = self.logic_rule_eval(concept_weights, input_concepts)
+
+        y_true = input['y'] if self.training else None
 
         if y_true is not None:
             c_rec_per_classifier = self._conc_recon(concept_weights,

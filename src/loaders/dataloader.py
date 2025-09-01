@@ -14,6 +14,8 @@ from torch_concepts.data.celeba import CelebADataset
 from src.loaders.datasets.cebab import CEBaBDataset
 from src.loaders.datasets.cifar.cifar10 import get_CIFAR10_CBM_dataloader
 from src.loaders.datasets.cifar.cifar100 import get_CIFAR100_CBM_dataloader
+from src.loaders.datasets.mnist_arithmetic import ArithmeticMNISTDataset
+from src.loaders.datasets.mnist_arithmetic import CONCEPT_NAMES as mnist_arithmetic_concept_names
 
 from torch.utils.data import DataLoader, random_split
 from env import DATA_PATH
@@ -141,6 +143,10 @@ class loader(object):
             concept_names = train_dataset.concept_names
             task_names = train_dataset.task_names
             concept_groups = None
+        elif self.name in ['mnist_arithmetic']:
+            concept_names = mnist_arithmetic_concept_names
+            task_names = ['Result']
+            concept_groups = None
         elif self.name == 'cub' and self.concept_percentage is None:
             concept_names = CUB_CONCEPT_NAMES
             task_names = cub_class_names
@@ -235,6 +241,10 @@ class loader(object):
             val_size = len(train_dataset) - train_size
             train_dataset, val_dataset = random_split(train_dataset, 
                                               [train_size, val_size])
+        elif self.name == 'mnist_arithmetic':
+            train_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=10000, img_size=224)
+            val_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=2000, img_size=224)
+            test_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=False, num_samples=3000, img_size=224)
         elif self.name == 'cub' and self.concept_percentage is None:
             train_dataset = CUBDataset(root=DATA_PATH, split='train')
             val_dataset = CUBDataset(root=DATA_PATH, split='val')

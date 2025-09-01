@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
 from torch_concepts.nn import concept_embedding_mixture
+from src.models.encoders.mlp import MLPEncoder
 
 from src.models.base import BaseModel
 
@@ -28,35 +29,44 @@ class ConceptEmbeddingModel(BaseModel):
 
         super().__init__(
                  output_size,
+                 c_names,
+                 y_names,
                  task,
+                 task_penalty,
+                 hard_concepts,
                  activation,
+                 int_prob,
+                 int_idxs,
+                 noise,
                  latent_size,
                  c_groups,
-                 encoder
+                 encoder,
+                 backbone_latent_size,
+                 concept_type
                  )
 
-        self.concept_type = concept_type
         self.embedding_size = embedding_size
-        self.task_penalty = task_penalty
-        self.c_names = list(c_names)
-        self.int_prob = int_prob
-        self.int_idxs = int_idxs
         self.has_concepts = True
-        self.noise = noise
-        self.hard_concepts = hard_concepts
-        self.concept_loss_form = concept_loss_form
-        c_activation = nn.Identity() if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.Sigmoid()
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             backbone_latent_size,
             self.c_names,
             embedding_size,
-            c_activation
+            nn.Identity()
         )
-        self.y_predictor = nn.Sequential(
-            nn.Linear(len(self.c_names) * embedding_size, latent_size),
-            nn.LeakyReLU(),
-            nn.Linear(latent_size, output_size),
+
+        # self.y_predictor = nn.Sequential(
+        #     nn.Linear(len(self.c_names) * embedding_size, latent_size),
+        #     getattr(nn, activation)(),
+        #     nn.Linear(latent_size, output_size),
+        # )
+
+        self.y_predictor = MLPEncoder(
+            len(self.c_names) * embedding_size,
+            output_size,
+            None,
+            latent_size,
+            activation
         )
 
 
@@ -70,10 +80,12 @@ class ConceptEmbeddingModel(BaseModel):
             intervention_rate=1.,
         )
         c_pred = c_dict['c_int']
-        if self.hard_concepts:
-            c_emb = self.bottleneck.linear(x)
-            c_pred_hard = (c_pred > 0.5).float()
-            c_emb = concept_embedding_mixture(c_emb, c_pred_hard)
+
+        c_pred, input_concepts = self._process_concepts(c_pred, c_true, int_idxs)
+
+        # It is necessary to compute again since 
+        c_emb = self.bottleneck.linear(x)
+        c_emb = concept_embedding_mixture(c_emb, input_concepts)
 
         y_pred = self.y_predictor(c_emb.flatten(-2))
         return y_pred, c_pred

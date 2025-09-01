@@ -11,4 +11,4 @@ metadata:
   lr: 0.001
   name: mnist_arithmetic
   data_type: image
-  concept_type: binary 
+  concept_type: ['integer', 'integer', 'binary', 'binary', 'binary', 'binary'] 

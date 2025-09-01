@@ -9,8 +9,12 @@ hydra:
   sweeper:
     params:
       seed: 1, 2, 3
-      dataset: cebab, mnist_addition #cub_incomplete, awa2_incomplete
+      dataset: cub_incomplete, awa2_incomplete
       model: m_licem, cmr
       memory_size: 1, 2, 3, 4, 5, 10, 20
 
-gpus: [1]
+gpus: [0]
+
+wandb:
+  entity: null
+  project: null

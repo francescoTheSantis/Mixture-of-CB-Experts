@@ -8,7 +8,7 @@ import os
 from env import CACHE
 from src.utilities import update_config_from_data, is_valid_experiment
 
-@hydra.main(config_path="conf", config_name="sweep")
+@hydra.main(config_path="conf", config_name="test")
 def main(cfg: DictConfig) -> None:
 
     # Initialize the wandb logger
@@ -22,7 +22,7 @@ def main(cfg: DictConfig) -> None:
                              'stored_tensors', 
                              'embeddings' if cfg.extract_embeddings else 'raw', # whether it contains embeddings or not
                              cfg.dataset.metadata.name)
-    data_path = data_path + f"_{cfg.dataset.loader.concept_percentage.replace('.', '')}" if cfg.dataset.loader.concept_percentage != None \
+    data_path = data_path + f"_{str(cfg.dataset.loader.concept_percentage).replace('.', '')}" if cfg.dataset.loader.concept_percentage != None \
                                                                         else data_path
     train_path = f"{data_path}/train.pt"
     val_path = f"{data_path}/val.pt"

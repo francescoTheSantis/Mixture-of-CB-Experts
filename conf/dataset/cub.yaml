@@ -14,4 +14,4 @@ metadata:
   data_type: image
   concept_type: binary
 
-latent_size: 256
+latent_size: 128

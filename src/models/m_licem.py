@@ -20,7 +20,6 @@ class LinearMemoryReasoner(BaseModel):
                  latent_size = 128,
                  c_groups=None,
                  memory_size=7,
-                 negative_concepts=False,
                  hard_concepts=False,
                  weight_reg=0,
                  encoder=None,
@@ -37,37 +36,34 @@ class LinearMemoryReasoner(BaseModel):
 
         super().__init__(
             output_size,
+            c_names,
+            y_names,
             task,
+            task_penalty,
+            hard_concepts,
             activation,
+            int_prob,
+            int_idxs,
+            noise,
             latent_size,
             c_groups,
-            encoder
+            encoder,
+            backbone_latent_size,
+            concept_type
         )
 
-        # Parameters in common with other Concept Embedding-based Models
         self.embedding_size = embedding_size
-        self.latent_size = latent_size
-        self.task_penalty = task_penalty
-        self.c_names = list(c_names)
-        self.int_prob = int_prob
-        self.int_idxs = int_idxs
         self.has_concepts = True
-        self.noise = noise
         self.y_names = list(y_names)
-        self.hard_concepts = hard_concepts
         self.weight_reg = weight_reg
-        self.concept_type = concept_type
 
-        # Parameters specific for the LinearMemoryReasoner
         self.sampling = sampling
         self.mc_approx = mc_approx
         self.embedding_memory = embedding_memory
         self.memory_size = memory_size
         self.intervene_on_selection = intervene_on_selection
         self.linear_classifier_selection = linear_classifier_selection
-        self.concept_loss_form = nn.BCELoss() if concept_type == 'binary' else nn.MSELoss()
-        c_activation = nn.Sigmoid() if isinstance(self.concept_loss_form,
-                                                   nn.BCELoss) else nn.Identity()
+
         self.bias = None if bias is None else bias
 
         if self.bias not in [None, 'local', 'global']:
@@ -80,7 +76,7 @@ class LinearMemoryReasoner(BaseModel):
             backbone_latent_size,
             self.c_names,
             embedding_size,
-            activation=c_activation
+            activation=nn.Identity()
         )
 
         # The selector generates logits that define a probability distribution 
@@ -88,14 +84,10 @@ class LinearMemoryReasoner(BaseModel):
         # More precisely, for each class in y_names, we have a set of linear equations in the memory, and the selector
         # selects a linear equation for each class in y_names.
         selector_input_size = embedding_size * len(c_names) if self.intervene_on_selection else backbone_latent_size
-        if self.linear_classifier_selection:
-            self.classifier_selector = nn.Sequential(
-                nn.Linear(selector_input_size, memory_size),
-            )
-        else:
-            self.classifier_selector = nn.Sequential(
-                nn.Linear(selector_input_size, memory_size * len(y_names)),
-            )
+        selector_output_size = memory_size if self.linear_classifier_selection else memory_size * len(y_names)
+        self.classifier_selector = nn.Sequential(
+            nn.Linear(selector_input_size, selector_output_size),
+        )
 
         # The memory containing the set linear equations for each class in self.y_names.
         # It can be instantiated in two ways:
@@ -119,7 +111,7 @@ class LinearMemoryReasoner(BaseModel):
         if self.bias == 'global':
             self.bias_params = nn.Parameter(torch.zeros(len(self.y_names))) 
 
-    def compute_tau(self, global_step, tau_init=1, tau_min=0.01, decay_rate=0.999):
+    def compute_tau(self, global_step, tau_init=1, tau_min=0.05, decay_rate=0.99):
         # Exponential decay to decrease tau over time
         tau = max(tau_min, tau_init * decay_rate ** global_step)
         return tau
@@ -135,12 +127,17 @@ class LinearMemoryReasoner(BaseModel):
             intervention_rate=1,
         )
         c_pred = c_dict['c_int']
-        if self.hard_concepts:
-            input_concepts = (c_pred > 0.5).float()
-        else:
-            input_concepts = c_pred
 
-        selector_input = c_emb.flatten(-2)
+        c_pred, input_concepts = self._process_concepts(c_pred, c_true, int_idxs)
+
+        # It is necessary to compute again since 
+        c_emb = self.bottleneck.linear(latent)
+        c_emb = concept_embedding_mixture(c_emb, input_concepts)
+
+        if self.intervene_on_selection:
+            selector_input = c_emb.flatten(-2)
+        else:
+            selector_input = latent
 
         classifier_selector_logits = self.classifier_selector(selector_input)
 
@@ -191,8 +188,7 @@ class LinearMemoryReasoner(BaseModel):
         # Execute the linear equations stored in memory by performing the dot product 
         # among the input concepts and the weights of the linear equations.
         # Dimension: (batch_size, output_size, memory_size)
-        y_per_classifier = self.linear_equation_eval(equation_weights, 
-                                                     input_concepts)
+        y_per_classifier = self.linear_equation_eval(equation_weights, input_concepts)
         
         # Select one logit for each class of y form the memory
         # Dimension: (batch_size, output_size, n_samples)

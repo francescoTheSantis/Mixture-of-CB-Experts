@@ -117,7 +117,7 @@ def get_backbone_latent_size(backbone):
 def get_type_from_name(dataset_name):
     if dataset_name in ['mnist_addition', 'cub', 'cub_incomplete', \
                         'awa2', 'awa2_incomplete', 'xor', 'celeba', \
-                        'cifar10', 'cifar100']:
+                        'cifar10', 'cifar100', 'mnist_arithmetic']:
         return 'image'
     else:
         return 'text'
@@ -150,8 +150,10 @@ def setup_encoder(cfg: DictConfig, input_size: int, backbone_latent_size: int) -
             'activation': cfg.activation,
             'input_transform': {
                 '_target_': 'src.models.encoders.transform.FlattenTransform',
-            }
+            },
+            'dropout': 0.1
         }
+
     else:
         backbone = cfg.img_backbone_name if get_type_from_name(cfg.dataset.metadata.name) == 'image' \
                                             else cfg.text_backbone_name
@@ -256,8 +258,8 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             data_type = data_type,
         )
 
-        #hard_concepts = True if cfg.dataset.metadata.name=='xor' else cfg.hard_concepts #cfg.hard_concepts if cfg.dataset.metadata.name != 'cebab' else False
-        hard_concepts = cfg.hard_concepts if allow_hard_concepts(cfg.dataset.metadata.name) else False
+        hard_concepts = cfg.hard_concepts
+        concept_type = prepare_concept_type(cfg.dataset.metadata.concept_type, cfg.engine.c_names)
 
         cfg.model.params.update(
             output_size = n_labels,
@@ -266,13 +268,20 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             task = cfg.dataset.metadata.task,
             c_groups = c_groups,
             backbone_latent_size = backbone_latent_size,
-            concept_type = cfg.dataset.metadata.concept_type,
+            concept_type = concept_type,
             hard_concepts = hard_concepts
         )
 
         cfg = setup_encoder(cfg, input_size, backbone_latent_size)
 
     return cfg
+
+def prepare_concept_type(c_types, c_names):
+    n_concepts = len(c_names)
+    if isinstance(c_types, list):
+        return c_types
+    else:
+        return [c_types] * n_concepts
 
 # def plot_data(data, predictions):
 #     """

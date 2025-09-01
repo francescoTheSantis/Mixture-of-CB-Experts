@@ -11,7 +11,7 @@ lr_patience: 25
 gamma: 0.5
 seed: 1
 activation: LeakyReLU
-num_workers: 5
+num_workers: 10
 
 ## These parameters can be overridden by the dataset config
 latent_size: 64
@@ -20,18 +20,18 @@ batch_size: 128
 ## Shared Concept-based model parameters
 task_penalty: 0.1
 int_prob: 0.25
-hard_concepts: True
+hard_concepts: False
 
 ## Shared Concept-embedding based model
 embedding_size: 16
 
 ## Shared Concept Memory model
-memory_size: 20
+memory_size: 10
 
 ## Pre-trained backbones
-# Examples of pre-trained image backbones: resnet18, resnet34, google/vit-base-patch32-224-in21k, facebook/dinov2-base
+# Examples of pre-trained image backbones: resnet18, resnet34, ..., google/vit-base-patch32-224-in21k, facebook/dinov2-base
 # Example of pre-trained text backbones: bert-base-uncased, ..., sentence-transformers/all-MiniLM-L6-v2
-img_backbone_name: google/vit-base-patch32-224-in21k
+img_backbone_name: facebook/dinov2-base
 text_backbone_name: sentence-transformers/all-MiniLM-L6-v2
 
 # Parameter that controls the % of selected groups. Valid only for cub dataset. 

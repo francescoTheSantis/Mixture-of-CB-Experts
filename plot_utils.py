@@ -284,3 +284,67 @@ def plot_explanations(lmr_paths):
             print(f"Error while plotting explanations for {exp['model']} on {exp['dataset']}. Skipping...")
             continue
     print("Explanations plotted successfully.")
+
+
+def plot_concept_size_ablation(
+        performance, 
+        model_styles, 
+        title_font, 
+        label_font, 
+        tick_font):
+    """
+    Plots the concept size ablation results.
+    In this plot the concept accuracy is shown on the y axis while the
+    concept size (percentage) is shown on the x axis.
+    Each line represent a different model and each subplot the results on a different dataset
+    """
+
+    # Sort the points in the order of concept_percentage.
+    performance = performance.sort_values(by=['dataset', 'concept_percentage'])
+
+    num_seeds = performance['seed'].nunique()
+
+    # Avg over the seeds for the performance metrics
+    performance = performance.groupby(['dataset', 'concept_percentage', 'model']).agg(
+        mean_task=('task', 'mean'),
+        std_task=('task', 'std'),
+        mean_concept=('concept', 'mean'),
+        std_concept=('concept', 'std')
+    ).reset_index()
+
+    
+    # instead of the std compute the standard error at 95% confidence
+    performance['se_task'] = 1.96 * performance['std_task'] / np.sqrt(num_seeds)
+    performance['se_concept'] = 1.96 * performance['std_concept'] / np.sqrt(num_seeds)
+
+    # Create a new figure
+    fig, ax = plt.subplots(figsize=(25, 10))
+
+    # Iterate over each model and plot its performance
+    for model, style in model_styles.items():
+        if model in performance['model'].values:
+            data = performance[performance['model'] == model]
+            ax.plot(data['concept_percentage'], data['mean_task'],
+                    label=style['name'], marker=style['marker'], color=style['color'])
+            ax.fill_between(data['concept_percentage'], 
+                          data['mean_task'] - data['se_task'], 
+                          data['mean_task'] + data['se_task'], 
+                          color=style['color'], alpha=0.2)
+
+    # Set the title and labels
+    ax.set_title("Concept Size Ablation", **title_font)
+    ax.set_xlabel("Dataset", **label_font)
+    ax.set_ylabel("Accuracy", **label_font)
+
+    # Customize ticks
+    ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
+    ax.grid(True)
+
+    # Create legend below the plot
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), 
+              ncol=len([m for m in model_styles.keys() if m in performance['model'].values]),
+              fontsize=tick_font['size'], frameon=True)
+
+    # Save the figure
+    plt.tight_layout()
+    plt.savefig(f'figs/concept_size_ablation.pdf', bbox_inches='tight')

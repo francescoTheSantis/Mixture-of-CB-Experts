@@ -3,8 +3,9 @@ import torch.nn as nn
 import torch_concepts.nn as pyc_nn
 from torch_concepts.semantic import ProductTNorm
 from torch_concepts.nn import functional as CF
-from src.models.base import BaseModel, LogicModel
+from src.models.base import BaseModel
 from torch.nn import functional as F
+from torch_concepts.nn import concept_embedding_mixture
 
 class DeepConceptReasoner(BaseModel):
     def __init__(self, 
@@ -29,37 +30,37 @@ class DeepConceptReasoner(BaseModel):
                  concept_type='binary'
                  ):
         super().__init__(
-            output_size,
-            task,
-            activation,
-            latent_size,
-            c_groups,
-            encoder
+                 output_size,
+                 c_names,
+                 y_names,
+                 task,
+                 task_penalty,
+                 hard_concepts,
+                 activation,
+                 int_prob,
+                 int_idxs,
+                 noise,
+                 latent_size,
+                 c_groups,
+                 encoder,
+                 backbone_latent_size,
+                 concept_type
         )
 
         self.n_roles = 3
         self.memory_names = ['Positive', 'Negative', 'Irrelevant']
         
-        self.concept_type = concept_type
         self.embedding_size = embedding_size
-        self.latent_size = latent_size
         self.task_penalty = task_penalty * 3 # BCE gives lower loss values
-        self.c_names = list(c_names)
-        self.int_prob = int_prob
-        self.int_idxs = int_idxs
         self.has_concepts = True
-        self.noise = noise
         self.semantic = semantic
         self.temperature = temperature
-        self.hard_concepts = hard_concepts
-        self.concept_loss_form = concept_loss_form
-        c_activation = nn.Identity() if isinstance(concept_loss_form, nn.CrossEntropyLoss) else nn.Sigmoid()
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             backbone_latent_size,
             self.c_names,
             embedding_size,
-            activation=c_activation
+            activation=nn.Identity()
         )
         self.concept_importance_predictor = nn.Sequential(
             nn.Linear(embedding_size, self.latent_size),
@@ -80,6 +81,13 @@ class DeepConceptReasoner(BaseModel):
             intervention_rate=1.,
         )
         c_pred = c_dict['c_int']
+
+        c_pred, input_concepts = self._process_concepts(c_pred, c_true, int_idxs)
+
+        # It is necessary to compute again since 
+        c_emb = self.bottleneck.linear(x)
+        c_emb = concept_embedding_mixture(c_emb, input_concepts)
+
         c_weights = self.concept_importance_predictor(c_emb)
         # adding memory dimension
         c_weights = c_weights.unsqueeze(dim=1)
@@ -91,8 +99,7 @@ class DeepConceptReasoner(BaseModel):
         # batch_size x memory_size x n_concepts x n_tasks x n_roles
         c_weights = torch.cat([polarity, 1 - relevance], dim=-1)
 
-        c_input = (c_pred > 0.5).float() if self.hard_concepts else c_pred
-        y_pred = CF.logic_rule_eval(c_weights, c_input,
+        y_pred = CF.logic_rule_eval(c_weights, input_concepts,
                                     semantic=self.semantic)
         # removing memory dimension
         y_pred = y_pred[:, :, 0]

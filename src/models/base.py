@@ -6,41 +6,23 @@ from src.models.encoders.base import BaseEncoder
 class BaseModel(nn.Module):
     """
     Base class for concept models (and blackbox).
-
-    Args:
-        input_size (int): Number of input features.
-        output_size (int): Number of output targets.
-        task (str): Task type, either 'classification' or 'regression'. Default is 'classification'.
-        activation (str): Name of the activation function to use in the encoder (e.g., 'ReLU').
-        latent_size (int): Size of the latent representation in the encoder. Default is 64.
-        c_groups (dict, optional): Dictionary defining concept groups for interventions.
-
-    Attributes:
-        encoder (nn.Sequential): Encoder mapping input to latent space.
-        task_loss_form (nn.Module): Loss function for the task.
-        concept_loss_form (nn.Module): Loss function for concepts.
-        task_penalty (float): Weighting factor for the task loss.
-        int_idxs (Tensor): Indices of intervened concepts (Default None).
-        test_interventions (bool): Whether to apply interventions during testing.
-        c_groups (dict): Concept groups for interventions.
-        current_epoch (int): Current training epoch.
-
-    Methods:
-        encode(input):
-            Encodes input data, computes indxes for applying concept interventions and add noise
-            to the latent embedding (if specified).
-        concept_based_loss(y_hat, y, c_hat=None, c=None):
-            Computes the following loss: L_{task}*task_penalty + L_{concepts} .
-        get_intervened_concepts_predictions(labels, groups=None):
-            Generates a mask for concept interventions based on intervention probability and groups.
     """
     def __init__(self, 
                  output_size,
-                 task='classification',
+                 c_names,
+                 y_names,
+                 task,
+                 task_penalty,
+                 hard_concepts,
                  activation='ReLU',
+                 int_prob=0.1,
+                 int_idxs=None,
+                 noise=None,
                  latent_size=64,
                  c_groups=None,
                  encoder: BaseEncoder=None,
+                 backbone_latent_size=None,
+                 concept_type='binary'
                  ):
         super().__init__()
         
@@ -52,6 +34,14 @@ class BaseModel(nn.Module):
         self.c_groups = c_groups
         self.global_step = 0
         self.encoder = encoder
+        self.concept_type = concept_type
+        self.hard_concepts = hard_concepts
+        self.task_penalty = task_penalty
+        self.c_names = list(c_names)
+        self.int_prob = int_prob
+        self.int_idxs = int_idxs
+        self.has_concepts = None # This value has to be overriden by the inheriting class
+        self.noise = noise
 
         if task == 'classification':
             if output_size > 1:
@@ -67,8 +57,14 @@ class BaseModel(nn.Module):
                                       f"Supported tasks are 'classification', "
                                       f"'regression', and 'generation'.")
 
-        self.concept_loss_form = None
-        self.task_penalty = None
+        # The concept loss form is a list of losses. 
+        # Each loss in the list is specifically selected according to the concept type.
+        self.concept_loss_form = []
+        for i in concept_type:
+            if i == 'binary':
+                self.concept_loss_form.append(nn.BCELoss())
+            else:
+                self.concept_loss_form.append(nn.MSELoss())
 
     def encode(self, input):
         x = input['x']
@@ -127,9 +123,69 @@ class BaseModel(nn.Module):
             raise ValueError(f"Unknown task type: {self.task}. Supported tasks are 'classification', 'regression', and 'generation'.")
         return y, y_hat
     
+    def _handle_hard_concepts(self, c_pred, int_idxs):
+        """
+        When the hard_concepts variable is True:
+            - the boolean concepts are made hard by applying a threshold at 0.5
+            - the integer concepts are made hard by rounding to the nearest integer
+            - the floating concepts are left unchanged
+        In the locations identified by int_idxs we apply the identity function, as the intervention already happened, 
+        and the values do not need to undergo any further transformation.
+        """
+        if self.hard_concepts:
+            binary_mask = torch.tensor([c_type == 'binary' for c_type in self.concept_type], device=c_pred.device)
+            integer_mask = torch.tensor([c_type == 'integer' for c_type in self.concept_type], device=c_pred.device)
+
+            # Combine with int_idxs
+            binary_mask = binary_mask & ~int_idxs
+            integer_mask = integer_mask & ~int_idxs
+
+            c_pred = torch.where(binary_mask, (c_pred > 0.5).float(), c_pred) if binary_mask.any() else c_pred
+            c_pred = torch.where(integer_mask, c_pred.round(), c_pred) if integer_mask.any() else c_pred
+        return c_pred
+    
+    def _apply_concept_activation(self, c_pred, int_idxs):
+        """
+        Apply the correct activation function to the concepts:
+            - if the concept is boolean, then a bce will be used as loss. For this reason, we apply a sigmoid activation.
+            - if the concept is numeric (e.g., integer or floating), then an mse will be used as loss. 
+              For this reason, we apply an identity function.
+        In the locations identified by int_idxs we apply the identity function, as the intervention already happened, 
+        and the values do not need to undergo any further transformation.
+        """
+        # Create masks for different concept types
+        binary_mask = torch.tensor([c_type == 'binary' for c_type in self.concept_type], device=c_pred.device)
+
+        # Combine binary_mask with int_mask
+        binary_mask = binary_mask & ~int_idxs
+
+        # Apply activations using masks
+        c_pred = torch.where(binary_mask, torch.sigmoid(c_pred), c_pred)
+
+        # numeric_mask = ~binary_mask
+        # c_pred = torch.where(numeric_mask, c_pred, c_pred)
+        return c_pred
+
+    def _process_concepts(self, c_pred, c_true, int_idxs):
+        """
+        Process the concepts by applying activation, intervening, and handling hard concepts.
+        """
+        # apply activation to concept prediction
+        c_pred = self._apply_concept_activation(c_pred, int_idxs)
+
+        # intervene
+        c_pred = self._intervene(c_pred, c_true, int_idxs)
+
+        # switch to hard concepts if the corresponding variable is true
+        input_concepts = self._handle_hard_concepts(c_pred, int_idxs)
+
+        return c_pred, input_concepts
+
     def concept_based_loss(self, y_hat, y, c_hat=None, c=None):
+
         # Update type and shape of y and y_hat before task loss computation
         y, y_hat = self._task_loss_variable_check(y, y_hat)
+
         # task loss
         task_loss = 0
         # In case of Monte Carlo sampling
@@ -139,20 +195,56 @@ class BaseModel(nn.Module):
             task_loss /= y_hat.shape[-1]
         else:
             task_loss = self.task_loss_form(y_hat.squeeze(), y)
+
         # concept loss
         concept_loss = 0
-        if isinstance(self.concept_loss_form, nn.BCELoss) or isinstance(self.concept_loss_form, nn.MSELoss):
-            for i in range(c.shape[1]):
-                concept_loss += self.concept_loss_form(c_hat[:,i], c[:,i])
-            concept_loss /= c.shape[1]
-        elif isinstance(self.concept_loss_form, nn.CrossEntropyLoss):
-            concept_loss = self.concept_loss_form(c_hat, c.argmax(-1))
-        else:
-            raise NotImplementedError(f"{self.concept_loss_form} not supported")
+        for i in range(c.shape[1]):
+            c_i_loss_form = self.concept_loss_form[i]
+            if isinstance(c_i_loss_form, nn.BCELoss) or isinstance(c_i_loss_form, nn.MSELoss):
+                concept_loss += c_i_loss_form(c_hat[:,i], c[:,i])
+            elif isinstance(c_i_loss_form, nn.CrossEntropyLoss):
+                concept_loss = c_i_loss_form(c_hat, c.argmax(-1))
+            else:
+                raise NotImplementedError(f"{c_i_loss_form} not supported")
+        # normalize over the number of concepts to avoid high concept loss
+        concept_loss /= c.shape[1]
+
         # combine the two losses by considering the task penalty regularization
         loss = concept_loss + self.task_penalty * task_loss
         return loss
-            
+
+    def get_intervened_concepts_predictions(self, labels, groups=None):
+        """
+        Generate the random mask to compute interventions.
+        Specifically, we randomly select rows in the batch whose concepts
+        will be replaced with their respective ground-truth values.
+        """
+        bsz = labels.shape[0]
+        n_concepts = labels.shape[1]
+
+        return (torch.rand(bsz, 1, device=labels.device) < self.int_prob).expand(bsz, n_concepts).int()
+
+    def _intervene(self, c_pred, c_true, int_idxs):
+        """
+        Apply interventions: when the entry in int_idxs is 1, replace c_pred with c_true
+        """
+        c_pred = torch.where(int_idxs == 1, c_true, c_pred)
+        return c_pred
+
+    def filter_output_for_loss(self, y_output, c_output=None):
+        """
+        Filter the output of the model for loss computation.
+        This method can be overridden in subclasses to customize the output filtering.
+        """
+        return y_output, c_output
+    
+    def filter_output_for_metrics(self, y_output, c_output=None):
+        """
+        Filter the output of the model for metrics computation.
+        This method can be overridden in subclasses to customize the output filtering.
+        """
+        return y_output, c_output
+
     # def get_intervened_concepts_predictions(self, labels, groups=None):
     #     '''
     #     Function to generate a mask for the intervention process.
@@ -193,48 +285,22 @@ class BaseModel(nn.Module):
                 
     #             return mask
 
-    def get_intervened_concepts_predictions(self, labels, groups=None):
-        """
-        Generate the random mask to compute interventions.
-        Specifically, we randomly select rows in the batch whose concepts
-        will be replaced with their respective ground-truth values.
-        """
-        bsz = labels.shape[0]
-        n_concepts = labels.shape[1]
+# class LogicModel(BaseModel):
+#     """
+#     Base class for logic-based models. So far, it is used to only identify
+#     the logic-based models that produce a logic-based output and convert the
+#     output to a binary format for the loss computation.
+#     """
 
-        return (torch.rand(bsz, 1, device=labels.device) < self.int_prob).expand(bsz, n_concepts).int()
-
-    def filter_output_for_loss(self, y_output, c_output=None):
-        """
-        Filter the output of the model for loss computation.
-        This method can be overridden in subclasses to customize the output filtering.
-        """
-        return y_output, c_output
-    
-    def filter_output_for_metrics(self, y_output, c_output=None):
-        """
-        Filter the output of the model for metrics computation.
-        This method can be overridden in subclasses to customize the output filtering.
-        """
-        return y_output, c_output
-
-
-class LogicModel(BaseModel):
-    """
-    Base class for logic-based models. So far, it is used to only identify
-    the logic-based models that produce a logic-based output and convert the
-    output to a binary format for the loss computation.
-    """
-
-    def loss(self, y_hat, y, c_hat=None, c=None):
-        """
-        Logic models do not use the concept loss, so we only compute the task loss.
-        """
-        if self.task == 'classification' and self.output_size > 1:
-            y = F.one_hot(y.flatten().long(),
-                              num_classes=self.output_size).float()
-        elif self.output_size == 1:
-            y = y.squeeze().float()
-        else:
-            raise NotImplementedError(f"Unknown taks {self.task} for logic model.")
-        return self.task_loss_form(y_hat.squeeze(), y)
+#     def loss(self, y_hat, y, c_hat=None, c=None):
+#         """
+#         Logic models do not use the concept loss, so we only compute the task loss.
+#         """
+#         if self.task == 'classification' and self.output_size > 1:
+#             y = F.one_hot(y.flatten().long(),
+#                               num_classes=self.output_size).float()
+#         elif self.output_size == 1:
+#             y = y.squeeze().float()
+#         else:
+#             raise NotImplementedError(f"Unknown taks {self.task} for logic model.")
+#         return self.task_loss_form(y_hat.squeeze(), y)

@@ -15,7 +15,7 @@ metadata:
   data_type: image
   concept_type: binary
 
-latent_size: 256
+latent_size: 128
     
 # We generated the CUB incomplete dataset following the same procedure as in the paper: https://arxiv.org/pdf/2504.17921v1.
 # More precisely, selecting the concepts belonging to the following groups:

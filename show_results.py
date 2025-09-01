@@ -24,7 +24,7 @@ custom_order = ['xor', \
                 'awa2',
                 'awa2_incomplete',
                 'cub_incomplete',
-                #'cebab',
+                'cebab',
                 #'celeba',
                 'cifar10',
                 'cifar100',
@@ -43,6 +43,7 @@ model_styles = {
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:gray', 'size': marker_size},
     'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:cyan', 'size': marker_size},
     'm_licem': {'marker': 's', 'name': 'M-LICEM', 'color': 'tab:green', 'size': marker_size},
+    #'m_licem_local': {'marker': 'X', 'name': 'M-LICEM Local', 'color': 'tab:red', 'size': marker_size}
 }
 
 # Call the function with the desired metric and font properties
@@ -56,16 +57,7 @@ def main():
     try:
         # List the paths containing the results
         paths = [
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/blackbox/2025-08-25_18-52-25",
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/blackbox/2025-08-30_17-56-57",
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cbm_linear/2025-08-25_18-53-03",
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cbm_linear/2025-08-30_18-05-17",
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cem/2025-08-25_18-54-03",
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cem/2025-08-30_18-59-10",
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/licem/2025-08-25_22-13-17",
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/licem/2025-08-30_18-59-10",
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cmr/2025-08-26_19-02-12",
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/dcr/2025-08-26_19-02-21",
+            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/general_sweep/2025-09-01_16-49-15",
         ]
 
         result_figs = "figs"
@@ -303,8 +295,7 @@ def main():
 
     try:
         paths = [
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/memory_ablation/2025-08-29_18-14-44",
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/memory_ablation/2025-08-30_14-51-39"
+            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/memory_ablation/2025-09-01_16-49-15"
         ]
 
         result_figs = "figs"
@@ -362,14 +353,78 @@ def main():
                 except:
                     pass
 
-        # Show a subplot for each dataset. 
-        # In each subplot there are bars as long as the accuracy reached by the models.
-        # For each model there will be several lines, each one representing a different model's performance. 
-        # The x-axis will represent the memory_size, while the y-axis will represent the task accuracy.
         plot_memory_ablation(performance, model_styles, title_font, label_font, tick_font)
     
     except Exception as e:
         print(f"Error occurred while plotting memory ablation results: {e}")
+
+
+    ###### Visualize the results of concept size ablation ######
+    try:
+        paths = [
+            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/ablation_concept_size/2025-09-01_16-51-41"
+        ]
+
+        result_figs = "figs"
+        os.makedirs(result_figs, exist_ok=True)
+
+        ###### Collect results regarding concept/task performance ######
+
+        exps_path = []
+        lmr_paths = []
+        for path in paths:
+            exps = os.listdir(path)
+            exps_path += [os.path.join(path, exp) for exp in exps if 'multirun' not in exp]
+
+        performance = pd.DataFrame()
+
+        for exp in exps_path:
+            d = {}
+            conf_file = os.path.join(exp, '.hydra/config.yaml')
+            result_file = os.path.join(exp, 'logs/experiment_metrics/version_0/metrics.csv')  
+            if os.path.exists(conf_file) and os.path.exists(result_file):
+                try:
+                    with open(conf_file, 'r') as file:
+                        conf = yaml.safe_load(file)
+                    d['seed'] = conf['seed']
+                    d['dataset'] = conf['dataset']['metadata']['name']
+                    d['model'] = conf['model']['metadata']['name']
+                    d['memory_size'] = conf['memory_size']
+                    d['concept_percentage'] = conf['concept_percentage']
+
+                    with open(result_file, 'r') as file:
+                        result = pd.read_csv(file, header=0)
+
+                    # Select the last row of the dataframe where we test the model
+                    # if 'test_task_acc' and 'test_concept_acc' are not in the dataframe, skip the experiment
+                    if 'test_task_acc' not in result.columns:
+                        d['task'] = result['test_task_mse'].iloc[-1]
+                    else:
+                        d['task'] = result['test_task_acc'].iloc[-1]
+
+                    if conf['model']['metadata']['name']=='blackbox':
+                        d['concept'] = 0
+                    else:
+                        if 'test_concept_acc' not in result.columns:
+                            d['concept'] = result['test_concept_mse'].iloc[-1]
+                        else:
+                            d['concept'] = result['test_concept_acc'].iloc[-1]
+
+                    print(d)
+                    
+                    if d['model'] == 'm_licem' and d['seed']==1:
+                        expl_dict = d.copy()
+                        expl_dict['path'] = exp
+                        lmr_paths.append(expl_dict)
+
+                    performance = pd.concat([performance, pd.DataFrame([d])], ignore_index=True)
+                except:
+                    pass
+
+        # Plot the results on the concept size ablation
+        plot_concept_size_ablation(performance, model_styles, title_font, label_font, tick_font)
+    except Exception as e:
+        print(f"Error occurred while plotting concept size ablation results: {e}")
 
 
 if __name__ == "__main__":
