@@ -129,13 +129,37 @@ def main(cifar):
                     dim=-1,
                     eps=1e-8,
                 )
-                # Split the similarity tensor into positive and negative concepts
+
                 similarity_pos_neg = similarity.reshape(target.shape[0], 2, -1)
-                concept_label = 1 - similarity_pos_neg.argmax(
-                    dim=1
-                )  # 0 if negated, 1 if positive
-                data_storage.append(concept_label > 0)
+
+                # Get the similarity with respect to the positive instance of the output
+                similarity_pos = similarity_pos_neg[:,0,:]
+
+                data_storage.append(similarity_pos)
+
+                #### SCBM paper implementation #####
+                # # Split the similarity tensor into positive and negative concepts
+                # similarity_pos_neg = similarity.reshape(target.shape[0], 2, -1)
+                # concept_label = 1 - similarity_pos_neg.argmax(
+                #     dim=1
+                # )  # 0 if negated, 1 if positive
+                # data_storage.append(concept_label > 0)
+
+        # Instead of classifying a concept as present if it is more aligned with the positive text (a apple) 
+        # instead of the negative one (not an apple), we follow the preprocessing adopted in the paper:
+        # - name: Avoiding Leakage Poisoning: Concept Interventions Under Distribution Shifts
+        # - link: https://arxiv.org/pdf/2504.17921v1
+        #
+        # Thus, we classify a concept as present if its alignment is above the 50% percentile and not present otherwise.
+
         data_storage = torch.cat(data_storage)
+
+        # Compute 50% percentile for each column
+        percentiles = data_storage.median(dim=0).values
+
+        # Binarize the data storage based on the 50% percentiles
+        data_storage = data_storage > percentiles
+
         if split:
             name = "train"
         else:
