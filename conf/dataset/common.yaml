@@ -7,3 +7,7 @@ loader:
   concept_percentage: ${concept_percentage}
 
 latent_size: ${latent_size}
+
+# This parameter controls the equations used by the symbolic models
+# If set to null, the equations will be learned from the data.
+equations: null

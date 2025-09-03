@@ -10,18 +10,20 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../../..'))
 from env import HOME, DATA_PATH
 
-def get_CIFAR100_CBM_dataloader(datapath):
+def get_CIFAR100_CBM_dataloader(datapath, selected_idxs=None):
     datapath = datapath + "cifar100/"
     image_datasets = {
         "train": CIFAR100_CBM_dataloader(
             root=datapath,
             train=True,
             download=False,
+            selected_idxs=selected_idxs
         ),
         "test": CIFAR100_CBM_dataloader(
             root=datapath,
             train=False,
             download=False,
+            selected_idxs=selected_idxs 
         ),
     }
 
@@ -30,8 +32,10 @@ def get_CIFAR100_CBM_dataloader(datapath):
 
 class CIFAR100_CBM_dataloader(datasets.CIFAR100):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, selected_idxs, *args, **kwargs):
         super(CIFAR100_CBM_dataloader, self).__init__(*args, **kwargs)
+
+        self.selected_idxs = selected_idxs
 
         if kwargs["train"]:
             self.transform = transforms.Compose(
@@ -63,7 +67,11 @@ class CIFAR100_CBM_dataloader(datasets.CIFAR100):
     def __getitem__(self, idx):
         X, target = super().__getitem__(idx)
 
-        return (X, self.concepts[idx], torch.tensor(target))
+        # from select.concept[idx], select only the columns identified by selected_idxs
+        if self.selected_idxs is not None:
+            concepts = self.concepts[idx, self.selected_idxs]
+
+        return (X, concepts, torch.tensor(target))
     
     
 if __name__ == "__main__":

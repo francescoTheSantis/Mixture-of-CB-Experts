@@ -20,7 +20,8 @@ class BlackBox(BaseModel):
                  c_groups=None,
                  encoder: BaseEncoder=None,
                  backbone_latent_size=None,
-                 concept_type='binary' 
+                 concept_type='binary',
+                 equations=None
                  ):
         super().__init__(
                  output_size,
@@ -37,7 +38,8 @@ class BlackBox(BaseModel):
                  c_groups,
                  encoder,
                  backbone_latent_size,
-                 concept_type
+                 concept_type,
+                 equations
                  )
 
         self.has_concepts = False

@@ -37,7 +37,7 @@ text_backbone_name: sentence-transformers/all-MiniLM-L6-v2
 # Parameter that controls the % of selected groups. Valid only for cub dataset. 
 # Variations of this parameter will have no effect on other concepts. 
 # If set to null, all groups will be selected.
-concept_percentage: Null
+concept_percentage: null
 
 # Set this parameter to True if you want to use the stored, preprocessed dataset,
 # otherwise it will be preprocessed from scratch and saved in the cache. 
@@ -46,6 +46,10 @@ use_stored_dataset: True
 # Set this variable to true if you want to preprocess the data 
 # using a pre-trained model.
 extract_embeddings: True
+
+## Set this parameter to True if you want to integrate the known equations
+# in the symbolic models.
+use_known_equations: true
 
 wandb:
   # Set the params below if you want to use wandb as logger.

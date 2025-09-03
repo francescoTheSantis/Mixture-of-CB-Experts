@@ -6,7 +6,7 @@ from src.utilities import set_seed, set_loggers
 import torch
 import os
 from env import CACHE
-from src.utilities import update_config_from_data, is_valid_experiment
+from src.utilities import update_config_from_data, is_valid_experiment, generate_data_path
 
 @hydra.main(config_path="conf", config_name="test")
 def main(cfg: DictConfig) -> None:
@@ -18,15 +18,7 @@ def main(cfg: DictConfig) -> None:
     set_seed(cfg.seed)
 
     ###### Load the data ######
-    data_path = os.path.join(str(CACHE), 
-                             'stored_tensors', 
-                             'embeddings' if cfg.extract_embeddings else 'raw', # whether it contains embeddings or not
-                             cfg.dataset.metadata.name)
-    data_path = data_path + f"_{str(cfg.dataset.loader.concept_percentage).replace('.', '')}" if cfg.dataset.loader.concept_percentage != None \
-                                                                        else data_path
-    train_path = f"{data_path}/train.pt"
-    val_path = f"{data_path}/val.pt"
-    test_path = f"{data_path}/test.pt"
+    data_path, train_path, val_path, test_path = generate_data_path(cfg)
 
     # Loader instantiation
     loader = instantiate(cfg.dataset.loader)

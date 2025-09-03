@@ -95,6 +95,33 @@ class loader(object):
             # Store in the same format as cub_incomplete
             self.CUB_CONCEPT_NAMES = selected_concepts
 
+        # set the concepts for the incomplete version of cifar10/100 datasets
+        if self.name in ['cifar10', 'cifar100']:
+
+            # Read and set the concept and label names for cifar10/100
+            with open(f"{DATA_PATH}{self.name}/{self.name}_filtered.txt", "r") as file:
+                concept_list = [line.strip() for line in file]
+            self.concept_names_cifar = concept_list
+            with open(f"{DATA_PATH}{self.name}/{self.name}_classes.txt", "r") as file:
+                task_label_list = [line.strip() for line in file]            
+            self.task_names_cifar = task_label_list
+
+            # Generate concept indexes 
+            self.concept_idxs_cifar = {self.concept_names_cifar.index(x): x for x in self.concept_names_cifar}
+
+            # Reduce the concept size if the percentage is not none
+            if self.concept_percentage is not None:
+                # generate random number from 0 to the number of concepts in the dataset
+                filtered_idxs = random.sample(range(0, len(self.concept_names_cifar)), int(len(self.concept_names_cifar) * self.concept_percentage))
+                # sort the indexes in ascending order
+                filtered_idxs.sort()
+                # Select the concepts
+                self.concept_names_cifar = [self.concept_idxs_cifar[x] for x in filtered_idxs]
+                # Update the idxs
+                self.concept_idxs_cifar = {idx:name for idx, name in zip(filtered_idxs, self.concept_names_cifar)}
+
+            self.concept_idxs_cifar = list(sorted(self.concept_idxs_cifar.keys()))
+
         if self.selected_concept_groups != None and self.name == 'cub_incomplete':
             # Select the group that matches the selected group names
             self.incomplete_cub_groups = {k:v for k,v in cub_concept_groups.items() if k in selected_concept_groups}
@@ -185,14 +212,8 @@ class loader(object):
             task_names = ['review']
             concept_groups = {'food': [0,1,2], 'ambiance': [3,4,5], 'service': [6,7,8], 'noise': [9,10,11]}
         elif self.name in ['cifar10', 'cifar100']:
-            with open(f"{DATA_PATH}{self.name}/{self.name}_filtered.txt", "r") as file:
-                # Read the contents of the file
-                concept_list = [line.strip() for line in file]
-            concept_names = concept_list
-            with open(f"{DATA_PATH}{self.name}/{self.name}_classes.txt", "r") as file:
-                # Read the contents of the file
-                task_label_list = [line.strip() for line in file]            
-            task_names = task_label_list
+            concept_names = self.concept_names_cifar          
+            task_names = self.task_names_cifar
             concept_groups = None
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
@@ -309,13 +330,13 @@ class loader(object):
             loader = CEBaBDataset(cfg.text_backbone_name, self.batch_size)
             loaded_train, loaded_val, loaded_test = loader.collator()
         elif self.name == 'cifar10':
-            train_dataset, test_dataset = get_CIFAR10_CBM_dataloader(DATA_PATH)
+            train_dataset, test_dataset = get_CIFAR10_CBM_dataloader(DATA_PATH, self.concept_idxs_cifar)
             # split the train in training and validation
             train_size = int(0.9 * len(train_dataset))
             val_size = len(train_dataset) - train_size
             train_dataset, val_dataset = random_split(train_dataset, [train_size, val_size])
         elif self.name == 'cifar100':
-            train_dataset, test_dataset = get_CIFAR100_CBM_dataloader(DATA_PATH)
+            train_dataset, test_dataset = get_CIFAR100_CBM_dataloader(DATA_PATH, self.concept_idxs_cifar)
             # split the train in training and validation
             train_size = int(0.9 * len(train_dataset))
             val_size = len(train_dataset) - train_size

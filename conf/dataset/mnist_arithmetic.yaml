@@ -12,3 +12,8 @@ metadata:
   name: mnist_arithmetic
   data_type: image
   concept_type: ['integer', 'integer', 'binary', 'binary', 'binary', 'binary'] 
+
+
+# for this dataset, the equations connecting the concepts to the task are known
+equations:
+  [ "c0 + c1", "c0 - c1", "c0 * c1", "c0 / c1"]

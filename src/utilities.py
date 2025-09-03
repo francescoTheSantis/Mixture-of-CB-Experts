@@ -14,6 +14,8 @@ from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet15
 from transformers import CLIPProcessor, CLIPModel
 import transformers
 import scienceplots
+import sympy, torch, sympytorch
+from env import CACHE
 
 warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
@@ -269,7 +271,8 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             c_groups = c_groups,
             backbone_latent_size = backbone_latent_size,
             concept_type = concept_type,
-            hard_concepts = hard_concepts
+            hard_concepts = hard_concepts,
+            equations = (cfg['use_known_equations'], cfg['dataset']['equations'])
         )
 
         cfg = setup_encoder(cfg, input_size, backbone_latent_size)
@@ -283,34 +286,40 @@ def prepare_concept_type(c_types, c_names):
     else:
         return [c_types] * n_concepts
 
-# def plot_data(data, predictions):
-#     """
-#     Return the figure of a plotting of data and predictions for logical problems with two variables
-#     and one output class (e.g. OR, NOR, XOR, XNOR). The data should be a 2D tensor
-#     with shape (n_samples, 2) and the predictions should be a 1D tensor with shape
-#     (n_samples,). The function will create a scatter plot of the data points and color them
-#     according to the predictions. The prediction take values between 0 and 1.
-#     """
-#     import matplotlib.pyplot as plt
-#     import seaborn as sns
-#     from matplotlib.colors import Normalize
-#     from matplotlib.cm import ScalarMappable
-#
-#     assert data.shape[1] == 2, "Data should have shape (n_samples, 2)"
-#     predictions = predictions.squeeze().cpu().numpy()
-#     assert len(predictions.shape) == 1, "Predictions should be a 1D tensor"
-#
-#     # Create a scatter plot of the data points
-#     fig = plt.figure(figsize=(8, 6))
-#     norm = Normalize(vmin=0, vmax=1)
-#     cmap = sns.color_palette("coolwarm", as_cmap=True)
-#     sm = ScalarMappable(cmap=cmap, norm=norm)
-#     sm.set_array([])
-#
-#     plt.scatter(data[:, 0], data[:, 1], c=predictions, cmap=cmap, norm=norm, s=100)
-#     plt.colorbar(sm, label='Predictions')
-#     plt.xlabel('Feature 1')
-#     plt.ylabel('Feature 2')
-#     plt.title('Data and Predictions')
-#
-#     return fig
+def generate_data_path(cfg):
+    data_path = os.path.join(str(CACHE), 
+                             'stored_tensors', 
+                             'embeddings' if cfg.extract_embeddings else 'raw', # whether it contains embeddings or not
+                             cfg.dataset.metadata.name)
+
+    # Add backbone name
+    img_backbone_name = cfg.img_backbone_name.replace('/', '_')
+    text_backbone_name = cfg.text_backbone_name.replace('/', '_')
+
+    data_path += f"/{img_backbone_name}" if get_type_from_name(cfg.dataset.metadata.name) == 'image' \
+                                                    else f"/{text_backbone_name}"
+
+    if cfg.dataset.loader.concept_percentage != None:
+        data_path += f"_{str(cfg.dataset.loader.concept_percentage).replace('.', '')}"
+
+
+    train_path = f"{data_path}/train.pt"
+    val_path = f"{data_path}/val.pt"
+    test_path = f"{data_path}/test.pt"
+
+    return data_path, train_path, val_path, test_path
+
+def convert_equation_to_torch(equation_str, variables):
+    # 1. Define the symbols (variables)
+    sympy_vars = sympy.symbols(variables)
+
+    # 2. Define the equation in a textual format
+    exp = equation_str
+
+    # 3. Convert to sympy expression
+    exp = sympy.sympify(exp)
+
+    # 4. Convert the textual equation into an executable PyTorch module
+    torch_exp = sympytorch.SymPyModule(expressions=[exp])
+
+    return torch_exp, sympy_vars

@@ -2,6 +2,8 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 from src.models.encoders.base import BaseEncoder
+from src.utilities import convert_equation_to_torch
+import re
 
 class BaseModel(nn.Module):
     """
@@ -22,7 +24,8 @@ class BaseModel(nn.Module):
                  c_groups=None,
                  encoder: BaseEncoder=None,
                  backbone_latent_size=None,
-                 concept_type='binary'
+                 concept_type='binary',
+                 equations=None
                  ):
         super().__init__()
         
@@ -42,6 +45,8 @@ class BaseModel(nn.Module):
         self.int_idxs = int_idxs
         self.has_concepts = None # This value has to be overriden by the inheriting class
         self.noise = noise
+        self.use_known_equation = equations[0]
+        self.known_equations = equations[1] if self.use_known_equation else None
 
         if task == 'classification':
             if output_size > 1:
@@ -65,6 +70,30 @@ class BaseModel(nn.Module):
                 self.concept_loss_form.append(nn.BCELoss())
             else:
                 self.concept_loss_form.append(nn.MSELoss())
+
+        # Prepare known equations if the corresponding flag is set
+        if self.use_known_equation is not None:
+            self.known_equations = equations
+
+    def _prepare_known_equations(self):
+        self.torch_equations = []
+        self.sympy_variables = []
+
+        # define the variables
+        variables = [f'c{i}' for i in self.c_names]
+
+        # Convert the string equations to torch functions
+        for eq in self.known_equations:
+            torch_eq, sympy_variable = convert_equation_to_torch(eq, variables)
+            self.torch_equations.append(torch_eq)
+            self.sympy_variables.append(sympy_variable)
+
+    def _execute_known_equation(self, equation, variables, values):
+        # Create a dictionary mapping variable names to their values
+        var_dict = dict(zip(variables, values))
+        # Execute the equation function with the mapped variables
+        output = equation(**var_dict)
+        return output
 
     def encode(self, input):
         x = input['x']
@@ -284,23 +313,3 @@ class BaseModel(nn.Module):
     #                 torch.cuda.empty_cache()
                 
     #             return mask
-
-# class LogicModel(BaseModel):
-#     """
-#     Base class for logic-based models. So far, it is used to only identify
-#     the logic-based models that produce a logic-based output and convert the
-#     output to a binary format for the loss computation.
-#     """
-
-#     def loss(self, y_hat, y, c_hat=None, c=None):
-#         """
-#         Logic models do not use the concept loss, so we only compute the task loss.
-#         """
-#         if self.task == 'classification' and self.output_size > 1:
-#             y = F.one_hot(y.flatten().long(),
-#                               num_classes=self.output_size).float()
-#         elif self.output_size == 1:
-#             y = y.squeeze().float()
-#         else:
-#             raise NotImplementedError(f"Unknown taks {self.task} for logic model.")
-#         return self.task_loss_form(y_hat.squeeze(), y)

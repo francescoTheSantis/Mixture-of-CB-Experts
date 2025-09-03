@@ -15,6 +15,9 @@ hydra:
 
 gpus: [0]
 
+# Bigger backbone for real world datasets
+img_backbone_name: facebook/dinov2-base
+
 wandb:
   entity: null
   project: null

@@ -58,6 +58,7 @@ def main():
         # List the paths containing the results
         paths = [
             "/home/fdesantis/projects/Linear-Memory-Reasoner/output/general_sweep/2025-09-01_16-49-15",
+            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/general_sweep/2025-09-01_21-26-47",
         ]
 
         result_figs = "figs"

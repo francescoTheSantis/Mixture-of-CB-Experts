@@ -9,5 +9,8 @@ hydra:
   sweeper:
     params:
       seed: 1, 2, 3, 4, 5
-      dataset: xor, cub, cub_incomplete, awa2, awa2_incomplete, cebab, cifar10, cifar100
+      dataset: xor, cifar10, cifar100
       model: blackbox, cbm_linear, cem, dcr, licem, cmr, m_licem
+
+# Smaller backbone for toy datasets
+img_backbone_name: resnet50

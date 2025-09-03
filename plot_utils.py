@@ -49,7 +49,6 @@ def get_df_name(df):
     elif df=='cifar100':
         return 'CIFAR100'
 
-
 def plot_intervention_results(df, 
                                 metric='accuracy', 
                                 unique_noises=[0.0], 
@@ -61,13 +60,32 @@ def plot_intervention_results(df,
                                 model_styles=None,
                                 relative_accuracy=True):
     unique_datasets = custom_order
-    n_cols = len(unique_noises)
-    n_rows = len(unique_datasets)
-    fig, axes = plt.subplots(n_cols, n_rows, figsize=(30, 7), sharex=True, sharey=False)
+    n_datasets = len(unique_datasets)
+    n_cols = min(5, n_datasets)  # Maximum 5 subplots per row
+    n_rows = (n_datasets + n_cols - 1) // n_cols  # Calculate required rows
     
-    for i, dataset in enumerate(unique_datasets):
-        for j, noise in enumerate(unique_noises):
-            ax = axes[i] #axes[i, j] if n_rows > 1 else axes[j]
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 7*n_rows), sharex=True, sharey=False)
+    
+    # Handle case where we have only one subplot
+    if n_rows == 1 and n_cols == 1:
+        axes = [axes]
+    elif n_rows == 1:
+        axes = [axes]
+    elif n_cols == 1:
+        axes = [[ax] for ax in axes]
+    else:
+        axes = axes
+    
+    for idx, dataset in enumerate(unique_datasets):
+        row = idx // n_cols
+        col = idx % n_cols
+        
+        if n_rows == 1:
+            ax = axes[col] if n_cols > 1 else axes[0]
+        else:
+            ax = axes[row][col] if n_cols > 1 else axes[row][0]
+        
+        for noise in unique_noises:
             data = df[(df['noise'] == noise) & (df['dataset'] == dataset)]
             if dataset in ['cebab']:
                 metric = 'mse'
@@ -91,30 +109,32 @@ def plot_intervention_results(df,
                 ax.plot(model_data['p_int'], model_data['mean_metric'], color=style['color'], linestyle='-', alpha=0.5)
                 ax.scatter(model_data['p_int'], model_data['mean_metric'], marker=style['marker'], color=style['color'], s=style['size']**2, label=style['name'], edgecolor='black', alpha=0.5)
                 ax.fill_between(model_data['p_int'], model_data['mean_metric'] - model_data['std_metric'], model_data['mean_metric'] + model_data['std_metric'], color=style['color'], alpha=0.2)
-            ax.set_xlabel('$p_{int}$', fontsize=label_font['size'])
-            if j == 0:
-                ax.set_title(f'{get_df_name(dataset)}', fontsize=label_font['size'])
-            if dataset not in ['cebab']:
-                ylabel = 'Relative Task Acc' if relative_accuracy else 'Task Acc'
-                ax.set_ylabel(ylabel, fontsize=label_font['size'])
-            else:
-                ylabel = 'Relative Task MSE' if relative_accuracy else 'Task MSE'
-                ax.set_ylabel(ylabel, fontsize=label_font['size'])
-            ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
-            ax.minorticks_off()
-            ax.grid(True)
-            ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{x:.2f}'))
+        
+        ax.set_xlabel('$p_{int}$', fontsize=label_font['size'])
+        ax.set_title(f'{get_df_name(dataset)}', fontsize=label_font['size'])
+        
+        if dataset not in ['cebab']:
+            ylabel = 'Relative Task Acc' if relative_accuracy else 'Task Acc'
+            ax.set_ylabel(ylabel, fontsize=label_font['size'])
+        else:
+            ylabel = 'Relative Task MSE' if relative_accuracy else 'Task MSE'
+            ax.set_ylabel(ylabel, fontsize=label_font['size'])
+        
+        ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
+        ax.minorticks_off()
+        ax.grid(True)
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{x:.2f}'))
     
-    # Create a single legend below the plots
-    handles, labels = [], []
-    for ax in axes.flatten():
-        for handle, label in zip(*ax.get_legend_handles_labels()):
-            if label not in labels:
-                handles.append(handle)
-                labels.append(label)
-    for handle in handles:
-        handle.set_alpha(1)  # Remove transparency from legend markers
-
+    # Hide empty subplots
+    total_subplots = n_rows * n_cols
+    for idx in range(n_datasets, total_subplots):
+        row = idx // n_cols
+        col = idx % n_cols
+        if n_rows == 1:
+            axes[col].set_visible(False) if n_cols > 1 else None
+        else:
+            axes[row][col].set_visible(False) if n_cols > 1 else axes[row][0].set_visible(False)
+    
     # Create custom legend handles
     custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=style['size']+10, label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in model_styles.values()]
 
@@ -125,7 +145,7 @@ def plot_intervention_results(df,
         ncol=(len(custom_handles) + 1) // 2,  # Split legend into two rows
         fontsize=tick_font['size'],
         frameon=True,
-        bbox_to_anchor=(0.5, -0.2),
+        bbox_to_anchor=(0.5, -0.1),
         columnspacing=1.0,
         handletextpad=0.5
     )
