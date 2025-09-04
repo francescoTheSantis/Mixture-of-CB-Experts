@@ -4,10 +4,10 @@ defaults:
   - engine: engine
 
 ## Common parameters
-gpus: [0]
-max_epochs: 5
-patience: 2
-lr_patience: 2
+gpus: [1]
+max_epochs: 500
+patience: 50
+lr_patience: 25
 gamma: 0.5
 seed: 1
 activation: LeakyReLU

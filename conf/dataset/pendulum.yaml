@@ -4,7 +4,7 @@ defaults:
 
 loader: 
   name: pendulum
-  dataset_already_created: true
+  dataset_already_created: False
 
 # Dataset parameters
 metadata:
