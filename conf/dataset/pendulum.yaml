@@ -1,0 +1,15 @@
+defaults:
+  - common
+  - _self_
+
+loader: 
+  name: pendulum
+  dataset_already_created: true
+
+# Dataset parameters
+metadata:
+  task: regression
+  lr: 0.001
+  name: pendulum
+  data_type: image
+  concept_type: continuous
