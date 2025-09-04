@@ -27,7 +27,8 @@ class DeepConceptReasoner(BaseModel):
                  encoder=None,
                  concept_loss_form=nn.BCELoss(),
                  backbone_latent_size=None,
-                 concept_type='binary'
+                 concept_type='binary',
+                 **kwargs
                  ):
         super().__init__(
                  output_size,
@@ -80,9 +81,9 @@ class DeepConceptReasoner(BaseModel):
             intervention_idxs=int_idxs,
             intervention_rate=1.,
         )
-        c_pred = c_dict['c_int']
+        c_hat = c_dict['c_int']
 
-        c_pred, input_concepts = self._process_concepts(c_pred, c_true, int_idxs)
+        c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 
         # It is necessary to compute again since 
         c_emb = self.bottleneck.linear(x)
@@ -99,11 +100,14 @@ class DeepConceptReasoner(BaseModel):
         # batch_size x memory_size x n_concepts x n_tasks x n_roles
         c_weights = torch.cat([polarity, 1 - relevance], dim=-1)
 
-        y_pred = CF.logic_rule_eval(c_weights, input_concepts,
+        y_hat = CF.logic_rule_eval(c_weights, input_concepts,
                                     semantic=self.semantic)
         # removing memory dimension
-        y_pred = y_pred[:, :, 0]
-        return y_pred, c_pred
+        y_hat = y_hat[:, :, 0]
+        return {
+            'y_hat': y_hat,
+            'c_hat': c_hat
+        }
 
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)

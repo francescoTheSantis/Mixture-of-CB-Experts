@@ -1,6 +1,6 @@
 from src.trainer import Trainer
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, open_dict
 from hydra.utils import instantiate
 from src.utilities import set_seed, set_loggers
 import torch
@@ -14,11 +14,24 @@ def main(cfg: DictConfig) -> None:
     # Initialize the wandb logger
     wandb_logger, csv_logger = set_loggers(cfg)
 
+    # Get the log_dir
+    log_dir = csv_logger.log_dir
+
     # Set the seed
     set_seed(cfg.seed)
 
     ###### Load the data ######
     data_path, train_path, val_path, test_path = generate_data_path(cfg)
+
+    # Add data_path to the loader and engine configs
+    with open_dict(cfg):
+        cfg.dataset.loader.update(
+            data_path = data_path
+        )
+        cfg.engine.update(
+            data_path = data_path
+        )
+
 
     # Loader instantiation
     loader = instantiate(cfg.dataset.loader)
@@ -48,7 +61,7 @@ def main(cfg: DictConfig) -> None:
     cfg = update_config_from_data(cfg, loaded_train, c_names, y_names, c_groups, csv_logger.log_dir)
 
     # Check whether it is a valid combination of dataset and model.
-    # Some models (e.g., dcr) cannot be executed on some datasets (e.g., cebab).
+    # Some models (e.g., dcr) cannot be executed on some datasets (e.g., mnist_arithmetic).
     is_valid_experiment(cfg)    
 
     ###### Instantiate the model ######
@@ -69,7 +82,6 @@ def main(cfg: DictConfig) -> None:
     if model.model.has_concepts:
         ###### Perform Intervetions ######
         intervention_df = trainer.interventions(loaded_test)
-        log_dir = csv_logger.log_dir
         intervention_df.to_csv(f"{log_dir}/interventions.csv", index=False)
 
     # Close the wandb logger if it is used

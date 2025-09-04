@@ -31,7 +31,8 @@ class LinearMemoryReasoner(BaseModel):
                  concept_loss_form=nn.BCELoss(),
                  backbone_latent_size=None,
                  concept_type='binary',
-                 bias=None
+                 bias=None,
+                 **kwargs
                  ):
 
         super().__init__(
@@ -126,9 +127,9 @@ class LinearMemoryReasoner(BaseModel):
             intervention_idxs=int_idxs,
             intervention_rate=1,
         )
-        c_pred = c_dict['c_int']
+        c_hat = c_dict['c_int']
 
-        c_pred, input_concepts = self._process_concepts(c_pred, c_true, int_idxs)
+        c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 
         # It is necessary to compute again since 
         c_emb = self.bottleneck.linear(latent)
@@ -166,7 +167,7 @@ class LinearMemoryReasoner(BaseModel):
             # Compute the temperature for the Gumbel-Softmax distribution
             current_tau = self.compute_tau(self.global_step)
 
-            # Dimension: (bsz, memory_size, n_samples)
+            # Dimension: (bsz, memory_size, n_classes, n_samples)
             prob_per_classifier = F.gumbel_softmax(classifier_selector_logits, 
                                                             tau=current_tau, 
                                                             hard=True, 
@@ -192,12 +193,17 @@ class LinearMemoryReasoner(BaseModel):
         
         # Select one logit for each class of y form the memory
         # Dimension: (batch_size, output_size, n_samples)
-        y_pred = self.selection_eval(prob_per_classifier, y_per_classifier)
+        y_hat = self.selection_eval(prob_per_classifier, y_per_classifier)
         if self.bias=='global':
-            y_pred = y_pred + self.bias_params[None, :, None]
+            y_hat = y_hat + self.bias_params[None, :, None]
 
-        return y_pred, c_pred, predicted_weights, selection_dist
-    
+        return {
+            'y_hat': y_hat,
+            'c_hat': c_hat,
+            'explanations': predicted_weights,
+            'selection_dist': selection_dist
+        }
+
     def linear_equation_eval(self, memory, input_concepts):
         if self.bias == 'local':
             concept_memory = memory[:,:,:-1,:]
@@ -206,12 +212,12 @@ class LinearMemoryReasoner(BaseModel):
             concept_memory = memory
             bias_memory = None
         
-        y_pred = torch.einsum('bmcy,bc->bym', concept_memory, input_concepts)
+        y_hat = torch.einsum('bmcy,bc->bym', concept_memory, input_concepts)
 
         if bias_memory is not None:
-            y_pred = y_pred + bias_memory
+            y_hat = y_hat + bias_memory
 
-        return y_pred
+        return y_hat
 
     def selection_eval(self, prob_per_classifier, y_per_classifier):
         """
@@ -257,13 +263,13 @@ class LinearMemoryReasoner(BaseModel):
 
         return loss
 
-    def filter_output_for_metrics(self, y_output, c_output=None, predicted_cbm=None, distribution_over_memory=None):
+    def filter_output_for_metrics(self, y_hat, c_hat=None, *args, **kwargs):
         # Average over the last dimension, which contains the samples
         # form the Monte Carlo approximation.
-        y_output = y_output.mean(dim=-1)
-        return y_output, c_output
-    
-    def filter_output_for_loss(self, y_output, c_output=None, predicted_cbm=None, distribution_over_memory=None):
+        y_hat = y_hat.mean(dim=-1)
+        return y_hat, c_hat
+
+    def filter_output_for_loss(self, y_hat, c_hat=None, *args, **kwargs):
         # This models return the predicted CBM in addition to the usual
         # y and c predictions. The loss function needs only y and c to be computed.
-        return y_output, c_output
+        return y_hat, c_hat

@@ -2,8 +2,6 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 from src.models.encoders.base import BaseEncoder
-from src.utilities import convert_equation_to_torch
-import re
 
 class BaseModel(nn.Module):
     """
@@ -24,8 +22,7 @@ class BaseModel(nn.Module):
                  c_groups=None,
                  encoder: BaseEncoder=None,
                  backbone_latent_size=None,
-                 concept_type='binary',
-                 equations=None
+                 concept_type='binary'
                  ):
         super().__init__()
         
@@ -45,8 +42,6 @@ class BaseModel(nn.Module):
         self.int_idxs = int_idxs
         self.has_concepts = None # This value has to be overriden by the inheriting class
         self.noise = noise
-        self.use_known_equation = equations[0]
-        self.known_equations = equations[1] if self.use_known_equation else None
 
         if task == 'classification':
             if output_size > 1:
@@ -70,31 +65,7 @@ class BaseModel(nn.Module):
                 self.concept_loss_form.append(nn.BCELoss())
             else:
                 self.concept_loss_form.append(nn.MSELoss())
-
-        # Prepare known equations if the corresponding flag is set
-        if self.use_known_equation is not None:
-            self.known_equations = equations
-
-    def _prepare_known_equations(self):
-        self.torch_equations = []
-        self.sympy_variables = []
-
-        # define the variables
-        variables = [f'c{i}' for i in self.c_names]
-
-        # Convert the string equations to torch functions
-        for eq in self.known_equations:
-            torch_eq, sympy_variable = convert_equation_to_torch(eq, variables)
-            self.torch_equations.append(torch_eq)
-            self.sympy_variables.append(sympy_variable)
-
-    def _execute_known_equation(self, equation, variables, values):
-        # Create a dictionary mapping variable names to their values
-        var_dict = dict(zip(variables, values))
-        # Execute the equation function with the mapped variables
-        output = equation(**var_dict)
-        return output
-
+                
     def encode(self, input):
         x = input['x']
         c_true = input['c']
@@ -152,7 +123,7 @@ class BaseModel(nn.Module):
             raise ValueError(f"Unknown task type: {self.task}. Supported tasks are 'classification', 'regression', and 'generation'.")
         return y, y_hat
     
-    def _handle_hard_concepts(self, c_pred, int_idxs):
+    def _handle_hard_concepts(self, c_hat, int_idxs):
         """
         When the hard_concepts variable is True:
             - the boolean concepts are made hard by applying a threshold at 0.5
@@ -162,18 +133,18 @@ class BaseModel(nn.Module):
         and the values do not need to undergo any further transformation.
         """
         if self.hard_concepts:
-            binary_mask = torch.tensor([c_type == 'binary' for c_type in self.concept_type], device=c_pred.device)
-            integer_mask = torch.tensor([c_type == 'integer' for c_type in self.concept_type], device=c_pred.device)
+            binary_mask = torch.tensor([c_type == 'binary' for c_type in self.concept_type], device=c_hat.device)
+            integer_mask = torch.tensor([c_type == 'integer' for c_type in self.concept_type], device=c_hat.device)
 
             # Combine with int_idxs
             binary_mask = binary_mask & ~int_idxs
             integer_mask = integer_mask & ~int_idxs
 
-            c_pred = torch.where(binary_mask, (c_pred > 0.5).float(), c_pred) if binary_mask.any() else c_pred
-            c_pred = torch.where(integer_mask, c_pred.round(), c_pred) if integer_mask.any() else c_pred
-        return c_pred
-    
-    def _apply_concept_activation(self, c_pred, int_idxs):
+            c_hat = torch.where(binary_mask, (c_hat > 0.5).float(), c_hat) if binary_mask.any() else c_hat
+            c_hat = torch.where(integer_mask, c_hat.round(), c_hat) if integer_mask.any() else c_hat
+        return c_hat
+
+    def _apply_concept_activation(self, c_hat, int_idxs):
         """
         Apply the correct activation function to the concepts:
             - if the concept is boolean, then a bce will be used as loss. For this reason, we apply a sigmoid activation.
@@ -183,32 +154,32 @@ class BaseModel(nn.Module):
         and the values do not need to undergo any further transformation.
         """
         # Create masks for different concept types
-        binary_mask = torch.tensor([c_type == 'binary' for c_type in self.concept_type], device=c_pred.device)
+        binary_mask = torch.tensor([c_type == 'binary' for c_type in self.concept_type], device=c_hat.device)
 
         # Combine binary_mask with int_mask
         binary_mask = binary_mask & ~int_idxs
 
         # Apply activations using masks
-        c_pred = torch.where(binary_mask, torch.sigmoid(c_pred), c_pred)
+        c_hat = torch.where(binary_mask, torch.sigmoid(c_hat), c_hat)
 
         # numeric_mask = ~binary_mask
-        # c_pred = torch.where(numeric_mask, c_pred, c_pred)
-        return c_pred
+        # c_hat = torch.where(numeric_mask, c_hat, c_hat)
+        return c_hat
 
-    def _process_concepts(self, c_pred, c_true, int_idxs):
+    def _process_concepts(self, c_hat, c_true, int_idxs):
         """
         Process the concepts by applying activation, intervening, and handling hard concepts.
         """
         # apply activation to concept prediction
-        c_pred = self._apply_concept_activation(c_pred, int_idxs)
+        c_hat = self._apply_concept_activation(c_hat, int_idxs)
 
         # intervene
-        c_pred = self._intervene(c_pred, c_true, int_idxs)
+        c_hat = self._intervene(c_hat, c_true, int_idxs)
 
         # switch to hard concepts if the corresponding variable is true
-        input_concepts = self._handle_hard_concepts(c_pred, int_idxs)
+        input_concepts = self._handle_hard_concepts(c_hat, int_idxs)
 
-        return c_pred, input_concepts
+        return c_hat, input_concepts
 
     def concept_based_loss(self, y_hat, y, c_hat=None, c=None):
 
@@ -253,26 +224,26 @@ class BaseModel(nn.Module):
 
         return (torch.rand(bsz, 1, device=labels.device) < self.int_prob).expand(bsz, n_concepts).int()
 
-    def _intervene(self, c_pred, c_true, int_idxs):
+    def _intervene(self, c_hat, c_true, int_idxs):
         """
-        Apply interventions: when the entry in int_idxs is 1, replace c_pred with c_true
+        Apply interventions: when the entry in int_idxs is 1, replace c_hat with c_true
         """
-        c_pred = torch.where(int_idxs == 1, c_true, c_pred)
-        return c_pred
+        c_hat = torch.where(int_idxs == 1, c_true, c_hat)
+        return c_hat
 
-    def filter_output_for_loss(self, y_output, c_output=None):
+    def filter_output_for_loss(self, y_hat, c_hat=None, *args):
         """
         Filter the output of the model for loss computation.
         This method can be overridden in subclasses to customize the output filtering.
         """
-        return y_output, c_output
-    
-    def filter_output_for_metrics(self, y_output, c_output=None):
+        return y_hat, c_hat
+
+    def filter_output_for_metrics(self, y_hat, c_hat=None, *args):
         """
         Filter the output of the model for metrics computation.
         This method can be overridden in subclasses to customize the output filtering.
         """
-        return y_output, c_output
+        return y_hat, c_hat
 
     # def get_intervened_concepts_predictions(self, labels, groups=None):
     #     '''

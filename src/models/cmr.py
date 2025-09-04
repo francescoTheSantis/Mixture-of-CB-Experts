@@ -30,7 +30,8 @@ class ConceptMemoryReasoner(BaseModel):
                  encoder=None,
                  concept_loss_form=nn.BCELoss(),
                  backbone_latent_size=None,
-                 concept_type='binary'
+                 concept_type='binary',
+                 **kwargs
                  ):
         super().__init__(
             output_size,
@@ -123,9 +124,9 @@ class ConceptMemoryReasoner(BaseModel):
             intervention_idxs=int_idxs,
             intervention_rate=1.,
         )
-        c_pred = c_dict['c_int']
+        c_hat = c_dict['c_int']
 
-        c_pred, input_concepts = self._process_concepts(c_pred, c_true, int_idxs)
+        c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 
         classifier_selector_logits = self.classifier_selector(latent)
         prob_per_classifier = torch.softmax(classifier_selector_logits, dim=-1)
@@ -144,17 +145,20 @@ class ConceptMemoryReasoner(BaseModel):
             c_rec_per_classifier = self._conc_recon(concept_weights,
                                                     c_true,
                                                     y_true)
-            y_pred = CF.selection_eval(
+            y_hat = CF.selection_eval(
                 prob_per_classifier,
                 y_per_classifier,
                 c_rec_per_classifier,
             )
         else:
-            y_pred = CF.selection_eval(prob_per_classifier,
+            y_hat = CF.selection_eval(prob_per_classifier,
                                        y_per_classifier)
-            
-        return y_pred, c_pred
-    
+
+        return {
+            'y_hat': y_hat,
+            'c_hat': c_hat
+        }
+
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         if torch.isnan(loss):
@@ -165,7 +169,7 @@ class ConceptMemoryReasoner(BaseModel):
     def logic_rule_eval(
             self,
             concept_weights: torch.Tensor,
-            c_pred: torch.Tensor,
+            c_hat: torch.Tensor,
             memory_idxs: torch.Tensor = None,
             semantic=CMRSemantic()
     ) -> torch.Tensor:
@@ -175,7 +179,7 @@ class ConceptMemoryReasoner(BaseModel):
         Args:
             concept_weights: concept weights with shape (batch_size,
                 memory_size, n_concepts, n_tasks, n_roles) with n_roles=3.
-            c_pred: concept predictions with shape (batch_size, n_concepts).
+            c_hat: concept predictions with shape (batch_size, n_concepts).
             memory_idxs: Indices of rules to evaluate with shape (batch_size,
                 n_tasks). Default is None (evaluate all).
             semantic: Semantic function to use for rule evaluation.
@@ -200,7 +204,7 @@ class ConceptMemoryReasoner(BaseModel):
 
         if memory_idxs is None:
             # cast all to (batch_size, memory_size, n_concepts, n_tasks)
-            x = c_pred.unsqueeze(1).unsqueeze(-1).expand(
+            x = c_hat.unsqueeze(1).unsqueeze(-1).expand(
                 -1,
                 memory_size,
                 -1,
@@ -208,7 +212,7 @@ class ConceptMemoryReasoner(BaseModel):
             )
         else:  # cast all to (batch_size, memory_size=1, n_concepts, n_tasks)
             # TODO: memory_idxs never used!
-            x = c_pred.unsqueeze(1).unsqueeze(-1).expand(-1, 1, -1, n_tasks)
+            x = c_hat.unsqueeze(1).unsqueeze(-1).expand(-1, 1, -1, n_tasks)
 
         # batch_size, mem_size, n_tasks
         y_per_rule = semantic.disj(

@@ -21,7 +21,7 @@ class BlackBox(BaseModel):
                  encoder: BaseEncoder=None,
                  backbone_latent_size=None,
                  concept_type='binary',
-                 equations=None
+                 **kwargs
                  ):
         super().__init__(
                  output_size,
@@ -38,18 +38,11 @@ class BlackBox(BaseModel):
                  c_groups,
                  encoder,
                  backbone_latent_size,
-                 concept_type,
-                 equations
+                 concept_type
                  )
 
         self.has_concepts = False
         hidden_size = latent_size 
-        
-        # self.predictor = nn.Sequential(
-        #     nn.Linear(backbone_latent_size, hidden_size),
-        #     getattr(nn, activation)(),
-        #     nn.Linear(hidden_size, output_size)
-        # )
 
         self.predictor = MLPEncoder(
             backbone_latent_size,
@@ -64,9 +57,12 @@ class BlackBox(BaseModel):
         x = input['x']
         x = self.encoder(x)
         y_hat = self.predictor(x)
-        return y_hat, None
-    
-    def loss(self, y_hat, y, c_hat=None, c=None):
+        return {
+            'y_hat': y_hat,
+            'c_hat': None
+        }
+
+    def loss(self, y_hat, y, *args):
         if self.task == 'classification' and self.output_size > 1:
             y = y.flatten().long()
         elif self.task == 'generation':

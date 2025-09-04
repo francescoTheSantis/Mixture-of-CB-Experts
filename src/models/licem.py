@@ -26,7 +26,8 @@ class LinearConceptEmbeddingModel(BaseModel):
                  encoder=None,
                  concept_loss_form=nn.BCELoss(),
                  backbone_latent_size=None,
-                 concept_type='binary'
+                 concept_type='binary',
+                 **kwargs
                  ):
 
         super().__init__(
@@ -98,9 +99,9 @@ class LinearConceptEmbeddingModel(BaseModel):
             intervention_idxs=int_idxs,
             intervention_rate=1.,
         )
-        c_pred = c_dict['c_int']
+        c_hat = c_dict['c_int']
 
-        c_pred, input_concepts = self._process_concepts(c_pred, c_true, int_idxs)
+        c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 
         # It is necessary to compute again since 
         c_emb = self.bottleneck.linear(latent)
@@ -116,9 +117,12 @@ class LinearConceptEmbeddingModel(BaseModel):
             y_bias = self.bias_predictor(c_emb).unsqueeze(dim=1)
             self.__predicted_bias = y_bias
 
-        y_pred = CF.linear_equation_eval(c_weights, input_concepts, y_bias)
-        return y_pred[:, :, 0], c_pred
-    
+        y_hat = CF.linear_equation_eval(c_weights, input_concepts, y_bias)
+        return {
+            'y_hat': y_hat[:, :, 0],
+            'c_hat': c_hat
+        }
+
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         # adding l1 regularization to the weights

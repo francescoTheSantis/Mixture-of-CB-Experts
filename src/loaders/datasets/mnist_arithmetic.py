@@ -15,7 +15,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
 from env import HOME, DATA_PATH
 
 
-CONCEPT_NAMES = ["first_digit", "second_digit", "addition", "subtraction", "multiplication", "division"]
+CONCEPT_NAMES = ["first_digit", "second_digit"]
 
 
 class ArithmeticMNISTDataset(Dataset):
@@ -33,6 +33,9 @@ class ArithmeticMNISTDataset(Dataset):
         self.num_samples = num_samples
         self.img_size = img_size
         self.operators = operators
+
+        # generate the list of operators for each sample
+        self.operator_list = [random.choice(self.operators) for _ in range(num_samples)]
 
         # If True, the training set will be composed of a limited set of digit pairs.
         self.incomplete_training = incomplete_training
@@ -60,19 +63,22 @@ class ArithmeticMNISTDataset(Dataset):
         return self.num_samples
 
     def __getitem__(self, idx):
-        # Sample two random MNIST digits
+        # Sample two random MNIST digits, resampling if either is 0
         i1 = random.randint(0, len(self.mnist) - 1)
         i2 = random.randint(0, len(self.mnist) - 1)
         img1, a = self.mnist[i1]
         img2, b = self.mnist[i2]
-
-        op = random.choice(self.operators)
-
-        # Avoid division by zero
-        if op == '/' and b == 0:
-            while b == 0:
+        
+        # Resample if either digit is 0
+        while a == 0 or b == 0:
+            if a == 0:
+                i1 = random.randint(0, len(self.mnist) - 1)
+                img1, a = self.mnist[i1]
+            if b == 0:
                 i2 = random.randint(0, len(self.mnist) - 1)
                 img2, b = self.mnist[i2]
+
+        op = self.operator_list[idx]
 
         # Compute result + flags
         if op == '+':
@@ -116,7 +122,7 @@ class ArithmeticMNISTDataset(Dataset):
         x = self.transform(canvas)
 
         # Concept tensor
-        c = torch.tensor([a, b] + flags, dtype=torch.float32)
+        c = torch.tensor([a, b], dtype=torch.float32)
 
         return x, c, torch.tensor(result)
 

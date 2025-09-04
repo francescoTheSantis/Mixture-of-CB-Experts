@@ -71,6 +71,21 @@ class Trainer:
         self.model.scheduler = self.scheduler
 
     def train(self, train_dataloader, val_dataloader, ckpt_path=None):
+
+        if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner' and self.model.model.equation_learning_strategy=='sym_reg_alg':
+            # Store the c_trues and y_trues of the training set in the model for later use
+            c_trues = []
+            y_trues = []
+            # iterate over the training-set
+            for batch in train_dataloader:
+                c = batch['c']
+                y = batch['y']
+                c_trues.append(c)
+                y_trues.append(y)
+            self.model.model.c_trues = torch.cat(c_trues, dim=0)
+            self.model.model.y_trues = torch.cat(y_trues, dim=0)
+            self.model.model.setup_symbolic_reg_equations()
+
         self.trainer.fit(self.model, 
                          train_dataloader, 
                          val_dataloader, ckpt_path=ckpt_path)
@@ -117,7 +132,7 @@ class Trainer:
                         
                         inputs = {'x': x, 'c': c, 'y': y}
                         output = self.model.forward(inputs)
-                        output = self.model.model.filter_output_for_metrics(*output)
+                        output = self.model.model.filter_output_for_metrics(**output)
                         
                         # Move to CPU immediately and detach to free GPU memory
                         y_pred = output[0].detach().cpu()

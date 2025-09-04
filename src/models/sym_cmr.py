@@ -1,0 +1,308 @@
+from matplotlib.pylab import sample
+import torch
+import torch.nn as nn
+import torch_concepts.nn as pyc_nn
+from src.models.base import BaseModel
+import torch.nn.functional as F
+from torch_concepts.nn import concept_embedding_mixture
+import re
+import sympy
+import sympytorch
+import pysr
+import numpy as np
+import os
+#os.environ["JULIA_NUM_THREADS"] = "8" # Set the number of threads for Julia (used by PySR)
+from pysr import PySRRegressor
+
+class SymbolicMemoryReasoner(BaseModel):
+    def __init__(self, 
+                 output_size,
+                 c_names,
+                 y_names,
+                 task, 
+                 task_penalty,
+                 activation='ReLU',
+                 int_prob=0.1,
+                 int_idxs=None,
+                 noise=None,
+                 embedding_size=16,
+                 latent_size=128,
+                 c_groups=None,
+                 memory_size=7,
+                 hard_concepts=False,
+                 weight_reg=0,
+                 encoder=None,
+                 mc_approx=100,
+                 concept_loss_form=nn.BCELoss(),
+                 backbone_latent_size=None,
+                 concept_type='binary',
+                 known_equations=None,
+                 equation_learning_strategy=None,
+                 use_memory=True,
+                 **kwargs
+                 ):
+
+        super().__init__(
+            output_size,
+            c_names,
+            y_names,
+            task,
+            task_penalty,
+            hard_concepts,
+            activation,
+            int_prob,
+            int_idxs,
+            noise,
+            latent_size,
+            c_groups,
+            encoder,
+            backbone_latent_size,
+            concept_type
+        )
+
+        self.embedding_size = embedding_size
+        self.has_concepts = True
+        self.y_names = list(y_names)
+        self.weight_reg = weight_reg
+
+        self.mc_approx = mc_approx
+        self.memory_size = memory_size
+        self.use_memory = use_memory
+
+        # We need to use the Concept embedding model to produce both concept predictions and embeddings.
+        self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
+            backbone_latent_size,
+            self.c_names,
+            embedding_size,
+            activation=nn.Identity()
+        )
+
+        # Equations handling
+        self.equation_learning_strategy = equation_learning_strategy
+        self.known_equations = known_equations
+
+        if self.equation_learning_strategy=='prior_knowledge': 
+            if self.known_equations is None:
+                raise ValueError("Known equations must be provided when using 'prior_knowledge' strategy.")
+            self._prepare_equations(self.known_equations) # We process the known equations to convert them to torch executable modules
+            self.memory_size = len(self.known_equations) # Override memory size to match the number of known equations
+        elif self.equation_learning_strategy == 'kan':
+            pass #TODO
+
+        # Define the Memory 
+        if self.use_memory:
+            self.classifier_selector = nn.Sequential(
+                nn.Linear(backbone_latent_size,  self.memory_size * len(y_names)),
+            )
+
+        # Handle parameter inconsistencies
+        if len(self.known_equations)>1 and not self.use_memory:
+            raise ValueError("If multiple equations are provided, memory must be used to select among them.")
+        elif len(self.known_equations)==1 and self.use_memory:
+            raise ValueError("Only one equation provided, memory will not be used.")
+        
+        if self.equation_learning_strategy not in ['prior_knowledge', 'sym_reg_alg', 'kan']:
+            raise ValueError(f"Unknown equation learning strategy: {self.equation_learning_strategy}")
+        
+    def setup_symbolic_reg_equations(self):
+        if self.equation_learning_strategy != 'sym_reg_alg':
+            raise ValueError("This method should only be called when using 'sym_reg_alg' strategy.")
+        learned_equations = self._fit_symbolic_reg_model()
+        # Rename the equations to use 'c0', 'c1', ... as variable names
+        renamed_equations = []
+        name = 'x'
+        for eq in learned_equations:
+            for i, _ in enumerate(self.c_names):
+                eq = re.sub(rf'\b{name}{i}\b', f'c{i}', eq)
+            renamed_equations.append(eq)
+        self._prepare_equations(learned_equations)
+
+    def _convert_equation_to_torch(self, equation_str, variables):
+        # 1. Define the symbols (variables)
+        sympy_vars = sympy.symbols(variables)
+
+        # 2. Define the equation in a textual format
+        exp = equation_str
+
+        # 3. Convert to sympy expression
+        exp = sympy.sympify(exp)
+
+        # 4. Convert the textual equation into an executable PyTorch module
+        torch_exp = sympytorch.SymPyModule(expressions=[exp])
+
+        return torch_exp, sympy_vars
+
+    def _prepare_equations(self, equations):
+        self.torch_equations = []
+        self.sympy_variables = []
+
+        # define the variables
+        variables = [f'c{i}' for i, name in enumerate(self.c_names)]
+
+        self.string_variables = variables
+
+        # Convert the string equations to torch functions
+        for eq in equations:
+            torch_eq, sympy_variable = self._convert_equation_to_torch(eq, variables)
+            self.torch_equations.append(torch_eq)
+            self.sympy_variables.append(sympy_variable)
+
+    def _fit_symbolic_reg_model(self, top_fraction=0.5):
+        equations = []
+        residuals = np.zeros_like(self.y_trues)
+
+        X_current, y_current = self.c_trues, self.y_trues
+
+        for i in range(self.memory_size):
+            # Train symbolic regression on current subset
+            model = PySRRegressor(
+                niterations=4,#40,
+                populations=3,#30,
+                binary_operators=["+", "-", "*", "/"],
+                unary_operators=["square", "exp", "log"],
+                model_selection="best",
+                verbosity=1,
+            )
+            model.fit(X_current, y_current)
+
+            # Save equation
+            eq = model.get_best()["equation"]
+            str_eq = str(eq)
+            equations.append(str_eq)
+
+            # Compute residuals on full dataset
+            y_pred_full = model.predict(self.c_trues)
+            residuals = self.y_trues - y_pred_full
+
+            # Select hardest samples for next round
+            errors = np.abs(residuals)
+            cutoff = np.quantile(errors, 1 - top_fraction)
+            mask = errors >= cutoff
+            X_current, y_current = self.c_trues[mask], self.y_trues[mask]
+
+            print(f"Iteration {i+1}: equation = {eq}, subset size = {X_current.shape[0]}")
+
+        return equations        
+
+
+    def compute_tau(self, global_step, tau_init=1, tau_min=0.05, decay_rate=0.99):
+        # Exponential decay to decrease tau over time
+        tau = max(tau_min, tau_init * decay_rate ** global_step)
+        return tau
+
+    def forward(self, input):
+        latent, c_true, int_idxs = self.encode(input)
+        bsz = latent.shape[0]
+
+        ## Concept encoder and concept processing block ##
+        c_emb, c_dict = self.bottleneck(
+            latent,
+            c_true=c_true,
+            intervention_idxs=int_idxs,
+            intervention_rate=1,
+        )
+        c_hat = c_dict['c_int']
+
+        c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
+
+        c_emb = self.bottleneck.linear(latent)
+        c_emb = concept_embedding_mixture(c_emb, input_concepts)
+
+        if self.training:
+            n_samples = self.mc_approx
+        else:
+            n_samples = 1
+
+        ## Memory block ##
+        if self.use_memory and self.memory_size>1:
+            classifier_selector_logits = self.classifier_selector(latent)
+            # Reshape the logits to have dimension (bsz, memory_size, n_classes)
+            classifier_selector_logits = classifier_selector_logits.view(-1, self.memory_size, len(self.y_names))
+            # Save the distribution over the memory to compute the entropy,
+            # which allows to evaluate how peaked the distribution is. 
+            selection_dist = classifier_selector_logits.view(bsz*len(self.y_names), self.memory_size).clone().detach()
+            # Dimension: (bsz, memory_size, n_classes, n_samples)
+            classifier_selector_logits = classifier_selector_logits.unsqueeze(-1).expand(-1, -1, -1, n_samples)
+            # Compute the temperature for the Gumbel-Softmax distribution
+            current_tau = self.compute_tau(self.global_step)
+            # Dimension: (bsz, memory_size, n_classes, n_samples)
+            prob_per_classifier = F.gumbel_softmax(classifier_selector_logits, 
+                                                   tau=current_tau, 
+                                                   hard=True, 
+                                                   dim=1)
+        else:
+            prob_per_classifier = torch.ones((bsz, 1, len(self.y_names)), device=latent.device)
+            selection_dist = torch.tensor([0.0], device=latent.device)
+
+        ## Equation execution block ##
+        y_hat, explanations = self._execute_equations(prob_per_classifier, input_concepts)
+
+        return {
+            'y_hat': y_hat,
+            'c_hat': c_hat,
+            'explanations': explanations,
+            'selection_dist': selection_dist
+        }
+
+    def _execute_equations(self, prob_per_classifier, input_concepts):
+        bsz = input_concepts.shape[0]
+
+        if self.equation_learning_strategy in ['prior_knowledge', 'sym_reg_alg']:
+            y_hat, explanations = self._execute_known_equations(prob_per_classifier, input_concepts)
+        elif self.equation_learning_strategy=='kan':
+            y_hat, explanations = self._execute_kan(prob_per_classifier, input_concepts)
+            
+        return y_hat, explanations
+
+    def _execute_kan(self, prob_per_classifier, input_concepts):
+        pass #TODO
+
+    def _execute_known_equations(self, prob_per_classifier, input_concepts):
+
+        # Execute all the equations
+        eq_outputs = []
+        for i, equation in enumerate(self.torch_equations):
+            eq_output = self._execute_known_equation(equation, input_concepts)
+            eq_outputs.append(eq_output)
+
+        # Stack the outputs along the class dimension
+        eq_outputs = torch.stack(eq_outputs, dim=1).squeeze() # Shape: (bsz, n_equations)
+
+        # Combine the outputs using the selector probabilities
+        y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
+
+        # Get the explanations (the selected equations)
+        if self.training:
+            explanations = None
+        else:
+            # If the number of classes is bigger than one, show the equation selected for the predicted class.
+            # Otherwise, show the equation selected for the single output.
+            exp_selection = prob_per_classifier[:,:,:,0]
+            # select the predicted class
+            y_idx = y_hat.argmax(dim=1).squeeze().unsqueeze(1).expand(-1, exp_selection.size(1)).unsqueeze(-1)
+            eq_idx = torch.gather(exp_selection, 2, y_idx).squeeze(-1).argmax(1)
+
+            # Get the explanations (the selected equations)
+            explanations = [self.known_equations[idx.item()] for i, idx in enumerate(eq_idx)]
+            
+        return y_hat, explanations
+
+    def _execute_known_equation(self, equation, values):
+        # Create a dictionary mapping variable names to their values
+        var_dict = dict(zip(self.string_variables, [values[:, i] for i in range(values.shape[1])]))
+        # Execute the equation function with the mapped variables
+        output = equation(**var_dict)
+        return output
+
+    def loss(self, y_hat, y, c_hat=None, c=None):
+        loss = self.concept_based_loss(y_hat, y, c_hat, c)
+        return loss
+
+    def filter_output_for_metrics(self, y_hat, c_hat=None, *args, **kwargs):
+        # Average over the last dimension, which contains the samples
+        # form the Monte Carlo approximation.
+        y_hat = y_hat.mean(dim=-1)
+        return y_hat, c_hat
+
+    def filter_output_for_loss(self, y_hat, c_hat=None, *args, **kwargs):
+        return y_hat, c_hat

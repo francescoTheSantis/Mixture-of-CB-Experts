@@ -27,6 +27,7 @@ import os
 import itertools
 from src.utilities import get_type_from_name
 import random
+import pandas as pd
 
 class TextDataset(torch.utils.data.Dataset):
     def __init__(self, encoded_text):
@@ -55,7 +56,8 @@ class loader(object):
                  selected_concept_groups=None,
                  concept_percentage=None,
                  class_attributes=None,
-                 extract_embeddings=True
+                 extract_embeddings=True,
+                 data_path=None
                  ):
         self.name = name
         self.batch_size = batch_size
@@ -67,6 +69,7 @@ class loader(object):
         self.concept_groups = None
         self.extract_embeddings = extract_embeddings
         self.concept_percentage = concept_percentage
+        self.data_path = data_path
 
         self.transform = transforms.Compose([
                 transforms.Resize((224, 224)),
@@ -266,6 +269,16 @@ class loader(object):
             train_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=10000, img_size=224)
             val_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=2000, img_size=224)
             test_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=False, num_samples=3000, img_size=224)
+
+            # Get the equations x sample in the test-set
+            operators = test_dataset.operator_list
+            equations = []
+            for i in range(len(operators)):
+                equations.append(f"c0 {operators[i]} c1")
+            # Create a dataframe and save it
+            equations_df = pd.DataFrame(equations, columns=['equation'])
+            equations_df.to_csv(f"{self.data_path}/mnist_arithmetic_equations.csv", index=False)
+
         elif self.name == 'cub' and self.concept_percentage is None:
             train_dataset = CUBDataset(root=DATA_PATH, split='train')
             val_dataset = CUBDataset(root=DATA_PATH, split='val')
@@ -431,32 +444,5 @@ if __name__ == '__main__':
     torch.save(train_loader, os.path.join(data_path, 'train.pt'))
     torch.save(val_loader, os.path.join(data_path, 'val.pt'))
     torch.save(test_loader, os.path.join(data_path, 'test.pt'))
-
-    # print("\nXNOR dataset")
-    # xnor_dataset = loader(
-    #     name='xnor',
-    #     batch_size=32,
-    #     num_workers=4,
-    #     device='cpu',
-    # ).load_data()[0]
-    # print(xnor_dataset.__iter__().__next__())
-    #
-    # print("\nNOR dataset")
-    # nor_dataset = loader(
-    #     name='nor',
-    #     batch_size=32,
-    #     num_workers=4,
-    #     device='cpu',
-    # ).load_data()[0]
-    # print(nor_dataset.__iter__().__next__())
-    #
-    # print("\nOR dataset")
-    # or_dataset = loader(
-    #     name='or',
-    #     batch_size=32,
-    #     num_workers=4,
-    #     device='cpu',
-    # ).load_data()[0]
-    # print(or_dataset.__iter__().__next__())
 
 

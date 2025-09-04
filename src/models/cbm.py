@@ -22,7 +22,8 @@ class ConceptBottleneckModel(BaseModel):
                  c_groups=None,
                  encoder=None,
                  backbone_latent_size=None,
-                 concept_type='binary' 
+                 concept_type='binary',
+                 **kwargs
                  ):
         
         super().__init__(
@@ -67,13 +68,16 @@ class ConceptBottleneckModel(BaseModel):
     def forward(self, input):
         x, c_true, int_idxs = self.encode(input)
         
-        c_pred, _ = self.bottleneck(x)
+        c_hat, _ = self.bottleneck(x)
 
-        c_pred, input_concepts = self._process_concepts(c_pred, c_true, int_idxs)
+        c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 
-        y_pred = self.y_predictor(input_concepts)
-        
-        return y_pred, c_pred
+        y_hat = self.y_predictor(input_concepts)
+
+        return {
+            'y_hat': y_hat,
+            'c_hat': c_hat
+        }
 
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)

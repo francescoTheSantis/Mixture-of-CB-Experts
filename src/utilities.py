@@ -14,7 +14,6 @@ from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet15
 from transformers import CLIPProcessor, CLIPModel
 import transformers
 import scienceplots
-import sympy, torch, sympytorch
 from env import CACHE
 
 warnings.filterwarnings("ignore")
@@ -258,10 +257,15 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             y_name = y_names,
             csv_log_dir = csv_log_dir,
             data_type = data_type,
+            dataset_name = cfg.dataset.metadata.name
         )
 
         hard_concepts = cfg.hard_concepts
         concept_type = prepare_concept_type(cfg.dataset.metadata.concept_type, cfg.engine.c_names)
+
+        # If cfg.dataset.equations exists, then we want to use the known equations,
+        # null otherwise
+        known_equations = cfg.dataset.equations if 'equations' in cfg.dataset and cfg.dataset.equations is not None else None
 
         cfg.model.params.update(
             output_size = n_labels,
@@ -272,7 +276,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             backbone_latent_size = backbone_latent_size,
             concept_type = concept_type,
             hard_concepts = hard_concepts,
-            equations = (cfg['use_known_equations'], cfg['dataset']['equations'])
+            known_equations = known_equations
         )
 
         cfg = setup_encoder(cfg, input_size, backbone_latent_size)
@@ -308,18 +312,3 @@ def generate_data_path(cfg):
     test_path = f"{data_path}/test.pt"
 
     return data_path, train_path, val_path, test_path
-
-def convert_equation_to_torch(equation_str, variables):
-    # 1. Define the symbols (variables)
-    sympy_vars = sympy.symbols(variables)
-
-    # 2. Define the equation in a textual format
-    exp = equation_str
-
-    # 3. Convert to sympy expression
-    exp = sympy.sympify(exp)
-
-    # 4. Convert the textual equation into an executable PyTorch module
-    torch_exp = sympytorch.SymPyModule(expressions=[exp])
-
-    return torch_exp, sympy_vars

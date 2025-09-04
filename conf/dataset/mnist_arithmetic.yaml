@@ -15,5 +15,8 @@ metadata:
 
 
 # for this dataset, the equations connecting the concepts to the task are known
-equations:
-  [ "c0 + c1", "c0 - c1", "c0 * c1", "c0 / c1"]
+equations: 
+  - "c0 + c1"
+  - "c0 - c1"
+  - "c0 * c1"
+  - "c0 / c1" 
