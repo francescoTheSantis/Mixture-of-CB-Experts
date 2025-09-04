@@ -115,7 +115,8 @@ class SymbolicMemoryReasoner(BaseModel):
             for i, _ in enumerate(self.c_names):
                 eq = re.sub(rf'\b{name}{i}\b', f'c{i}', eq)
             renamed_equations.append(eq)
-        self._prepare_equations(learned_equations)
+        self.known_equations = renamed_equations
+        self._prepare_equations(renamed_equations)
 
     def _convert_equation_to_torch(self, equation_str, variables):
         # 1. Define the symbols (variables)
@@ -179,8 +180,6 @@ class SymbolicMemoryReasoner(BaseModel):
             cutoff = np.quantile(errors, 1 - top_fraction)
             mask = errors >= cutoff
             X_current, y_current = self.c_trues[mask], self.y_trues[mask]
-
-            print(f"Iteration {i+1}: equation = {eq}, subset size = {X_current.shape[0]}")
 
         return equations        
 
