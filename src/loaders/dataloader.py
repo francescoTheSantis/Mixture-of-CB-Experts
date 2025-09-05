@@ -369,7 +369,7 @@ class loader(object):
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
 
-        if get_type_from_name(self.name) != 'text' and self.name !="pendulum":
+        if get_type_from_name(self.name) != 'text':
             loaded_train = DataLoader(train_dataset, 
                                     batch_size=self.batch_size, 
                                     shuffle=True,

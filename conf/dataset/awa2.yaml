@@ -1,4 +1,4 @@
-conf/dataset/cebab.yamldefaults:
+defaults:
   - common
   - _self_
   
