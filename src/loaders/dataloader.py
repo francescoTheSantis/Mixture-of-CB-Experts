@@ -16,6 +16,9 @@ from src.loaders.datasets.cifar.cifar10 import get_CIFAR10_CBM_dataloader
 from src.loaders.datasets.cifar.cifar100 import get_CIFAR100_CBM_dataloader
 from src.loaders.datasets.mnist_arithmetic import ArithmeticMNISTDataset
 from src.loaders.datasets.mnist_arithmetic import CONCEPT_NAMES as mnist_arithmetic_concept_names
+from src.loaders.datasets.pendulum import PendulumDataset
+from src.loaders.datasets.pendulum import CONCEPT_NAMES as concept_names_pendulum
+from src.loaders.datasets.pendulum import TASK_NAMES as task_names_pendulum
 
 from torch.utils.data import DataLoader, random_split
 from env import DATA_PATH
@@ -57,7 +60,8 @@ class loader(object):
                  concept_percentage=None,
                  class_attributes=None,
                  extract_embeddings=True,
-                 data_path=None
+                 data_path=None,
+                 dataset_already_created=False
                  ):
         self.name = name
         self.batch_size = batch_size
@@ -70,6 +74,7 @@ class loader(object):
         self.extract_embeddings = extract_embeddings
         self.concept_percentage = concept_percentage
         self.data_path = data_path
+        self.dataset_already_created = dataset_already_created
 
         self.transform = transforms.Compose([
                 transforms.Resize((224, 224)),
@@ -218,6 +223,10 @@ class loader(object):
             concept_names = self.concept_names_cifar          
             task_names = self.task_names_cifar
             concept_groups = None
+        elif self.name == "pendulum":
+            concept_names = concept_names_pendulum
+            task_names = task_names_pendulum
+            concept_groups = None
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
         
@@ -354,10 +363,13 @@ class loader(object):
             train_size = int(0.9 * len(train_dataset))
             val_size = len(train_dataset) - train_size
             train_dataset, val_dataset = random_split(train_dataset, [train_size, val_size])
+        elif self.name == "pendulum":
+            loader = PendulumDataset(already_created=self.dataset_already_created)
+            loaded_train, loaded_val, loaded_test = loader.collator()
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
 
-        if get_type_from_name(self.name) != 'text':
+        if get_type_from_name(self.name) != 'text' and self.name !="pendulum":
             loaded_train = DataLoader(train_dataset, 
                                     batch_size=self.batch_size, 
                                     shuffle=True,
