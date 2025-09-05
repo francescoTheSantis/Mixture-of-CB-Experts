@@ -11,7 +11,8 @@ import sympytorch
 import pysr
 import numpy as np
 import os
-#os.environ["JULIA_NUM_THREADS"] = "8" # Set the number of threads for Julia (used by PySR)
+from kan import KAN
+# os.environ["JULIA_NUM_THREADS"] = "8" # Set the number of threads for Julia (used by PySR)
 from pysr import PySRRegressor
 
 class SymbolicMemoryReasoner(BaseModel):
@@ -87,7 +88,18 @@ class SymbolicMemoryReasoner(BaseModel):
             self._prepare_equations(self.known_equations) # We process the known equations to convert them to torch executable modules
             self.memory_size = len(self.known_equations) # Override memory size to match the number of known equations
         elif self.equation_learning_strategy == 'kan':
-            pass #TODO
+            kan_params = {
+                    'width': [len(self.c_names), len(self.c_names)+1, output_size],
+                    'grid': 3,
+                    'k': 3,
+                    'auto_save': False,
+            }
+            # Instantiate as many KAN Layers as the memory size
+            self.kan_layers = nn.ModuleList()
+            for _ in range(self.memory_size):
+                kan_layer = KAN(**kan_params)
+                self.kan_layers.append(kan_layer)
+            self.symbolic_kan_eq_substituted = False
 
         # Define the Memory 
         if self.use_memory:
@@ -121,16 +133,12 @@ class SymbolicMemoryReasoner(BaseModel):
     def _convert_equation_to_torch(self, equation_str, variables):
         # 1. Define the symbols (variables)
         sympy_vars = sympy.symbols(variables)
-
         # 2. Define the equation in a textual format
         exp = equation_str
-
         # 3. Convert to sympy expression
         exp = sympy.sympify(exp)
-
         # 4. Convert the textual equation into an executable PyTorch module
         torch_exp = sympytorch.SymPyModule(expressions=[exp])
-
         return torch_exp, sympy_vars
 
     def _prepare_equations(self, equations):
@@ -253,10 +261,37 @@ class SymbolicMemoryReasoner(BaseModel):
             
         return y_hat, explanations
 
-    def _execute_kan(self, prob_per_classifier, input_concepts):
-        pass #TODO
+    def setup_kan_equations(self):
+        # Update the corresponding flag
+        self.symbolic_kan_eq_substituted = True
+        # Substitute the learned KAN splines with the most similar symbolic expressions
+        for kan_layer in self.kan_layers:
+            kan_layer.auto_symbolic()
 
-    def _execute_known_equations(self, prob_per_classifier, input_concepts):
+    def _execute_kan(self, prob_per_classifier, input_concepts):
+        if self.symbolic_kan_eq_substituted:
+            y_hat = self._execute_known_equations(prob_per_classifier, input_concepts, discard_explanations=True)
+        else:
+            # Execute all the KAN layers
+            eq_outputs = []
+            for i, kan_layer in enumerate(self.kan_layers):
+                eq_output = kan_layer(input_concepts)
+                eq_outputs.append(eq_output)
+            # Stack the outputs along the class dimension
+            eq_outputs = torch.stack(eq_outputs, dim=1).squeeze() # Shape: (bsz, n_equations)
+            # Combine the outputs using the selector probabilities
+            y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
+
+        # Get the explanations (the selected equations)
+        if self.training:
+            explanations = None
+        else:
+            explanations = None
+            # TODO
+
+        return y_hat, explanations
+
+    def _execute_known_equations(self, prob_per_classifier, input_concepts, discard_explanations=False):
 
         # Execute all the equations
         eq_outputs = []
@@ -270,21 +305,22 @@ class SymbolicMemoryReasoner(BaseModel):
         # Combine the outputs using the selector probabilities
         y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
 
-        # Get the explanations (the selected equations)
-        if self.training:
-            explanations = None
+        if discard_explanations:
+            return y_hat
         else:
-            # If the number of classes is bigger than one, show the equation selected for the predicted class.
-            # Otherwise, show the equation selected for the single output.
-            exp_selection = prob_per_classifier[:,:,:,0]
-            # select the predicted class
-            y_idx = y_hat.argmax(dim=1).squeeze().unsqueeze(1).expand(-1, exp_selection.size(1)).unsqueeze(-1)
-            eq_idx = torch.gather(exp_selection, 2, y_idx).squeeze(-1).argmax(1)
-
             # Get the explanations (the selected equations)
-            explanations = [self.known_equations[idx.item()] for i, idx in enumerate(eq_idx)]
-            
-        return y_hat, explanations
+            if self.training:
+                explanations = None
+            else:
+                # If the number of classes is bigger than one, show the equation selected for the predicted class.
+                # Otherwise, show the equation selected for the single output.
+                exp_selection = prob_per_classifier[:,:,:,0]
+                # select the predicted class
+                y_idx = y_hat.argmax(dim=1).squeeze().unsqueeze(1).expand(-1, exp_selection.size(1)).unsqueeze(-1)
+                eq_idx = torch.gather(exp_selection, 2, y_idx).squeeze(-1).argmax(1)
+                # Get the explanations (the selected equations)
+                explanations = [self.known_equations[idx.item()] for i, idx in enumerate(eq_idx)]
+            return y_hat, explanations
 
     def _execute_known_equation(self, equation, values):
         # Create a dictionary mapping variable names to their values

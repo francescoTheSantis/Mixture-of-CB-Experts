@@ -60,10 +60,6 @@ class Engine(pl.LightningModule):
             self.y_trues = []
             self.y_preds = []
 
-        # Store all the c_trues and y_preds of the test set
-
-
-
     def forward(self, input):
         return self.model(input)
 
@@ -115,6 +111,16 @@ class Engine(pl.LightningModule):
             selection_entropy = selection_entropy.mean()
             self.log('train_selection_entropy', selection_entropy)
         return loss
+
+    def on_train_end(self):
+        # If the model is the symbolic memory reasoner and
+        # KANs are used to learn the equations, we need to
+        # update the equations at the end of each epoch.
+        if self.model.__class__.__name__ == 'SymbolicMemoryReasoner':
+            if self.model.equation_learning_strategy == 'kan':
+                # Update the memory by substituting the KANs with
+                # their corresponding symbolic equations.
+                self.model.setup_kan_equations()
 
     def validation_step(self, batch, batch_idx):
         loss, model_output, y, c = self.shared_step(batch)
