@@ -116,11 +116,13 @@ class Engine(pl.LightningModule):
         # If the model is the symbolic memory reasoner and
         # KANs are used to learn the equations, we need to
         # update the equations at the end of each epoch.
-        if self.model.__class__.__name__ == 'SymbolicMemoryReasoner':
-            if self.model.equation_learning_strategy == 'kan':
-                # Update the memory by substituting the KANs with
-                # their corresponding symbolic equations.
-                self.model.setup_kan_equations()
+        if self.model.__class__.__name__ == 'SymbolicMemoryReasoner' and self.model.equation_learning_strategy == 'kan':
+            # Prune the KAN layers
+            for kan_layer in self.model.kan_layers:
+                kan_layer.prune()
+            # Update the memory by substituting the KANs with
+            # their corresponding symbolic equations.
+            self.model.setup_kan_equations()
 
     def validation_step(self, batch, batch_idx):
         loss, model_output, y, c = self.shared_step(batch)

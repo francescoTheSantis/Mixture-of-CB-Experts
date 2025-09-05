@@ -268,6 +268,9 @@ class SymbolicMemoryReasoner(BaseModel):
         for kan_layer in self.kan_layers:
             kan_layer.auto_symbolic()
 
+        # Store the equations in the known_equations attribute
+        # TODO
+
     def _execute_kan(self, prob_per_classifier, input_concepts):
         if self.symbolic_kan_eq_substituted:
             y_hat = self._execute_known_equations(prob_per_classifier, input_concepts, discard_explanations=True)
@@ -286,9 +289,7 @@ class SymbolicMemoryReasoner(BaseModel):
         if self.training:
             explanations = None
         else:
-            explanations = None
-            # TODO
-
+            explanations = self._get_explanations(prob_per_classifier, y_hat)
         return y_hat, explanations
 
     def _execute_known_equations(self, prob_per_classifier, input_concepts, discard_explanations=False):
@@ -312,15 +313,19 @@ class SymbolicMemoryReasoner(BaseModel):
             if self.training:
                 explanations = None
             else:
-                # If the number of classes is bigger than one, show the equation selected for the predicted class.
-                # Otherwise, show the equation selected for the single output.
-                exp_selection = prob_per_classifier[:,:,:,0]
-                # select the predicted class
-                y_idx = y_hat.argmax(dim=1).squeeze().unsqueeze(1).expand(-1, exp_selection.size(1)).unsqueeze(-1)
-                eq_idx = torch.gather(exp_selection, 2, y_idx).squeeze(-1).argmax(1)
-                # Get the explanations (the selected equations)
-                explanations = [self.known_equations[idx.item()] for i, idx in enumerate(eq_idx)]
+                explanations = self._get_explanations(prob_per_classifier, y_hat)
             return y_hat, explanations
+
+    def _get_explanations(self, prob_per_classifier, y_hat):
+        # If the number of classes is bigger than one, show the equation selected for the predicted class.
+        # Otherwise, show the equation selected for the single output.
+        exp_selection = prob_per_classifier[:,:,:,0]
+        # select the predicted class
+        y_idx = y_hat.argmax(dim=1).squeeze().unsqueeze(1).expand(-1, exp_selection.size(1)).unsqueeze(-1)
+        eq_idx = torch.gather(exp_selection, 2, y_idx).squeeze(-1).argmax(1)
+        # Get the explanations (the selected equations)
+        explanations = [self.known_equations[idx.item()] for i, idx in enumerate(eq_idx)]
+        return explanations
 
     def _execute_known_equation(self, equation, values):
         # Create a dictionary mapping variable names to their values
