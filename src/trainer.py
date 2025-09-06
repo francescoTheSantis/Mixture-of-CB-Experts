@@ -73,19 +73,19 @@ class Trainer:
 
     def train(self, train_dataloader, val_dataloader, ckpt_path=None):
 
+        c_trues = []
+        y_trues = []
+        # iterate over the training-set
+        for batch in train_dataloader:
+            c = batch['c']
+            y = batch['y']
+            c_trues.append(c)
+            y_trues.append(y)
+        c_trues = torch.cat(c_trues, dim=0)
+        y_trues = torch.cat(y_trues, dim=0)
+
         # If regression, standardize the target variable and store the scaler in the model
         if self.model.model.task == 'regression':
-            c_trues = []
-            y_trues = []
-            # iterate over the training-set
-            for batch in train_dataloader:
-                c = batch['c']
-                y = batch['y']
-                c_trues.append(c)
-                y_trues.append(y)
-            c_trues = torch.cat(c_trues, dim=0)
-            y_trues = torch.cat(y_trues, dim=0)
-
             # Standardize the target variable
             y_trues, y_mean, y_std = standardize_tensor(y_trues, dim=0)
 
@@ -105,11 +105,12 @@ class Trainer:
                     self.model.model.y_trues = y_trues
                     # Setup equations for the symbolic regression
                     self.model.model.setup_symbolic_reg_equations()
-                # If KAN are used, we need to setup the grid for each kan in the memory
-                elif self.model.model.equation_learning_strategy=='kan':
-                    self.model.model.setup_kan_grid(c_trues)
-                
 
+        # If KAN are used, we need to setup the grid for each kan in the memory.
+        # This operation is required for any kind of task (classification, regression, ...).
+        if self.model.model.equation_learning_strategy=='kan':
+            self.model.model.setup_kan_grid(c_trues)
+                
         self.trainer.fit(self.model, 
                          train_dataloader, 
                          val_dataloader, ckpt_path=ckpt_path)
