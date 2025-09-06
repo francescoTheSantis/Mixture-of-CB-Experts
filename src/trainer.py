@@ -7,6 +7,7 @@ import pandas as pd
 from src.metrics import f1_acc_metrics
 from tqdm import tqdm
 from src.models.m_licem import LinearMemoryReasoner
+from src.utilities import standardize_tensor
 
 class Trainer:
     """
@@ -72,8 +73,8 @@ class Trainer:
 
     def train(self, train_dataloader, val_dataloader, ckpt_path=None):
 
-        if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner' and self.model.model.equation_learning_strategy=='sym_reg_alg':
-            # Store the c_trues and y_trues of the training set in the model for later use
+        # If regression, standardize the target variable and store the scaler in the model
+        if self.model.model.task == 'regression':
             c_trues = []
             y_trues = []
             # iterate over the training-set
@@ -82,9 +83,26 @@ class Trainer:
                 y = batch['y']
                 c_trues.append(c)
                 y_trues.append(y)
-            self.model.model.c_trues = torch.cat(c_trues, dim=0)
-            self.model.model.y_trues = torch.cat(y_trues, dim=0)
-            self.model.model.setup_symbolic_reg_equations()
+            c_trues = torch.cat(c_trues, dim=0)
+            y_trues = torch.cat(y_trues, dim=0)
+
+            # Standardize the target variable
+            y_trues, y_mean, y_std = standardize_tensor(y_trues, dim=0)
+
+            # Store the scaler in the engine
+            self.model.y_mean = y_mean
+            self.model.y_std = y_std
+
+            # Store the scaler in the model
+            self.model.model.y_mean = y_mean
+            self.model.model.y_std = y_std
+
+            # If a symbolic regression algorithm is used, we need to store the true concepts and targets in the model in order to setup the equations.
+            if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner' and self.model.model.equation_learning_strategy=='sym_reg_alg':
+                self.model.model.c_trues = c_trues
+                self.model.model.y_trues = y_trues
+                # Setup equations for the symbolic regression
+                self.model.model.setup_symbolic_reg_equations()
 
         self.trainer.fit(self.model, 
                          train_dataloader, 
@@ -165,17 +183,26 @@ class Trainer:
                     if self.cfg.dataset.metadata.task == 'regression':
                         task_f1, task_acc = 0, 0
                         mse = np.mean((y - y_preds) ** 2)
+                        mae = np.mean(np.abs(y - y_preds))
+                        r2 = 1 - (np.sum((y - y_preds) ** 2) / np.sum((y - np.mean(y)) ** 2))
+                        rmse = np.sqrt(mse)
                     else:
                         task_f1, task_acc = f1_acc_metrics(y, y_preds)
                         mse = 0
-                    
+                        mae = 0
+                        r2 = 0
+                        rmse = 0
+
                     # Append to list instead of concatenating DataFrames
                     intervention_results.append({
                         'noise': round(eps, 1), 
                         'p_int': round(p_int, 1), 
                         'f1': round(task_f1, 2), 
                         'accuracy': round(task_acc, 2),
-                        'mse': round(mse, 4)
+                        'mse': round(mse, 4),
+                        'mae': round(mae, 4),
+                        'r2': round(r2, 4),
+                        'rmse': round(rmse, 4)
                     })
                     
                     # Clear variables to free memory

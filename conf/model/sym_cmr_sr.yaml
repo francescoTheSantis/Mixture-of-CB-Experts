@@ -8,9 +8,8 @@ params:
   int_prob: ${int_prob}
   memory_size: ${memory_size}
   embedding_size: ${embedding_size}
-  mc_approx: 100
+  mc_approx: 10
   weight_reg: 1e-5
-  embedding_memory: True
   equation_learning_strategy: "sym_reg_alg" 
 
 metadata:

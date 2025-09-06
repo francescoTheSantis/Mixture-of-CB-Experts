@@ -80,13 +80,26 @@ class Engine(pl.LightningModule):
     def shared_step(self, batch):
         # batch['x'] will be a tensor for image and toy datasets,
         # and a dict for text datasets.
+        x = batch['x']
+        c = batch['c']
+
+        # if the task is regression and we are at training-time, we standardize the target variable
+        if self.model.task == 'regression':
+            if self.model.y_mean is None and self.model.y_std is None:
+                raise ValueError("y_mean and y_std are None. Please standardize the target variable before training.")
+            batch['y'] = (batch['y'] - self.model.y_mean) / self.model.y_std
+
+        y = batch['y'].float()
+
         inputs = {
-            'x': batch['x'],
-            'c': batch['c'],
-            'y': batch['y'].float()
+            'x': x,
+            'c': c,
+            'y': y
         }
+
         # model forward
         model_output = self.forward(inputs)
+
         # Compute loss
         y_output, c_output = self.model.filter_output_for_loss(**model_output)
         loss = self.model.loss(y_output, inputs['y'], c_output, inputs['c'])
@@ -112,17 +125,30 @@ class Engine(pl.LightningModule):
             self.log('train_selection_entropy', selection_entropy)
         return loss
 
+    def on_train_epoch_end(self):
+        # Update grid for KAN layers
+        if self.model.__class__.__name__ == 'SymbolicMemoryReasoner':
+            if self.model.equation_learning_strategy == 'kan':
+                for kan_layer in self.model.kan_layers:
+                    kan_layer.update_grid()
+
     def on_train_end(self):
         # If the model is the symbolic memory reasoner and
         # KANs are used to learn the equations, we need to
         # update the equations at the end of each epoch.
-        if self.model.__class__.__name__ == 'SymbolicMemoryReasoner' and self.model.equation_learning_strategy == 'kan':
-            # Prune the KAN layers
-            for kan_layer in self.model.kan_layers:
-                kan_layer.prune()
-            # Update the memory by substituting the KANs with
-            # their corresponding symbolic equations.
-            self.model.setup_kan_equations()
+        if self.model.__class__.__name__ == 'SymbolicMemoryReasoner':
+            if self.model.equation_learning_strategy == 'kan':
+                # Prune the KAN layers
+                for kan_layer in self.model.kan_layers:
+                    kan_layer.prune()
+                # Update the memory by substituting the KANs with
+                # their corresponding symbolic equations.
+                self.model.setup_kan_equations()
+
+            # Teh equations learnt the normalized target variable,
+            # we need to destandardize them.
+            if self.model.task == 'regression':
+                self.model.destandardize_equations(self.model.y_mean, self.model.y_std)
 
     def validation_step(self, batch, batch_idx):
         loss, model_output, y, c = self.shared_step(batch)

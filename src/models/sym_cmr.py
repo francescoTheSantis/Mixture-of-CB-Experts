@@ -33,7 +33,7 @@ class SymbolicMemoryReasoner(BaseModel):
                  hard_concepts=False,
                  weight_reg=0,
                  encoder=None,
-                 mc_approx=100,
+                 mc_approx=10,
                  concept_loss_form=nn.BCELoss(),
                  backbone_latent_size=None,
                  concept_type='binary',
@@ -116,6 +116,7 @@ class SymbolicMemoryReasoner(BaseModel):
         if self.equation_learning_strategy not in ['prior_knowledge', 'sym_reg_alg', 'kan']:
             raise ValueError(f"Unknown equation learning strategy: {self.equation_learning_strategy}")
         
+    ###### Symbolic regression related methods ######
     def setup_symbolic_reg_equations(self):
         if self.equation_learning_strategy != 'sym_reg_alg':
             raise ValueError("This method should only be called when using 'sym_reg_alg' strategy.")
@@ -129,32 +130,6 @@ class SymbolicMemoryReasoner(BaseModel):
             renamed_equations.append(eq)
         self.known_equations = renamed_equations
         self._prepare_equations(renamed_equations)
-
-    def _convert_equation_to_torch(self, equation_str, variables):
-        # 1. Define the symbols (variables)
-        sympy_vars = sympy.symbols(variables)
-        # 2. Define the equation in a textual format
-        exp = equation_str
-        # 3. Convert to sympy expression
-        exp = sympy.sympify(exp)
-        # 4. Convert the textual equation into an executable PyTorch module
-        torch_exp = sympytorch.SymPyModule(expressions=[exp])
-        return torch_exp, sympy_vars
-
-    def _prepare_equations(self, equations):
-        self.torch_equations = []
-        self.sympy_variables = []
-
-        # define the variables
-        variables = [f'c{i}' for i, name in enumerate(self.c_names)]
-
-        self.string_variables = variables
-
-        # Convert the string equations to torch functions
-        for eq in equations:
-            torch_eq, sympy_variable = self._convert_equation_to_torch(eq, variables)
-            self.torch_equations.append(torch_eq)
-            self.sympy_variables.append(sympy_variable)
 
     def _fit_symbolic_reg_model(self, top_fraction=0.5):
         equations = []
@@ -189,7 +164,34 @@ class SymbolicMemoryReasoner(BaseModel):
             mask = errors >= cutoff
             X_current, y_current = self.c_trues[mask], self.y_trues[mask]
 
-        return equations        
+        return equations
+
+    ###### Equation conversion methods ######
+    def _convert_equation_to_torch(self, equation_str, variables):
+        # 1. Define the symbols (variables)
+        sympy_vars = sympy.symbols(variables)
+        # 2. Define the equation in a textual format
+        exp = equation_str
+        # 3. Convert to sympy expression
+        exp = sympy.sympify(exp)
+        # 4. Convert the textual equation into an executable PyTorch module
+        torch_exp = sympytorch.SymPyModule(expressions=[exp])
+        return torch_exp, sympy_vars
+
+    def _prepare_equations(self, equations):
+        self.torch_equations = []
+        self.sympy_variables = []
+
+        # define the variables
+        variables = [f'c{i}' for i, name in enumerate(self.c_names)]
+
+        self.string_variables = variables
+
+        # Convert the string equations to torch functions
+        for eq in equations:
+            torch_eq, sympy_variable = self._convert_equation_to_torch(eq, variables)
+            self.torch_equations.append(torch_eq)
+            self.sympy_variables.append(sympy_variable)   
 
 
     def compute_tau(self, global_step, tau_init=1, tau_min=0.05, decay_rate=0.99):
@@ -346,3 +348,4 @@ class SymbolicMemoryReasoner(BaseModel):
 
     def filter_output_for_loss(self, y_hat, c_hat=None, *args, **kwargs):
         return y_hat, c_hat
+    

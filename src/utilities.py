@@ -312,3 +312,19 @@ def generate_data_path(cfg):
     test_path = f"{data_path}/test.pt"
 
     return data_path, train_path, val_path, test_path
+
+def standardize_tensor(tensor, dim=0):
+    """
+    Standardize a tensor to have zero mean and unit variance.
+    
+    Args:
+        tensor: Input tensor to standardize
+    """
+    mean = tensor.mean(dim=dim)
+    std = tensor.std(dim=dim)
+
+    # Add small epsilon to avoid division by zero
+    eps = 1e-8
+    standardized = (tensor - mean) / (std + eps)
+
+    return standardized, mean, std

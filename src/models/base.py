@@ -243,6 +243,10 @@ class BaseModel(nn.Module):
         Filter the output of the model for metrics computation.
         This method can be overridden in subclasses to customize the output filtering.
         """
+        # if the task is regression and we are at inference-time, we destandardize the predictions
+        if self.model.task == 'regression' and not self.training:
+            y_hat = y_hat * self.y_std + self.y_mean
+
         return y_hat, c_hat
 
     # def get_intervened_concepts_predictions(self, labels, groups=None):

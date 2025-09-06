@@ -24,7 +24,7 @@ custom_order = ['xor', \
                 'awa2',
                 'awa2_incomplete',
                 'cub_incomplete',
-                'cebab',
+                #'cebab',
                 #'celeba',
                 'cifar10',
                 'cifar100',
