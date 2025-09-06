@@ -65,6 +65,8 @@ class SymbolicMemoryReasoner(BaseModel):
         self.has_concepts = True
         self.y_names = list(y_names)
         self.weight_reg = weight_reg
+        self.output_size = output_size
+        self.backbone_latent_size = backbone_latent_size
 
         self.mc_approx = mc_approx
         self.memory_size = memory_size
@@ -82,25 +84,6 @@ class SymbolicMemoryReasoner(BaseModel):
         self.equation_learning_strategy = equation_learning_strategy
         self.known_equations = known_equations
 
-        if self.equation_learning_strategy=='prior_knowledge': 
-            if self.known_equations is None:
-                raise ValueError("Known equations must be provided when using 'prior_knowledge' strategy.")
-            self._prepare_equations(self.known_equations) # We process the known equations to convert them to torch executable modules
-            self.memory_size = len(self.known_equations) # Override memory size to match the number of known equations
-        elif self.equation_learning_strategy == 'kan':
-            kan_params = {
-                    'width': [len(self.c_names), len(self.c_names)+1, output_size],
-                    'grid': 3,
-                    'k': 3,
-                    'auto_save': False,
-            }
-            # Instantiate as many KAN Layers as the memory size
-            self.kan_layers = nn.ModuleList()
-            for _ in range(self.memory_size):
-                kan_layer = KAN(**kan_params)
-                self.kan_layers.append(kan_layer)
-            self.symbolic_kan_eq_substituted = False
-
         # Define the Memory 
         if self.use_memory:
             self.classifier_selector = nn.Sequential(
@@ -116,6 +99,29 @@ class SymbolicMemoryReasoner(BaseModel):
         if self.equation_learning_strategy not in ['prior_knowledge', 'sym_reg_alg', 'kan']:
             raise ValueError(f"Unknown equation learning strategy: {self.equation_learning_strategy}")
         
+    ###### Setup methods ######
+    def setup_equations(self):
+        if self.equation_learning_strategy=='prior_knowledge': 
+            if self.known_equations is None:
+                raise ValueError("Known equations must be provided when using 'prior_knowledge' strategy.")
+            self._prepare_equations(self.known_equations) # We process the known equations to convert them to torch executable modules
+            self.memory_size = len(self.known_equations) # Override memory size to match the number of known equations
+            self.classifier_selector = nn.Sequential(
+                nn.Linear(self.backbone_latent_size,  self.memory_size * len(self.y_names)),
+            )
+        elif self.equation_learning_strategy == 'kan':
+            kan_params = {
+                    'width': [len(self.c_names), len(self.c_names)+1, self.output_size],
+                    'grid': 3,
+                    'k': 3,
+                    'ckpt_path': os.path.join(os.getcwd(), 'kan_ckpt'),
+            }
+            # Instantiate as many KAN Layers as the memory size
+            self.kan_layers = nn.ModuleList()
+            for _ in range(self.memory_size):
+                kan_layer = KAN(**kan_params)
+                self.kan_layers.append(kan_layer)
+
     ###### Symbolic regression related methods ######
     def setup_symbolic_reg_equations(self):
         if self.equation_learning_strategy != 'sym_reg_alg':
@@ -167,34 +173,21 @@ class SymbolicMemoryReasoner(BaseModel):
         return equations
 
     ###### KAN related methods ######
-    def setup_kan_equations(self):
-        # Update the corresponding flag
-        self.symbolic_kan_eq_substituted = True
-        # Substitute the learned KAN splines with the most similar symbolic expressions
-        for kan_layer in self.kan_layers:
-            kan_layer.auto_symbolic()
-
-        # Store the equations in the known_equations attribute
-        # TODO
-
     def setup_kan_grid(self, inputs):
         # Update the grid of all KAN layers based on the provided inputs
         for kan_layer in self.kan_layers:
             kan_layer.update_grid(inputs)
 
     def _execute_kan(self, prob_per_classifier, input_concepts):
-        if self.symbolic_kan_eq_substituted:
-            y_hat = self._execute_known_equations(prob_per_classifier, input_concepts, discard_explanations=True)
-        else:
-            # Execute all the KAN layers
-            eq_outputs = []
-            for i, kan_layer in enumerate(self.kan_layers):
-                eq_output = kan_layer(input_concepts)
-                eq_outputs.append(eq_output)
-            # Stack the outputs along the class dimension
-            eq_outputs = torch.stack(eq_outputs, dim=1).squeeze() # Shape: (bsz, n_equations)
-            # Combine the outputs using the selector probabilities
-            y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
+        # Execute all the KAN layers
+        eq_outputs = []
+        for i, kan_layer in enumerate(self.kan_layers):
+            eq_output = kan_layer(input_concepts)
+            eq_outputs.append(eq_output)
+        # Stack the outputs along the class dimension
+        eq_outputs = torch.stack(eq_outputs, dim=1).squeeze() # Shape: (bsz, n_equations)
+        # Combine the outputs using the selector probabilities
+        y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
 
         # Get the explanations (the selected equations)
         if self.training:
@@ -207,6 +200,7 @@ class SymbolicMemoryReasoner(BaseModel):
     def _prepare_equations(self, equations):
         self.torch_equations = []
         self.sympy_variables = []
+        self.sympy_equations = []
 
         # define the variables
         variables = [f'c{i}' for i, name in enumerate(self.c_names)]
@@ -215,20 +209,26 @@ class SymbolicMemoryReasoner(BaseModel):
 
         # Convert the string equations to torch functions
         for eq in equations:
-            torch_eq, sympy_variable = self._convert_equation_to_torch(eq, variables)
+            torch_eq, sympy_variable, sympy_eq = self._convert_equation_to_torch(eq, variables)
             self.torch_equations.append(torch_eq)
-            self.sympy_variables.append(sympy_variable)  
+            self.sympy_variables.append(sympy_variable)
+            self.sympy_equations.append(sympy_eq)
 
     def _convert_equation_to_torch(self, equation_str, variables):
+        if self.equation_learning_strategy != 'prior_knowledge':
+            raise NotImplementedError("This method is only implemented for 'prior_knowledge' strategy.")
         # 1. Define the symbols (variables)
         sympy_vars = sympy.symbols(variables)
         # 2. Define the equation in a textual format
-        exp = equation_str
+        str_exp = equation_str
         # 3. Convert to sympy expression
-        exp = sympy.sympify(exp)
-        # 4. Convert the textual equation into an executable PyTorch module
-        torch_exp = sympytorch.SymPyModule(expressions=[exp])
-        return torch_exp, sympy_vars 
+        sympy_exp = sympy.sympify(str_exp)
+        # 4. standardize the equation if needed
+        if self.task == 'regression':
+            sympy_exp = (sympy_exp - self.y_mean) / (self.y_std + 1e-8)
+        # 5. Convert the textual equation into an executable PyTorch module
+        torch_exp = sympytorch.SymPyModule(expressions=[sympy_exp])
+        return torch_exp, sympy_vars, sympy_exp
 
     ###### Equation execution methods ######
     def _execute_equations(self, prob_per_classifier, input_concepts):
@@ -274,9 +274,24 @@ class SymbolicMemoryReasoner(BaseModel):
         # select the predicted class
         y_idx = y_hat.argmax(dim=1).squeeze().unsqueeze(1).expand(-1, exp_selection.size(1)).unsqueeze(-1)
         eq_idx = torch.gather(exp_selection, 2, y_idx).squeeze(-1).argmax(1)
-        # Get the explanations (the selected equations)
-        explanations = [self.known_equations[idx.item()] for i, idx in enumerate(eq_idx)]
+
+        self._setup_string_equations()
+
+        explanations = [self.string_equations[idx.item()] for _, idx in enumerate(eq_idx)]
         return explanations
+
+    def _setup_string_equations(self):
+        # if the self.string_equations have not been computed yet, compute them
+        if not hasattr(self, 'string_equations'):
+            if self.equation_learning_strategy=='prior_knowledge':
+                equations = self.known_equations
+            elif self.equation_learning_strategy=='kan':
+                equations = [kan_layer.symbolic_formula()[0] for kan_layer in self.kan_layers]
+                # de-standardize if needed
+                if self.task == 'regression':
+                    equations = [((eq * self.y_std + self.y_mean)) for eq in equations]
+            # convert to string
+            self.string_equations = [str(eq) for eq in equations]
 
     ###### Forward and loss methods ######
     def compute_tau(self, global_step, tau_init=1, tau_min=0.05, decay_rate=0.99):
@@ -341,15 +356,3 @@ class SymbolicMemoryReasoner(BaseModel):
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         return loss
-
-    def filter_output_for_metrics(self, y_hat, c_hat=None, *args, **kwargs):
-        # Average over the last dimension, which contains the samples
-        # form the Monte Carlo approximation.
-        y_hat = y_hat.mean(dim=-1)
-
-        # if the task is regression and we are at inference-time, we destandardize the predictions
-        if self.model.task == 'regression':
-            y_hat = y_hat * self.y_std + self.y_mean
-
-        return y_hat, c_hat
-    

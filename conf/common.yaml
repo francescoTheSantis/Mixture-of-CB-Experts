@@ -21,6 +21,7 @@ batch_size: 128
 task_penalty: 0.1
 int_prob: 0.25
 hard_concepts: False
+joint_training: False
 
 ## Shared Concept-embedding based model
 embedding_size: 16

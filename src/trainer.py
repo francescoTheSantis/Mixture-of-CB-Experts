@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from src.metrics import f1_acc_metrics
 from tqdm import tqdm
-from models.l_cmr import LinearMemoryReasoner
+#from models.l_cmr import LinearMemoryReasoner
 from src.utilities import standardize_tensor
 
 class Trainer:
@@ -89,27 +89,27 @@ class Trainer:
             # Standardize the target variable
             y_trues, y_mean, y_std = standardize_tensor(y_trues, dim=0)
 
-            # Store the scaler in the engine
+            # Store the scaler in the engine & model
             self.model.y_mean = y_mean
             self.model.y_std = y_std
-
-            # Store the scaler in the model
             self.model.model.y_mean = y_mean
             self.model.model.y_std = y_std
 
-            if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner':
+        if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner':
+            # setup the model (e.g., setup equations if prior knowledge is used)
+            self.model.model.setup_equations()
+
+            if self.model.model.equation_learning_strategy=='sym_reg_alg':
                 # If a symbolic regression algorithm is used, 
                 # we need to store the true concepts and targets in the model in order to setup the equations.
-                if self.model.model.equation_learning_strategy=='sym_reg_alg':
-                    self.model.model.c_trues = c_trues
-                    self.model.model.y_trues = y_trues
-                    # Setup equations for the symbolic regression
-                    self.model.model.setup_symbolic_reg_equations()
-
-        # If KAN are used, we need to setup the grid for each kan in the memory.
-        # This operation is required for any kind of task (classification, regression, ...).
-        if self.model.model.equation_learning_strategy=='kan':
-            self.model.model.setup_kan_grid(c_trues)
+                self.model.model.c_trues = c_trues
+                self.model.model.y_trues = y_trues
+                # Setup equations for the symbolic regression
+                self.model.model.setup_symbolic_reg_equations()
+            elif self.model.model.equation_learning_strategy=='kan':
+                # If KAN are used, we need to setup the grid for each kan in the memory.
+                # This operation is required for any kind of task (classification, regression, ...).
+                self.model.model.setup_kan_grid(c_trues)
                 
         self.trainer.fit(self.model, 
                          train_dataloader, 
@@ -223,71 +223,71 @@ class Trainer:
         intervention_df = pd.DataFrame(intervention_results)
         return intervention_df
 
-    def plot_results(self, test_dataloader, verbose=True):
-        """
-        Plot the results of the model on the test set.
-        This method is specific to the xor, or, nor, and, nand, xnor datasets.
-        If the model is a LinearModel it will plot the weights of the model as well as the predictions.
-        """
+    # def plot_results(self, test_dataloader, verbose=True):
+    #     """
+    #     Plot the results of the model on the test set.
+    #     This method is specific to the xor, or, nor, and, nand, xnor datasets.
+    #     If the model is a LinearModel it will plot the weights of the model as well as the predictions.
+    #     """
 
-        # Set the model on the right device
-        from matplotlib import pyplot as plt
-        import numpy as np
+    #     # Set the model on the right device
+    #     from matplotlib import pyplot as plt
+    #     import numpy as np
 
-        self.model = self.model.to(self.cfg.gpus[0])
-        self.model.eval()
+    #     self.model = self.model.to(self.cfg.gpus[0])
+    #     self.model.eval()
 
-        with torch.no_grad():
-            input_list = []
-            outputs = []
-            for batch in test_dataloader:
-                x, c, y = self.model.unpack_batch(batch)
-                # Move the data to the GPU
-                x = x.to(self.cfg.gpus[0])
-                c = c.to(self.cfg.gpus[0])
-                y = y.to(self.cfg.gpus[0])
-                inputs = {'x': x, 'c': c, 'y': y}
-                output = self.model.forward(inputs)
-                output = self.model.model.filter_output_for_metrics(*output)
-                y_pred = output[0]
-                y_pred = y_pred.cpu().numpy()
-                if len(self.cfg.model.params.y_names) == 1:
-                    y_pred = (y_pred > 0.5).astype(int)
-                else:
-                    y_pred = y_pred.argmax(-1)
-                outputs.append(y_pred)
-                input_list.append(x.cpu().numpy())
+    #     with torch.no_grad():
+    #         input_list = []
+    #         outputs = []
+    #         for batch in test_dataloader:
+    #             x, c, y = self.model.unpack_batch(batch)
+    #             # Move the data to the GPU
+    #             x = x.to(self.cfg.gpus[0])
+    #             c = c.to(self.cfg.gpus[0])
+    #             y = y.to(self.cfg.gpus[0])
+    #             inputs = {'x': x, 'c': c, 'y': y}
+    #             output = self.model.forward(inputs)
+    #             output = self.model.model.filter_output_for_metrics(*output)
+    #             y_pred = output[0]
+    #             y_pred = y_pred.cpu().numpy()
+    #             if len(self.cfg.model.params.y_names) == 1:
+    #                 y_pred = (y_pred > 0.5).astype(int)
+    #             else:
+    #                 y_pred = y_pred.argmax(-1)
+    #             outputs.append(y_pred)
+    #             input_list.append(x.cpu().numpy())
 
-            # Plot the results
-            outputs = np.concatenate(outputs, axis=0).squeeze()
-            input_list = np.concatenate(input_list, axis=0)
+    #         # Plot the results
+    #         outputs = np.concatenate(outputs, axis=0).squeeze()
+    #         input_list = np.concatenate(input_list, axis=0)
 
-            pos_preds = input_list[outputs == 1]
-            neg_preds = input_list[outputs == 0]
+    #         pos_preds = input_list[outputs == 1]
+    #         neg_preds = input_list[outputs == 0]
 
-            if isinstance(self.model.model, LinearMemoryReasoner):
-                # Plot the weights of the model
-                model = self.model.model
-                weights = model.equation_decoder(model.equation_memory.weight).detach().cpu().numpy()
-                norm_weights = weights / np.linalg.norm(weights, axis=1, keepdims=True)
-                for i, (w1, w2) in enumerate(zip(norm_weights[:, 0], norm_weights[:, 1])):
-                    plt.arrow(0, 0, w1.item(), w2.item(), head_width=0.05, head_length=0.1, fc='k', ec='k', label=f'Weight {i+1}')
+    #         if isinstance(self.model.model, LinearMemoryReasoner):
+    #             # Plot the weights of the model
+    #             model = self.model.model
+    #             weights = model.equation_decoder(model.equation_memory.weight).detach().cpu().numpy()
+    #             norm_weights = weights / np.linalg.norm(weights, axis=1, keepdims=True)
+    #             for i, (w1, w2) in enumerate(zip(norm_weights[:, 0], norm_weights[:, 1])):
+    #                 plt.arrow(0, 0, w1.item(), w2.item(), head_width=0.05, head_length=0.1, fc='k', ec='k', label=f'Weight {i+1}')
 
-                if model.negative_concepts:
-                    pos_preds = 2* pos_preds - 1
-                    neg_preds = 2* neg_preds - 1
+    #             if model.negative_concepts:
+    #                 pos_preds = 2* pos_preds - 1
+    #                 neg_preds = 2* neg_preds - 1
 
-            plt.scatter(neg_preds[:, 0], neg_preds[:, 1], label='Negative Predictions')
-            plt.scatter(pos_preds[:, 0], pos_preds[:, 1], label='Positive Predictions')
+    #         plt.scatter(neg_preds[:, 0], neg_preds[:, 1], label='Negative Predictions')
+    #         plt.scatter(pos_preds[:, 0], pos_preds[:, 1], label='Positive Predictions')
 
-            plt.xlabel('X1')
-            plt.ylabel('X2')
+    #         plt.xlabel('X1')
+    #         plt.ylabel('X2')
 
-            plt.title('Model Predictions on Test Set')
-            plt.legend()
-            plt.savefig(f"{self.wandb_logger.experiment.dir}/test_predictions.png")
+    #         plt.title('Model Predictions on Test Set')
+    #         plt.legend()
+    #         plt.savefig(f"{self.wandb_logger.experiment.dir}/test_predictions.png")
 
-            if verbose:
-                plt.show()
-            else:
-                plt.close()
+    #         if verbose:
+    #             plt.show()
+    #         else:
+    #             plt.close()

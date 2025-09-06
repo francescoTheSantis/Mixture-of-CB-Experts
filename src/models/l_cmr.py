@@ -262,14 +262,3 @@ class LinearMemoryReasoner(BaseModel):
             loss += self.weight_reg * self.bias_params.pow(2).sum()
 
         return loss
-
-    def filter_output_for_metrics(self, y_hat, c_hat=None, *args, **kwargs):
-        # Average over the last dimension, which contains the samples
-        # form the Monte Carlo approximation.
-        y_hat = y_hat.mean(dim=-1)
-
-        # if the task is regression and we are at inference-time, we destandardize the predictions
-        if self.model.task == 'regression':
-            y_hat = y_hat * self.y_std + self.y_mean
-
-        return y_hat, c_hat

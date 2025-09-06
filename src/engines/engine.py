@@ -6,6 +6,7 @@ from src.metrics import MAE, Task_Accuracy, Concept_Accuracy
 from collections import OrderedDict
 import pandas as pd
 import torch.nn.functional as F
+import sympy as sp
 
 from src.models.base import BaseModel
 
@@ -109,13 +110,14 @@ class Engine(pl.LightningModule):
         self.model.global_step = self.global_step
         loss, model_output, y, c = self.shared_step(batch)
         self.log("train_loss", loss.item())
-        output_x_metrics = self.model.filter_output_for_metrics(**model_output)
+        y_output, c_output = self.model.filter_output_for_metrics(**model_output)
         # if the task is regression, we denormalize the target variable to compute the metrics
+        y_output = self._denormalize(y_output)
         y = self._denormalize(y)
-        task_acc = self.task_metric(output_x_metrics[0], y) 
+        task_acc = self.task_metric(y_output, y)
         self.log(f'train_{self.task_metric_name}', task_acc)
         if self.model.has_concepts:
-            concept_acc = self.concept_metric(output_x_metrics[1], c)
+            concept_acc = self.concept_metric(c_output, c)
             self.log(f'train_{self.concept_metric_name}', concept_acc)
         # compute the selection entropy
         if self.model.__class__.__name__ in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
@@ -127,13 +129,6 @@ class Engine(pl.LightningModule):
             self.log('train_selection_entropy', selection_entropy)
         return loss
 
-    def on_train_epoch_end(self):
-        # Update grid for KAN layers
-        if self.model.__class__.__name__ == 'SymbolicMemoryReasoner':
-            if self.model.equation_learning_strategy == 'kan':
-                for kan_layer in self.model.kan_layers:
-                    kan_layer.update_grid()
-
     def on_train_end(self):
         # If the model is the symbolic memory reasoner and
         # KANs are used to learn the equations, we need to
@@ -142,20 +137,21 @@ class Engine(pl.LightningModule):
             if self.model.equation_learning_strategy == 'kan':
                 # Prune the KAN layers
                 for kan_layer in self.model.kan_layers:
+                    # prune each kan layer
                     kan_layer.prune()
-                # Update the memory by substituting the KANs with
-                # their corresponding symbolic equations.
-                self.model.setup_kan_equations()
 
-            # Teh equations learnt the normalized target variable,
-            # we need to destandardize them.
-            if self.model.task == 'regression':
-                self.model.destandardize_equations(self.model.y_mean, self.model.y_std)
+                    # Set the symbolic equation in the kan layer
+                    kan_layer.auto_symbolic()
+
+                # Fine-tune the model after replacing the KAN layers with the symbolic equations.
+                # TODO ...
 
     def validation_step(self, batch, batch_idx):
         loss, model_output, y, c = self.shared_step(batch)
         self.log("val_loss", loss.item())
         y_output, c_output = self.model.filter_output_for_metrics(**model_output)
+        # if the task is regression, we denormalize the target variable to compute the metrics
+        y_output = self._denormalize(y_output)
         y = self._denormalize(y)
         task_acc = self.task_metric(y_output, y)
         self.log(f'val_{self.task_metric_name}', task_acc)
@@ -176,6 +172,8 @@ class Engine(pl.LightningModule):
         loss, model_output, y, c = self.shared_step(batch)
         y_output, c_output = self.model.filter_output_for_metrics(**model_output)
         self.log("test_loss", loss.item())
+        # if the task is regression, we denormalize the target variable to compute the metrics
+        y_output = self._denormalize(y_output)
         y = self._denormalize(y)
         task_acc = self.task_metric(y_output, y)
         self.log(f'test_{self.task_metric_name}', task_acc)
