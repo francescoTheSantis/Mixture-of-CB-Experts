@@ -1,0 +1,19 @@
+defaults:
+  - common
+  - _self_
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+      dir: test/${now:%Y-%m-%d_%H-%M-%S}
+  sweeper:
+    params:
+      seed: 1
+      dataset: mnist_arithmetic # , cub, mnist_addition, cebab, awa2, cub_incomplete, awa2_incomplete, cifar10, cifar100
+      model: sym_cmr_prior # sym_cmr_kan
+      max_epochs: 100
+gpus: [1]
+
+# wandb:
+#   project: null
+#   entity: null 
