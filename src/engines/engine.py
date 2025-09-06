@@ -110,7 +110,9 @@ class Engine(pl.LightningModule):
         loss, model_output, y, c = self.shared_step(batch)
         self.log("train_loss", loss.item())
         output_x_metrics = self.model.filter_output_for_metrics(**model_output)
-        task_acc = self.task_metric(output_x_metrics[0], y) #TODO: check we have an output list for all models
+        # if the task is regression, we denormalize the target variable to compute the metrics
+        y = self._denormalize(y)
+        task_acc = self.task_metric(output_x_metrics[0], y) 
         self.log(f'train_{self.task_metric_name}', task_acc)
         if self.model.has_concepts:
             concept_acc = self.concept_metric(output_x_metrics[1], c)
@@ -154,6 +156,7 @@ class Engine(pl.LightningModule):
         loss, model_output, y, c = self.shared_step(batch)
         self.log("val_loss", loss.item())
         y_output, c_output = self.model.filter_output_for_metrics(**model_output)
+        y = self._denormalize(y)
         task_acc = self.task_metric(y_output, y)
         self.log(f'val_{self.task_metric_name}', task_acc)
         if self.model.has_concepts:
@@ -173,6 +176,7 @@ class Engine(pl.LightningModule):
         loss, model_output, y, c = self.shared_step(batch)
         y_output, c_output = self.model.filter_output_for_metrics(**model_output)
         self.log("test_loss", loss.item())
+        y = self._denormalize(y)
         task_acc = self.task_metric(y_output, y)
         self.log(f'test_{self.task_metric_name}', task_acc)
 
@@ -201,6 +205,12 @@ class Engine(pl.LightningModule):
             self.y_preds.append(y_output)
         return loss 
     
+    def _denormalize(self, tensor):
+        if self.model.task == 'regression':
+            return tensor * self.model.y_std + self.model.y_mean
+        else:
+            return tensor
+
     def on_test_epoch_end(self):
         # If the name of the class is LinearMemoryReasoner,
         # store the tensors required for the explanations.

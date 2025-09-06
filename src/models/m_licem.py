@@ -267,9 +267,9 @@ class LinearMemoryReasoner(BaseModel):
         # Average over the last dimension, which contains the samples
         # form the Monte Carlo approximation.
         y_hat = y_hat.mean(dim=-1)
-        return y_hat, c_hat
 
-    def filter_output_for_loss(self, y_hat, c_hat=None, *args, **kwargs):
-        # This models return the predicted CBM in addition to the usual
-        # y and c predictions. The loss function needs only y and c to be computed.
+        # if the task is regression and we are at inference-time, we destandardize the predictions
+        if self.model.task == 'regression':
+            y_hat = y_hat * self.y_std + self.y_mean
+
         return y_hat, c_hat

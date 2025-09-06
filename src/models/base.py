@@ -231,14 +231,14 @@ class BaseModel(nn.Module):
         c_hat = torch.where(int_idxs == 1, c_true, c_hat)
         return c_hat
 
-    def filter_output_for_loss(self, y_hat, c_hat=None, *args):
+    def filter_output_for_loss(self, y_hat, c_hat=None, *args, **kwargs):
         """
         Filter the output of the model for loss computation.
         This method can be overridden in subclasses to customize the output filtering.
         """
         return y_hat, c_hat
 
-    def filter_output_for_metrics(self, y_hat, c_hat=None, *args):
+    def filter_output_for_metrics(self, y_hat, c_hat=None, *args, **kwargs):
         """
         Filter the output of the model for metrics computation.
         This method can be overridden in subclasses to customize the output filtering.
