@@ -48,8 +48,8 @@ def main(cfg: DictConfig) -> None:
     # Otherwise, preprocess the data and then store the results
     else:
         print('Prepearing dataloaders...')
-        loaded_train, loaded_val, loaded_test = loader.load_data(cfg)
         os.makedirs(data_path, exist_ok=True)
+        loaded_train, loaded_val, loaded_test = loader.load_data(cfg)
         torch.save(loaded_train, train_path)
         torch.save(loaded_val, val_path)
         torch.save(loaded_test, test_path)

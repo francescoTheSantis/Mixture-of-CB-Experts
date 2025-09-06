@@ -7,7 +7,7 @@ import pandas as pd
 from src.metrics import f1_acc_metrics
 from tqdm import tqdm
 #from models.l_cmr import LinearMemoryReasoner
-from src.utilities import standardize_tensor
+from src.utils.scalers import StandardScaler
 
 class Trainer:
     """
@@ -72,7 +72,6 @@ class Trainer:
         self.model.scheduler = self.scheduler
 
     def train(self, train_dataloader, val_dataloader, ckpt_path=None):
-
         c_trues = []
         y_trues = []
         # iterate over the training-set
@@ -86,14 +85,13 @@ class Trainer:
 
         # If regression, standardize the target variable and store the scaler in the model
         if self.model.model.task == 'regression':
-            # Standardize the target variable
-            y_trues, y_mean, y_std = standardize_tensor(y_trues, dim=0)
+            # Fit scaler to y data
+            scaler = StandardScaler(dims=(0,))
+            scaler.fit(y_trues)
 
             # Store the scaler in the engine & model
-            self.model.y_mean = y_mean
-            self.model.y_std = y_std
-            self.model.model.y_mean = y_mean
-            self.model.model.y_std = y_std
+            self.model.scaler = scaler
+            self.model.model.scaler = scaler
 
         if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner':
             # setup the model (e.g., setup equations if prior knowledge is used)

@@ -47,7 +47,7 @@ class DeepConceptReasoner(BaseModel):
                  backbone_latent_size,
                  concept_type
         )
-
+        self.logic_reasoning = True
         self.n_roles = 3
         self.memory_names = ['Positive', 'Negative', 'Irrelevant']
         

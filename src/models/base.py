@@ -43,6 +43,8 @@ class BaseModel(nn.Module):
         self.has_concepts = None # This value has to be overriden by the inheriting class
         self.noise = noise
 
+        self.logic_reasoning = False # This value has to be overriden by the inheriting class if it is a logic-based model
+
         if task == 'classification':
             if output_size > 1:
                 self.task_loss_form = nn.CrossEntropyLoss()
@@ -248,6 +250,36 @@ class BaseModel(nn.Module):
             # Average over the last dimension, which contains the samples
             # form the Monte Carlo approximation.
             y_hat = y_hat.mean(dim=-1)
+
+        # task
+        if self.task == 'regression':
+            # output will be shape (batch_size, )
+            y_hat = y_hat.squeeze()
+        elif self.task == 'classification': 
+            # output will be shape (batch_size, ) if binary classification
+            # output will be shape (batch_size, ) if multi-class classification
+            binary_classification = (y_hat.shape[1] == 1)
+            if binary_classification:
+                # logic-based models return probabilities
+                # the other models return logits
+                if self.logic_reasoning:
+                    pass
+                else:
+                    y_hat = torch.sigmoid(y_hat)
+                y_hat = (y_hat > 0.5).squeeze().long()
+            else:
+                y_hat = torch.argmax(y_hat, dim=1)
+        else:
+            raise NotImplementedError(f"Task {self.task} not implemented for metrics computation.")
+
+        # concepts
+        if self.task == 'regression':
+            # output will be shape (batch_size, num_concepts)
+            pass
+        elif self.task == 'classification':
+            # output will be shape (batch_size, num_concepts)
+            c_hat = torch.where(c_hat > 0.5, 1, 0)
+
         return y_hat, c_hat
 
     # def get_intervened_concepts_predictions(self, labels, groups=None):
