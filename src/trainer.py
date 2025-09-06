@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from src.metrics import f1_acc_metrics
 from tqdm import tqdm
-from src.models.m_licem import LinearMemoryReasoner
+from models.l_cmr import LinearMemoryReasoner
 from src.utilities import standardize_tensor
 
 class Trainer:
@@ -97,12 +97,18 @@ class Trainer:
             self.model.model.y_mean = y_mean
             self.model.model.y_std = y_std
 
-            # If a symbolic regression algorithm is used, we need to store the true concepts and targets in the model in order to setup the equations.
-            if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner' and self.model.model.equation_learning_strategy=='sym_reg_alg':
-                self.model.model.c_trues = c_trues
-                self.model.model.y_trues = y_trues
-                # Setup equations for the symbolic regression
-                self.model.model.setup_symbolic_reg_equations()
+            if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner':
+                # If a symbolic regression algorithm is used, 
+                # we need to store the true concepts and targets in the model in order to setup the equations.
+                if self.model.model.equation_learning_strategy=='sym_reg_alg':
+                    self.model.model.c_trues = c_trues
+                    self.model.model.y_trues = y_trues
+                    # Setup equations for the symbolic regression
+                    self.model.model.setup_symbolic_reg_equations()
+                # If KAN are used, we need to setup the grid for each kan in the memory
+                elif self.model.model.equation_learning_strategy=='kan':
+                    self.model.model.setup_kan_grid(c_trues)
+                
 
         self.trainer.fit(self.model, 
                          train_dataloader, 

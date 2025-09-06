@@ -166,18 +166,44 @@ class SymbolicMemoryReasoner(BaseModel):
 
         return equations
 
-    ###### Equation conversion methods ######
-    def _convert_equation_to_torch(self, equation_str, variables):
-        # 1. Define the symbols (variables)
-        sympy_vars = sympy.symbols(variables)
-        # 2. Define the equation in a textual format
-        exp = equation_str
-        # 3. Convert to sympy expression
-        exp = sympy.sympify(exp)
-        # 4. Convert the textual equation into an executable PyTorch module
-        torch_exp = sympytorch.SymPyModule(expressions=[exp])
-        return torch_exp, sympy_vars
+    ###### KAN related methods ######
+    def setup_kan_equations(self):
+        # Update the corresponding flag
+        self.symbolic_kan_eq_substituted = True
+        # Substitute the learned KAN splines with the most similar symbolic expressions
+        for kan_layer in self.kan_layers:
+            kan_layer.auto_symbolic()
 
+        # Store the equations in the known_equations attribute
+        # TODO
+
+    def setup_kan_grid(self, inputs):
+        # Update the grid of all KAN layers based on the provided inputs
+        for kan_layer in self.kan_layers:
+            kan_layer.update_grid(inputs)
+
+    def _execute_kan(self, prob_per_classifier, input_concepts):
+        if self.symbolic_kan_eq_substituted:
+            y_hat = self._execute_known_equations(prob_per_classifier, input_concepts, discard_explanations=True)
+        else:
+            # Execute all the KAN layers
+            eq_outputs = []
+            for i, kan_layer in enumerate(self.kan_layers):
+                eq_output = kan_layer(input_concepts)
+                eq_outputs.append(eq_output)
+            # Stack the outputs along the class dimension
+            eq_outputs = torch.stack(eq_outputs, dim=1).squeeze() # Shape: (bsz, n_equations)
+            # Combine the outputs using the selector probabilities
+            y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
+
+        # Get the explanations (the selected equations)
+        if self.training:
+            explanations = None
+        else:
+            explanations = self._get_explanations(prob_per_classifier, y_hat)
+        return y_hat, explanations
+        
+    ###### Equation conversion methods ######
     def _prepare_equations(self, equations):
         self.torch_equations = []
         self.sympy_variables = []
@@ -191,9 +217,68 @@ class SymbolicMemoryReasoner(BaseModel):
         for eq in equations:
             torch_eq, sympy_variable = self._convert_equation_to_torch(eq, variables)
             self.torch_equations.append(torch_eq)
-            self.sympy_variables.append(sympy_variable)   
+            self.sympy_variables.append(sympy_variable)  
 
+    def _convert_equation_to_torch(self, equation_str, variables):
+        # 1. Define the symbols (variables)
+        sympy_vars = sympy.symbols(variables)
+        # 2. Define the equation in a textual format
+        exp = equation_str
+        # 3. Convert to sympy expression
+        exp = sympy.sympify(exp)
+        # 4. Convert the textual equation into an executable PyTorch module
+        torch_exp = sympytorch.SymPyModule(expressions=[exp])
+        return torch_exp, sympy_vars 
 
+    ###### Equation execution methods ######
+    def _execute_equations(self, prob_per_classifier, input_concepts):
+        bsz = input_concepts.shape[0]
+
+        if self.equation_learning_strategy in ['prior_knowledge', 'sym_reg_alg']:
+            y_hat, explanations = self._execute_known_equations(prob_per_classifier, input_concepts)
+        elif self.equation_learning_strategy=='kan':
+            y_hat, explanations = self._execute_kan(prob_per_classifier, input_concepts)
+            
+        return y_hat, explanations
+    
+    def _execute_known_equations(self, prob_per_classifier, input_concepts, discard_explanations=False):
+        # Execute all the equations
+        eq_outputs = []
+        for i, equation in enumerate(self.torch_equations):
+            # Create a dictionary mapping variable names to their values
+            var_dict = dict(zip(self.string_variables, [input_concepts[:, i] for i in range(input_concepts.shape[1])]))
+            # Execute the equation function with the mapped variables
+            eq_output = equation(**var_dict)
+            eq_outputs.append(eq_output)
+
+        # Stack the outputs along the class dimension
+        eq_outputs = torch.stack(eq_outputs, dim=1).squeeze() # Shape: (bsz, n_equations)
+
+        # Combine the outputs using the selector probabilities
+        y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
+
+        if discard_explanations:
+            return y_hat
+        else:
+            # Get the explanations (the selected equations)
+            if self.training:
+                explanations = None
+            else:
+                explanations = self._get_explanations(prob_per_classifier, y_hat)
+            return y_hat, explanations
+
+    def _get_explanations(self, prob_per_classifier, y_hat):
+        # If the number of classes is bigger than one, show the equation selected for the predicted class.
+        # Otherwise, show the equation selected for the single output.
+        exp_selection = prob_per_classifier[:,:,:,0]
+        # select the predicted class
+        y_idx = y_hat.argmax(dim=1).squeeze().unsqueeze(1).expand(-1, exp_selection.size(1)).unsqueeze(-1)
+        eq_idx = torch.gather(exp_selection, 2, y_idx).squeeze(-1).argmax(1)
+        # Get the explanations (the selected equations)
+        explanations = [self.known_equations[idx.item()] for i, idx in enumerate(eq_idx)]
+        return explanations
+
+    ###### Forward and loss methods ######
     def compute_tau(self, global_step, tau_init=1, tau_min=0.05, decay_rate=0.99):
         # Exponential decay to decrease tau over time
         tau = max(tau_min, tau_init * decay_rate ** global_step)
@@ -252,89 +337,6 @@ class SymbolicMemoryReasoner(BaseModel):
             'explanations': explanations,
             'selection_dist': selection_dist
         }
-
-    def _execute_equations(self, prob_per_classifier, input_concepts):
-        bsz = input_concepts.shape[0]
-
-        if self.equation_learning_strategy in ['prior_knowledge', 'sym_reg_alg']:
-            y_hat, explanations = self._execute_known_equations(prob_per_classifier, input_concepts)
-        elif self.equation_learning_strategy=='kan':
-            y_hat, explanations = self._execute_kan(prob_per_classifier, input_concepts)
-            
-        return y_hat, explanations
-
-    def setup_kan_equations(self):
-        # Update the corresponding flag
-        self.symbolic_kan_eq_substituted = True
-        # Substitute the learned KAN splines with the most similar symbolic expressions
-        for kan_layer in self.kan_layers:
-            kan_layer.auto_symbolic()
-
-        # Store the equations in the known_equations attribute
-        # TODO
-
-    def _execute_kan(self, prob_per_classifier, input_concepts):
-        if self.symbolic_kan_eq_substituted:
-            y_hat = self._execute_known_equations(prob_per_classifier, input_concepts, discard_explanations=True)
-        else:
-            # Execute all the KAN layers
-            eq_outputs = []
-            for i, kan_layer in enumerate(self.kan_layers):
-                eq_output = kan_layer(input_concepts)
-                eq_outputs.append(eq_output)
-            # Stack the outputs along the class dimension
-            eq_outputs = torch.stack(eq_outputs, dim=1).squeeze() # Shape: (bsz, n_equations)
-            # Combine the outputs using the selector probabilities
-            y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
-
-        # Get the explanations (the selected equations)
-        if self.training:
-            explanations = None
-        else:
-            explanations = self._get_explanations(prob_per_classifier, y_hat)
-        return y_hat, explanations
-
-    def _execute_known_equations(self, prob_per_classifier, input_concepts, discard_explanations=False):
-
-        # Execute all the equations
-        eq_outputs = []
-        for i, equation in enumerate(self.torch_equations):
-            eq_output = self._execute_known_equation(equation, input_concepts)
-            eq_outputs.append(eq_output)
-
-        # Stack the outputs along the class dimension
-        eq_outputs = torch.stack(eq_outputs, dim=1).squeeze() # Shape: (bsz, n_equations)
-
-        # Combine the outputs using the selector probabilities
-        y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
-
-        if discard_explanations:
-            return y_hat
-        else:
-            # Get the explanations (the selected equations)
-            if self.training:
-                explanations = None
-            else:
-                explanations = self._get_explanations(prob_per_classifier, y_hat)
-            return y_hat, explanations
-
-    def _get_explanations(self, prob_per_classifier, y_hat):
-        # If the number of classes is bigger than one, show the equation selected for the predicted class.
-        # Otherwise, show the equation selected for the single output.
-        exp_selection = prob_per_classifier[:,:,:,0]
-        # select the predicted class
-        y_idx = y_hat.argmax(dim=1).squeeze().unsqueeze(1).expand(-1, exp_selection.size(1)).unsqueeze(-1)
-        eq_idx = torch.gather(exp_selection, 2, y_idx).squeeze(-1).argmax(1)
-        # Get the explanations (the selected equations)
-        explanations = [self.known_equations[idx.item()] for i, idx in enumerate(eq_idx)]
-        return explanations
-
-    def _execute_known_equation(self, equation, values):
-        # Create a dictionary mapping variable names to their values
-        var_dict = dict(zip(self.string_variables, [values[:, i] for i in range(values.shape[1])]))
-        # Execute the equation function with the mapped variables
-        output = equation(**var_dict)
-        return output
 
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)

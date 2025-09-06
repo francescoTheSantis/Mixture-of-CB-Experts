@@ -5,4 +5,4 @@ from .dcr import DeepConceptReasoner
 from .cem import ConceptEmbeddingModel
 from .licem import LinearConceptEmbeddingModel
 from .cbm import ConceptBottleneckModel
-from .m_licem import LinearMemoryReasoner
+from .l_cmr import LinearMemoryReasoner
