@@ -8,12 +8,12 @@ from torch_concepts.nn import concept_embedding_mixture
 import re
 import sympy
 import sympytorch
-import pysr
+#import pysr
 import numpy as np
 import os
 from kan import KAN
-# os.environ["JULIA_NUM_THREADS"] = "8" # Set the number of threads for Julia (used by PySR)
-from pysr import PySRRegressor
+# # os.environ["JULIA_NUM_THREADS"] = "8" # Set the number of threads for Julia (used by PySR)
+# from pysr import PySRRegressor
 
 class SymbolicMemoryReasoner(BaseModel):
     def __init__(self, 
@@ -96,11 +96,11 @@ class SymbolicMemoryReasoner(BaseModel):
         elif len(self.known_equations)==1 and self.use_memory:
             raise ValueError("Only one equation provided, memory will not be used.")
         
-        if self.equation_learning_strategy not in ['prior_knowledge', 'sym_reg_alg', 'kan']:
+        if self.equation_learning_strategy not in ['prior_knowledge', 'kan']:
             raise ValueError(f"Unknown equation learning strategy: {self.equation_learning_strategy}")
         
     ###### Setup methods ######
-    def setup_equations(self):
+    def setup_memory(self):
         if self.equation_learning_strategy=='prior_knowledge': 
             if self.known_equations is None:
                 raise ValueError("Known equations must be provided when using 'prior_knowledge' strategy.")
@@ -124,8 +124,6 @@ class SymbolicMemoryReasoner(BaseModel):
 
     ###### Symbolic regression related methods ######
     def setup_symbolic_reg_equations(self):
-        if self.equation_learning_strategy != 'sym_reg_alg':
-            raise ValueError("This method should only be called when using 'sym_reg_alg' strategy.")
         learned_equations = self._fit_symbolic_reg_model()
         # Rename the equations to use 'c0', 'c1', ... as variable names
         renamed_equations = []
@@ -136,41 +134,6 @@ class SymbolicMemoryReasoner(BaseModel):
             renamed_equations.append(eq)
         self.known_equations = renamed_equations
         self._prepare_equations(renamed_equations)
-
-    def _fit_symbolic_reg_model(self, top_fraction=0.5):
-        equations = []
-        residuals = np.zeros_like(self.y_trues)
-
-        X_current, y_current = self.c_trues, self.y_trues
-
-        for i in range(self.memory_size):
-            # Train symbolic regression on current subset
-            model = PySRRegressor(
-                niterations=40,
-                populations=30,
-                binary_operators=["+", "-", "*", "/"],
-                unary_operators=["square", "exp", "log"],
-                model_selection="best",
-                verbosity=1,
-            )
-            model.fit(X_current, y_current)
-
-            # Save equation
-            eq = model.get_best()["equation"]
-            str_eq = str(eq)
-            equations.append(str_eq)
-
-            # Compute residuals on full dataset
-            y_pred_full = model.predict(self.c_trues)
-            residuals = self.y_trues - y_pred_full
-
-            # Select hardest samples for next round
-            errors = np.abs(residuals)
-            cutoff = np.quantile(errors, 1 - top_fraction)
-            mask = errors >= cutoff
-            X_current, y_current = self.c_trues[mask], self.y_trues[mask]
-
-        return equations
 
     ###### KAN related methods ######
     def setup_kan_grid(self, inputs):
@@ -209,34 +172,35 @@ class SymbolicMemoryReasoner(BaseModel):
 
         # Convert the string equations to torch functions
         for eq in equations:
-            torch_eq, sympy_variable, sympy_eq = self._convert_equation_to_torch(eq, variables)
-            self.torch_equations.append(torch_eq)
-            self.sympy_variables.append(sympy_variable)
-            self.sympy_equations.append(sympy_eq)
+            self._convert_equation_to_torch(eq, variables)
+
 
     def _convert_equation_to_torch(self, equation_str, variables):
         if self.equation_learning_strategy != 'prior_knowledge':
             raise NotImplementedError("This method is only implemented for 'prior_knowledge' strategy.")
-        # 1. Define the symbols (variables)
+        # Define the symbols (variables)
         sympy_vars = sympy.symbols(variables)
-        # 2. Define the equation in a textual format
+        # Define the equation in a textual format
         str_exp = equation_str
-        # 3. Convert to sympy expression
+        # Convert to sympy expression
         sympy_exp = sympy.sympify(str_exp)
-        # 4. standardize the equation if needed
+        # standardize the equation if self.scale_target
         if self.task == 'regression' and self.scale_target:
             y_mean = self.scaler.mean_.item()
             y_std = self.scaler.std_.item()
             sympy_exp = (sympy_exp - y_mean) / (y_std)
-        # 5. Convert the textual equation into an executable PyTorch module
+        # Convert the textual equation into an executable PyTorch module
         torch_exp = sympytorch.SymPyModule(expressions=[sympy_exp])
-        return torch_exp, sympy_vars, sympy_exp
+        # Store the torch module, the sympy variables, and the sympy expression 
+        self.torch_equations.append(torch_exp)
+        self.sympy_variables.append(sympy_vars)
+        self.sympy_equations.append(sympy_exp)
 
     ###### Equation execution methods ######
     def _execute_equations(self, prob_per_classifier, input_concepts):
         bsz = input_concepts.shape[0]
 
-        if self.equation_learning_strategy in ['prior_knowledge', 'sym_reg_alg']:
+        if self.equation_learning_strategy == 'prior_knowledge':
             y_hat, explanations = self._execute_known_equations(prob_per_classifier, input_concepts)
         elif self.equation_learning_strategy=='kan':
             y_hat, explanations = self._execute_kan(prob_per_classifier, input_concepts)
@@ -360,3 +324,40 @@ class SymbolicMemoryReasoner(BaseModel):
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         return loss
+    
+
+
+    # def _fit_symbolic_reg_model(self, top_fraction=0.5):
+    #     equations = []
+    #     residuals = np.zeros_like(self.y_trues)
+
+    #     X_current, y_current = self.c_trues, self.y_trues
+
+    #     for i in range(self.memory_size):
+    #         # Train symbolic regression on current subset
+    #         model = PySRRegressor(
+    #             niterations=40,
+    #             populations=30,
+    #             binary_operators=["+", "-", "*", "/"],
+    #             unary_operators=["square", "exp", "log"],
+    #             model_selection="best",
+    #             verbosity=1,
+    #         )
+    #         model.fit(X_current, y_current)
+
+    #         # Save equation
+    #         eq = model.get_best()["equation"]
+    #         str_eq = str(eq)
+    #         equations.append(str_eq)
+
+    #         # Compute residuals on full dataset
+    #         y_pred_full = model.predict(self.c_trues)
+    #         residuals = self.y_trues - y_pred_full
+
+    #         # Select hardest samples for next round
+    #         errors = np.abs(residuals)
+    #         cutoff = np.quantile(errors, 1 - top_fraction)
+    #         mask = errors >= cutoff
+    #         X_current, y_current = self.c_trues[mask], self.y_trues[mask]
+
+    #     return equations
