@@ -12,6 +12,8 @@ wandb_entity.txt
 debugging.yaml
 sweep_extract_emb.yaml
 my_sweep.yaml
+my_sweep_2.yaml
+my_sweep_3.yaml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -127,8 +127,9 @@ class SymbolicMemoryReasoner(BaseModel):
             self.classifier_selector = MLPEncoder(
                 input_size=self.backbone_latent_size,
                 output_size=self.memory_size * len(self.y_names),
-                hidden_size=self.backbone_latent_size,
-                activation=self.activation
+                hidden_size=int(self.backbone_latent_size / 3),
+                activation=self.activation,
+                dropout=0.5
                 )
         else:
             raise ValueError(f"Unknown selector model: {self.selector_model}")
@@ -260,7 +261,7 @@ class SymbolicMemoryReasoner(BaseModel):
             self.string_equations = [str(eq) for eq in equations]
 
     ###### Forward and loss methods ######
-    def compute_tau(self, global_step, tau_init=1, tau_min=0.05, decay_rate=0.99):
+    def compute_tau(self, global_step, tau_init=2, tau_min=0.05, decay_rate=0.99):
         # Exponential decay to decrease tau over time
         tau = max(tau_min, tau_init * decay_rate ** global_step)
         return tau

@@ -281,9 +281,9 @@ class loader(object):
             train_dataset, val_dataset = random_split(train_dataset, 
                                               [train_size, val_size])
         elif self.name == 'mnist_arithmetic':
-            train_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=10000, img_size=224)
-            val_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=2000, img_size=224)
-            test_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=False, num_samples=3000, img_size=224)
+            train_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=70000, img_size=224)
+            val_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=10000, img_size=224)
+            test_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=False, num_samples=20000, img_size=224)
 
             # Get the equations x sample in the test-set
             operators = test_dataset.operator_list
