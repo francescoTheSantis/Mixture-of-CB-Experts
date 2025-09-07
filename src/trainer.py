@@ -175,11 +175,13 @@ class Trainer:
 
                     # Concatenate outside the loop
                     y = torch.cat(y_trues, dim=0).numpy()
-                    y_preds = torch.cat(y_preds, dim=0).numpy()
+                    y_preds = torch.cat(y_preds, dim=0)
 
                     if self.cfg.dataset.metadata.task == 'regression' and self.scale_target:
                         # If regression, inverse transform the predictions
                         y_preds = self.model.scaler.inverse_transform(y_preds)
+
+                    y_preds = y_preds.numpy()
 
                     # Process predictions
                     # if len(self.cfg.model.params.y_names)==1 and self.cfg.dataset.metadata.task != 'regression':
@@ -194,28 +196,25 @@ class Trainer:
 
                     # Calculate metrics
                     if self.cfg.dataset.metadata.task == 'regression':
-                        task_f1, task_acc = 0, 0
+                        task_f1, task_acc = None, None
                         mse = np.mean((y - y_preds) ** 2)
                         mae = np.mean(np.abs(y - y_preds))
                         r2 = 1 - (np.sum((y - y_preds) ** 2) / np.sum((y - np.mean(y)) ** 2))
                         rmse = np.sqrt(mse)
                     else:
                         task_f1, task_acc = f1_acc_metrics(y, y_preds)
-                        mse = 0
-                        mae = 0
-                        r2 = 0
-                        rmse = 0
+                        mse, mae, r2, rmse = None, None, None, None
 
                     # Append to list instead of concatenating DataFrames
                     intervention_results.append({
                         'noise': round(eps, 1), 
                         'p_int': round(p_int, 1), 
-                        'f1': round(task_f1, 2), 
-                        'accuracy': round(task_acc, 2),
-                        'mse': round(mse, 4),
-                        'mae': round(mae, 4),
-                        'r2': round(r2, 4),
-                        'rmse': round(rmse, 4)
+                        'f1': task_f1, 
+                        'accuracy': task_acc,
+                        'mse': mse,
+                        'mae': mae,
+                        'r2': r2,
+                        'rmse': rmse
                     })
                     
                     # Clear variables to free memory
