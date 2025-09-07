@@ -4,7 +4,6 @@ defaults:
 
 loader: 
   name: mnist_addition
-  extract_embeddings: false
   batch_size: 128
 
 # Dataset parameters

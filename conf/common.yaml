@@ -2,6 +2,7 @@ defaults:
   - dataset: xor
   - model: blackbox
   - engine: engine
+  - _self_
 
 ## Common parameters
 gpus: [1]

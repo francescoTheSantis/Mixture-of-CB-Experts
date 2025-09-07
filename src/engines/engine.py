@@ -33,6 +33,7 @@ class Engine(pl.LightningModule):
         self.y_name = y_name
         self.num_classes = len(y_name) #if len(y_name)>1 else 2
         self.class_names = y_name # if len(y_name)>1 else ['0','1']
+        self.model_name = self.model.__class__.__name__
 
         self.csv_log_dir = csv_log_dir
         self.dataset_name = dataset_name
@@ -44,7 +45,7 @@ class Engine(pl.LightningModule):
 
         # If we are using the LinearMemoryReasoner model,
         # we need to save the tensors required for the explanations.
-        if self.model.__class__.__name__ in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
+        if self.model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
             self.explanations = []
             self.c_trues = []
             self.c_preds = []
@@ -139,7 +140,7 @@ class Engine(pl.LightningModule):
         self.update_and_log_metrics('train', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
         # compute the selection entropy
-        if self.model.__class__.__name__ in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
+        if self.model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
             # Compute the entropy of the selection distribution
             selection_dist = model_output['selection_dist']
             selection_dist = torch.softmax(selection_dist, dim=-1)
@@ -177,7 +178,7 @@ class Engine(pl.LightningModule):
         self.update_and_log_metrics('val', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
         # compute the selection entropy
-        if self.model.__class__.__name__ in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
+        if self.model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
             # Compute the entropy of the selection distribution
             selection_dist = model_output['selection_dist']
             selection_dist = torch.softmax(selection_dist, dim=-1)
@@ -218,66 +219,70 @@ class Engine(pl.LightningModule):
         else:
             return tensor
 
-    """
+
     def on_test_epoch_end(self):
-        # If the name of the class is LinearMemoryReasoner,
-        # store the tensors required for the explanations.
-        if self.model.__class__.__name__ == 'LinearMemoryReasoner':
-            # Concatenate the tensors
-            self.explanations = torch.cat(self.explanations, dim=0)
-            # Save the predicted_CBM to a .pt file
-            torch.save(self.explanations, f"{self.csv_log_dir}/pred_CBMs.pt")
-        elif self.model.__class__.__name__ == 'SymbolicMemoryReasoner':
-            if self.dataset_name == 'mnist_arithmetic':
-                # read the file containing the ordered list of rules
-                true_eqs = pd.read_csv(f"{self.data_path}/mnist_arithmetic_equations.csv")
-                # read all the rules that have been selected
-                selected_eqs = pd.DataFrame(self.explanations, columns=['pred_equation'])
-                # combine the two in a single dataframe
-                combined_eqs = pd.DataFrame()
-                combined_eqs['pred_equation'] = selected_eqs['pred_equation']
-                combined_eqs['true_equation'] = true_eqs['equation']
-                # save the dataframe to a csv file
-                combined_eqs.to_csv(f"{self.csv_log_dir}/pred_equations.csv", index=False)
 
-        self.c_trues = torch.cat(self.c_trues, dim=0)
-        self.c_preds = torch.cat(self.c_preds, dim=0)
-        self.y_trues = torch.cat(self.y_trues, dim=0)
-        if self.num_classes > 2:
-            # If the number of classes is greater than 1, we need to take the argmax
-            self.y_preds = torch.cat(self.y_preds, dim=0).argmax(-1)
-        elif self.num_classes == 1 and not isinstance(self.model.task_loss_form, nn.MSELoss):
-            # If the number of classes is 1, we just discretize the predictions
-            # to get the predicted labels.
-            self.y_preds = (torch.cat(self.y_preds, dim=0) > 0.5).long()
-        else:
-            self.y_preds = (torch.cat(self.y_preds, dim=0)).long()
+        model_name = self.model.__class__.__name__
 
-        # Convert the tensors to pandas dfs
-        c_preds = pd.DataFrame(self.c_preds.cpu().numpy(), columns=self.c_names)
-        c_trues = pd.DataFrame(self.c_trues.cpu().numpy(), columns=self.c_names)
+        # The whole function is only executed for: LinearMemoryReasoner, SymbolicMemoryReasoner.
+        if model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
+            # If the name of the class is LinearMemoryReasoner,
+            # store the tensors required for the explanations.
+            if model_name == 'LinearMemoryReasoner':
+                # Concatenate the tensors
+                self.explanations = torch.cat(self.explanations, dim=0)
+                # Save the predicted_CBM to a .pt file
+                torch.save(self.explanations, f"{self.csv_log_dir}/pred_CBMs.pt")
+            elif model_name == 'SymbolicMemoryReasoner':
+                if self.dataset_name == 'mnist_arithmetic':
+                    # read the file containing the ordered list of rules
+                    true_eqs = pd.read_csv(f"{self.data_path}/mnist_arithmetic_equations.csv")
+                    # read all the rules that have been selected
+                    selected_eqs = pd.DataFrame(self.explanations, columns=['pred_equation'])
+                    # combine the two in a single dataframe
+                    combined_eqs = pd.DataFrame()
+                    combined_eqs['pred_equation'] = selected_eqs['pred_equation']
+                    combined_eqs['true_equation'] = true_eqs['equation']
+                    # save the dataframe to a csv file
+                    combined_eqs.to_csv(f"{self.csv_log_dir}/pred_equations.csv", index=False)
 
-        # Create a list of names for the y_preds and y_trues to create 
-        # a pandas containing the list of predicted and true labels
-        if isinstance(self.model.task_loss_form, nn.MSELoss):
-            y_preds = pd.DataFrame(self.y_preds.cpu().numpy(), columns=[self.y_name])
-            y_trues = pd.DataFrame(self.y_trues.cpu().numpy(), columns=[self.y_name])
-        else:
-            if self.num_classes == 1:
-                y_preds = pd.DataFrame(self.y_preds.long().cpu().numpy(), columns=[self.y_name])
-                y_trues = pd.DataFrame(self.y_trues.long().cpu().numpy(), columns=[self.y_name])
+            self.c_trues = torch.cat(self.c_trues, dim=0)
+            self.c_preds = torch.cat(self.c_preds, dim=0)
+            self.y_trues = torch.cat(self.y_trues, dim=0)
+            if self.num_classes > 2:
+                # If the number of classes is greater than 1, we need to take the argmax
+                self.y_preds = torch.cat(self.y_preds, dim=0).argmax(-1)
+            elif self.num_classes == 1 and not isinstance(self.model.task_loss_form, nn.MSELoss):
+                # If the number of classes is 1, we just discretize the predictions
+                # to get the predicted labels.
+                self.y_preds = (torch.cat(self.y_preds, dim=0) > 0.5).long()
             else:
-                y_preds = pd.DataFrame(F.one_hot(self.y_preds.cpu(), self.num_classes).squeeze().numpy(),
-                                    columns=self.class_names)
-                y_trues = pd.DataFrame(F.one_hot(self.y_trues.long().cpu(), self.num_classes).squeeze().numpy(),
-                                    columns=self.class_names)
+                self.y_preds = (torch.cat(self.y_preds, dim=0)).long()
 
-        # Store the pandas dfs
-        c_preds.to_csv(f"{self.csv_log_dir}/c_preds.csv", index=False)
-        c_trues.to_csv(f"{self.csv_log_dir}/c_trues.csv", index=False)
-        y_preds.to_csv(f"{self.csv_log_dir}/y_preds.csv", index=False)
-        y_trues.to_csv(f"{self.csv_log_dir}/y_trues.csv", index=False)
-    """
+            # Convert the tensors to pandas dfs
+            c_preds = pd.DataFrame(self.c_preds.cpu().numpy(), columns=self.c_names)
+            c_trues = pd.DataFrame(self.c_trues.cpu().numpy(), columns=self.c_names)
+
+            # Create a list of names for the y_preds and y_trues to create 
+            # a pandas containing the list of predicted and true labels
+            if isinstance(self.model.task_loss_form, nn.MSELoss):
+                y_preds = pd.DataFrame(self.y_preds.cpu().numpy(), columns=[self.y_name])
+                y_trues = pd.DataFrame(self.y_trues.cpu().numpy(), columns=[self.y_name])
+            else:
+                if self.num_classes == 1:
+                    y_preds = pd.DataFrame(self.y_preds.long().cpu().numpy(), columns=[self.y_name])
+                    y_trues = pd.DataFrame(self.y_trues.long().cpu().numpy(), columns=[self.y_name])
+                else:
+                    y_preds = pd.DataFrame(F.one_hot(self.y_preds.cpu(), self.num_classes).squeeze().numpy(),
+                                        columns=self.class_names)
+                    y_trues = pd.DataFrame(F.one_hot(self.y_trues.long().cpu(), self.num_classes).squeeze().numpy(),
+                                        columns=self.class_names)
+
+            # Store the pandas dfs
+            c_preds.to_csv(f"{self.csv_log_dir}/c_preds.csv", index=False)
+            c_trues.to_csv(f"{self.csv_log_dir}/c_trues.csv", index=False)
+            y_preds.to_csv(f"{self.csv_log_dir}/y_preds.csv", index=False)
+            y_trues.to_csv(f"{self.csv_log_dir}/y_trues.csv", index=False)
 
     def configure_optimizers(self):
         return [self.optimizer], [self.scheduler]

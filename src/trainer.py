@@ -175,18 +175,22 @@ class Trainer:
 
                     # Concatenate outside the loop
                     y = torch.cat(y_trues, dim=0).numpy()
-                    y_preds = torch.cat(y_preds, dim=0)
+                    y_preds = torch.cat(y_preds, dim=0).numpy()
+
+                    if self.cfg.dataset.metadata.task == 'regression' and self.scale_target:
+                        # If regression, inverse transform the predictions
+                        y_preds = self.model.scaler.inverse_transform(y_preds)
 
                     # Process predictions
-                    if len(self.cfg.model.params.y_names)==1 and self.cfg.dataset.metadata.task != 'regression':
-                        if self.model.model.__class__.__name__ in ['DeepConceptReasoner', 'ConceptMemoryReasoner']:
-                            y_preds = (y_preds > 0.5).long().numpy()
-                        else:
-                            y_preds = (y_preds > 0.).long().numpy()
-                    elif self.cfg.dataset.metadata.task == 'regression':
-                        y_preds = y_preds.squeeze().numpy()
-                    else:
-                        y_preds = y_preds.argmax(-1).numpy()
+                    # if len(self.cfg.model.params.y_names)==1 and self.cfg.dataset.metadata.task != 'regression':
+                    #     if self.model.model.__class__.__name__ in ['DeepConceptReasoner', 'ConceptMemoryReasoner']:
+                    #         y_preds = (y_preds > 0.5).long().numpy()
+                    #     else:
+                    #         y_preds = (y_preds > 0.).long().numpy()
+                    # elif self.cfg.dataset.metadata.task == 'regression':
+                    #     y_preds = y_preds.numpy()
+                    # else:
+                    #     y_preds = y_preds.numpy()
 
                     # Calculate metrics
                     if self.cfg.dataset.metadata.task == 'regression':
