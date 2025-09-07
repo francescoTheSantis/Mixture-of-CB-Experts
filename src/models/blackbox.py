@@ -22,6 +22,7 @@ class BlackBox(BaseModel):
                  backbone_latent_size=None,
                  concept_type='binary',
                  disjoint_training=False,
+                 num_layers=1,
                  **kwargs
                  ):
         super().__init__(
@@ -47,13 +48,13 @@ class BlackBox(BaseModel):
         hidden_size = latent_size 
 
         self.predictor = MLPEncoder(
-            backbone_latent_size,
-            output_size,
-            None,
-            hidden_size,
-            activation
+            input_size=backbone_latent_size,
+            output_size=output_size,
+            input_transform=None,
+            hidden_size=hidden_size,
+            activation=activation,
+            num_layers=num_layers,
         )
-
 
     def forward(self, input):
         x = input['x']
