@@ -20,6 +20,7 @@ class Trainer:
         self.model = model
         self.epss = np.arange(0, 0.6, 0.1) # Noise levels for interventions
         self.p_ints = np.arange(0, 1.1, 0.1) # Intervention probabilities
+        self.scale_target = cfg.scale_target if 'scale_target' in cfg else True
 
     def build_trainer(self):
         early_stopping = EarlyStopping(
@@ -84,7 +85,7 @@ class Trainer:
         y_trues = torch.cat(y_trues, dim=0)
 
         # If regression, standardize the target variable and store the scaler in the model
-        if self.model.model.task == 'regression':
+        if self.model.model.task == 'regression' and self.scale_target:
             # Fit scaler to y data
             scaler = StandardScaler(dims=(0,))
             scaler.fit(y_trues)
@@ -92,6 +93,9 @@ class Trainer:
             # Store the scaler in the engine & model
             self.model.scaler = scaler
             self.model.model.scaler = scaler
+        else:
+            self.model.scaler = None
+            self.model.model.scaler = None
 
         if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner':
             # setup the model (e.g., setup equations if prior knowledge is used)

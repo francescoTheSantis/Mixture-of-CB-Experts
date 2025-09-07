@@ -257,7 +257,8 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             y_name = y_names,
             csv_log_dir = csv_log_dir,
             data_type = data_type,
-            dataset_name = cfg.dataset.metadata.name
+            dataset_name = cfg.dataset.metadata.name,
+            scale_target = cfg.scale_target if 'scale_target' in cfg else True
         )
 
         hard_concepts = cfg.hard_concepts

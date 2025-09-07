@@ -22,7 +22,8 @@ class Engine(pl.LightningModule):
                 csv_log_dir: Optional[str] = None,
                 data_type: Optional[str] = None,
                 dataset_name: Optional[str] = None,
-                data_path: Optional[str] = None
+                data_path: Optional[str] = None,
+                scale_target: bool = True
                 ):
         super(Engine, self).__init__()
         self.model = model
@@ -36,6 +37,7 @@ class Engine(pl.LightningModule):
         self.csv_log_dir = csv_log_dir
         self.dataset_name = dataset_name
         self.data_path = data_path
+        self.scale_target = scale_target
 
         # Set the metrics
         self._set_metrics()
@@ -115,7 +117,7 @@ class Engine(pl.LightningModule):
 
         # Compute loss
         y_hat_loss, c_hat_loss = self.model.filter_output_for_loss(**model_output)
-        if self.model.task == 'regression':
+        if self.model.task == 'regression' and self.scale_target:
             y_loss = self.scaler.transform(batch['y'])
         else:
             y_loss = batch['y']
@@ -132,7 +134,7 @@ class Engine(pl.LightningModule):
         y_hat_metrics, c_hat_metrics = self.model.filter_output_for_metrics(**model_output)
         # compute task metrics
         # if the task is regression, we denormalize the target variable to compute the metrics
-        if self.model.task == 'regression':
+        if self.model.task == 'regression' and self.scale_target:
             y_hat_metrics = self.scaler.inverse_transform(y_hat_metrics.detach())
         self.update_and_log_metrics('train', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
@@ -170,7 +172,7 @@ class Engine(pl.LightningModule):
         y_hat_metrics, c_hat_metrics = self.model.filter_output_for_metrics(**model_output)
         # compute task metrics
         # if the task is regression, we denormalize the target variable to compute the metrics
-        if self.model.task == 'regression':
+        if self.model.task == 'regression' and self.scale_target:
             y_hat_metrics = self.scaler.inverse_transform(y_hat_metrics)
         self.update_and_log_metrics('val', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
@@ -191,7 +193,7 @@ class Engine(pl.LightningModule):
         y_hat_metrics, c_hat_metrics = self.model.filter_output_for_metrics(**model_output)
         # compute task metrics
         # if the task is regression, we denormalize the target variable to compute the metrics
-        if self.model.task == 'regression':
+        if self.model.task == 'regression' and self.scale_target:
             y_hat_metrics = self.scaler.inverse_transform(y_hat_metrics)
         self.update_and_log_metrics('test', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
