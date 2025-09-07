@@ -27,7 +27,6 @@ class LinearMemoryReasoner(BaseModel):
                  mc_approx=10,
                  embedding_memory=True,
                  selector_model='linear',
-                 intervene_on_selection=True,
                  linear_classifier_selection=False,
                  sampling=True,
                  concept_loss_form=nn.BCELoss(),
@@ -66,7 +65,6 @@ class LinearMemoryReasoner(BaseModel):
         self.mc_approx = mc_approx
         self.embedding_memory = embedding_memory
         self.memory_size = memory_size
-        self.intervene_on_selection = intervene_on_selection
         self.linear_classifier_selection = linear_classifier_selection
         self.selector_model = selector_model
 
@@ -75,21 +73,17 @@ class LinearMemoryReasoner(BaseModel):
         if self.bias not in [None, 'local', 'global']:
             raise ValueError("Invalid bias type. Expected one of [None, 'local', 'global'].")
 
-        # We need to use the Concept embedding model to produce both concept predictions and embeddings.
-        # Which will allow to intervene on both the linear classifier selection (concept embeddings)
-        # and execution (concept predictions).
-        self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
+        self.bottleneck = pyc_nn.LinearConceptBottleneck(
             backbone_latent_size,
             self.c_names,
-            embedding_size,
-            activation=nn.Identity()
+            activation=nn.Identity(), # we will later apply a sigmoid if the concept is boolean
         )
 
         # The selector generates logits that define a probability distribution 
         # over the linear equations stored in memory.
         # More precisely, for each class in y_names, we have a set of linear equations in the memory, and the selector
         # selects a linear equation for each class in y_names.
-        selector_input_size = embedding_size * len(c_names) if self.intervene_on_selection else backbone_latent_size
+        selector_input_size = backbone_latent_size
         selector_output_size = memory_size if self.linear_classifier_selection else memory_size * len(y_names)
         if self.selector_model == 'linear':
             self.classifier_selector = nn.Sequential(
@@ -136,26 +130,11 @@ class LinearMemoryReasoner(BaseModel):
         latent, c_true, int_idxs = self.encode(input)
         bsz = latent.shape[0]
 
-        c_emb, c_dict = self.bottleneck(
-            latent,
-            c_true=c_true,
-            intervention_idxs=int_idxs,
-            intervention_rate=1,
-        )
-        c_hat = c_dict['c_int']
+        c_hat, _ = self.bottleneck(latent)
 
         c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 
-        # It is necessary to compute again since 
-        c_emb = self.bottleneck.linear(latent)
-        c_emb = concept_embedding_mixture(c_emb, input_concepts)
-
-        if self.intervene_on_selection:
-            selector_input = c_emb.flatten(-2)
-        else:
-            selector_input = latent
-
-        classifier_selector_logits = self.classifier_selector(selector_input)
+        classifier_selector_logits = self.classifier_selector(latent)
 
         # At training time, we sample multiple times (Monte-Carlo approximation)
         # from a categorical distribution.

@@ -78,12 +78,10 @@ class SymbolicMemoryReasoner(BaseModel):
         self.use_memory = use_memory
         self.selector_model = selector_model
 
-        # We need to use the Concept embedding model to produce both concept predictions and embeddings.
-        self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
+        self.bottleneck = pyc_nn.LinearConceptBottleneck(
             backbone_latent_size,
             self.c_names,
-            embedding_size,
-            activation=nn.Identity()
+            activation=nn.Identity(), # we will later apply a sigmoid if the concept is boolean
         )
 
         # Equations handling
@@ -271,18 +269,9 @@ class SymbolicMemoryReasoner(BaseModel):
         bsz = latent.shape[0]
 
         ## Concept encoder and concept processing block ##
-        c_emb, c_dict = self.bottleneck(
-            latent,
-            c_true=c_true,
-            intervention_idxs=int_idxs,
-            intervention_rate=1,
-        )
-        c_hat = c_dict['c_int']
+        c_hat, _ = self.bottleneck(latent)
 
         c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
-
-        c_emb = self.bottleneck.linear(latent)
-        c_emb = concept_embedding_mixture(c_emb, input_concepts)
 
         if self.training:
             n_samples = self.mc_approx
