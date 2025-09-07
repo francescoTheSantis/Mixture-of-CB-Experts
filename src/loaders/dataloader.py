@@ -229,9 +229,9 @@ class loader(object):
             concept_names = concept_names_pendulum
             task_names = task_names_pendulum
             concept_groups = None
-        elif self.name == "dsprites":
+        elif self.name in ["dsprites_simple", "dsprites_complex"]:
             concept_names = ['value_orientation', 'value_x_position', 'value_y_position']
-            task_names = task_names_dsprites
+            task_names = ['custom_target']
             concept_groups = None
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
@@ -284,7 +284,6 @@ class loader(object):
             train_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=70000, img_size=224)
             val_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=10000, img_size=224)
             test_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=False, num_samples=20000, img_size=224)
-
             # Get the equations x sample in the test-set
             operators = test_dataset.operator_list
             equations = []
@@ -293,7 +292,6 @@ class loader(object):
             # Create a dataframe and save it
             equations_df = pd.DataFrame(equations, columns=['equation'])
             equations_df.to_csv(f"{self.data_path}/mnist_arithmetic_equations.csv", index=False)
-
         elif self.name == 'cub' and self.concept_percentage is None:
             train_dataset = CUBDataset(root=DATA_PATH, split='train')
             val_dataset = CUBDataset(root=DATA_PATH, split='val')
@@ -372,6 +370,18 @@ class loader(object):
         elif self.name == "pendulum":
             loader = PendulumDataset(already_created=self.dataset_already_created)
             loaded_train, loaded_val, loaded_test = loader.collator()
+        elif self.name in ["dsprites_simple", "dsprites_complex"]:
+            from src.loaders.datasets.dsprites import DSprites
+            assert self.formulas is not None, "Formulas must be provided for dsprites dataset"
+            dsprites_dataset = DSprites(concepts=self.selected_concepts,
+                                        formulas=self.formulas,
+                                        split='train')
+            # split the dataset into train, validation and test sets
+            total_size = len(dsprites_dataset)
+            train_size = int(0.7 * total_size)
+            val_size = int(0.1 * total_size)
+            test_size = total_size - train_size - val_size
+            train_dataset, val_dataset, test_dataset = random_split(dsprites_dataset, [train_size, val_size, test_size])
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
 
