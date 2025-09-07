@@ -224,8 +224,10 @@ class SymbolicMemoryReasoner(BaseModel):
         # 3. Convert to sympy expression
         sympy_exp = sympy.sympify(str_exp)
         # 4. standardize the equation if needed
-        if self.task == 'regression':
-            sympy_exp = (sympy_exp - self.y_mean) / (self.y_std + 1e-8)
+        if self.task == 'regression' and self.scale_target:
+            y_mean = self.scaler.mean_.item()
+            y_std = self.scaler.std_.item()
+            sympy_exp = (sympy_exp - y_mean) / (y_std)
         # 5. Convert the textual equation into an executable PyTorch module
         torch_exp = sympytorch.SymPyModule(expressions=[sympy_exp])
         return torch_exp, sympy_vars, sympy_exp
@@ -288,8 +290,10 @@ class SymbolicMemoryReasoner(BaseModel):
             elif self.equation_learning_strategy=='kan':
                 equations = [kan_layer.symbolic_formula()[0] for kan_layer in self.kan_layers]
                 # de-standardize if needed
-                if self.task == 'regression':
-                    equations = [((eq * self.y_std + self.y_mean)) for eq in equations]
+                if self.task == 'regression' and self.scale_target:
+                    y_mean = self.scaler.mean_.item()
+                    y_std = self.scaler.std_.item()
+                    equations = [((eq * y_std + y_mean)) for eq in equations]
             # convert to string
             self.string_equations = [str(eq) for eq in equations]
 

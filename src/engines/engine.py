@@ -39,6 +39,7 @@ class Engine(pl.LightningModule):
         self.dataset_name = dataset_name
         self.data_path = data_path
         self.scale_target = scale_target
+        self.model.scale_target = scale_target
 
         # Set the metrics
         self._set_metrics()
