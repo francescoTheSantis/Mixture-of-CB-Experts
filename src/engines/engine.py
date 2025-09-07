@@ -141,7 +141,7 @@ class Engine(pl.LightningModule):
         self.update_and_log_metrics('train', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
         # compute the selection entropy
-        if self.model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
+        if self.model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner'] and self.model.memory_size>1:
             # Compute the entropy of the selection distribution
             selection_dist = model_output['selection_dist']
             selection_dist = torch.softmax(selection_dist, dim=-1)
@@ -179,7 +179,7 @@ class Engine(pl.LightningModule):
         self.update_and_log_metrics('val', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
         # compute the selection entropy
-        if self.model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
+        if self.model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner'] and self.model.memory_size>1:
             # Compute the entropy of the selection distribution
             selection_dist = model_output['selection_dist']
             selection_dist = torch.softmax(selection_dist, dim=-1)
@@ -202,8 +202,8 @@ class Engine(pl.LightningModule):
         # update the tensors required for the explanations.
         c = batch['c']
         y = batch['y']
-        if self.model.__class__.__name__ in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
-            if self.model.__class__.__name__ == 'LinearMemoryReasoner':
+        if self.model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
+            if self.model_name == 'LinearMemoryReasoner':
                 self.explanations.append(model_output['explanations'])
             else:
                 for eq in model_output['explanations']:
@@ -222,19 +222,16 @@ class Engine(pl.LightningModule):
 
 
     def on_test_epoch_end(self):
-
-        model_name = self.model.__class__.__name__
-
         # The whole function is only executed for: LinearMemoryReasoner, SymbolicMemoryReasoner.
-        if model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
+        if self.model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
             # If the name of the class is LinearMemoryReasoner,
             # store the tensors required for the explanations.
-            if model_name == 'LinearMemoryReasoner':
+            if self.model_name == 'LinearMemoryReasoner':
                 # Concatenate the tensors
                 self.explanations = torch.cat(self.explanations, dim=0)
                 # Save the predicted_CBM to a .pt file
                 torch.save(self.explanations, f"{self.csv_log_dir}/pred_CBMs.pt")
-            elif model_name == 'SymbolicMemoryReasoner':
+            elif self.model_name == 'SymbolicMemoryReasoner':
                 if self.dataset_name == 'mnist_arithmetic':
                     # read the file containing the ordered list of rules
                     true_eqs = pd.read_csv(f"{self.data_path}/mnist_arithmetic_equations.csv")

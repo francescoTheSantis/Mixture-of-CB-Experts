@@ -97,6 +97,21 @@ class SymbolicMemoryReasoner(BaseModel):
         if self.equation_learning_strategy not in ['prior_knowledge', 'kan']:
             raise ValueError(f"Unknown equation learning strategy: {self.equation_learning_strategy}")
         
+        if self.equation_learning_strategy == 'kan':
+            kan_params = {
+                    'width': [len(self.c_names), len(self.c_names)+1, self.output_size],
+                    'grid': 5,
+                    'k': 4,
+            }
+            # Instantiate as many KAN Layers as the memory size
+            self.kan_layers = nn.ModuleList()
+            for i in range(self.memory_size):
+                kan_params['ckpt_path'] = os.path.join(os.getcwd(), f'kan{i}_ckpt')
+                kan_layer = KAN(**kan_params)
+                # for param in kan_layer.get_params():
+                #     param.requires_grad = True
+                self.kan_layers.append(kan_layer)
+        
     ###### Setup methods ######
     def setup_memory(self):
         if self.equation_learning_strategy=='prior_knowledge': 
@@ -104,18 +119,20 @@ class SymbolicMemoryReasoner(BaseModel):
                 raise ValueError("Known equations must be provided when using 'prior_knowledge' strategy.")
             self._prepare_equations(self.known_equations) # We process the known equations to convert them to torch executable modules
             self.memory_size = len(self.known_equations) # Override memory size to match the number of known equations
-        elif self.equation_learning_strategy == 'kan':
-            kan_params = {
-                    'width': [len(self.c_names), len(self.c_names)+1, self.output_size],
-                    'grid': 3,
-                    'k': 3,
-                    'ckpt_path': os.path.join(os.getcwd(), 'kan_ckpt'),
-            }
-            # Instantiate as many KAN Layers as the memory size
-            self.kan_layers = nn.ModuleList()
-            for _ in range(self.memory_size):
-                kan_layer = KAN(**kan_params)
-                self.kan_layers.append(kan_layer)
+        # elif self.equation_learning_strategy == 'kan':
+        #     kan_params = {
+        #             'width': [len(self.c_names), len(self.c_names)+1, self.output_size],
+        #             'grid': 5,
+        #             'k': 4,
+        #     }
+        #     # Instantiate as many KAN Layers as the memory size
+        #     self.kan_layers = nn.ModuleList()
+        #     for i in range(self.memory_size):
+        #         kan_params['ckpt_path'] = os.path.join(os.getcwd(), f'kan{i}_ckpt')
+        #         kan_layer = KAN(**kan_params)
+        #         for param in kan_layer.get_params():
+        #             param.requires_grad = True
+        #         self.kan_layers.append(kan_layer)
 
         if self.selector_model == 'linear':
             self.classifier_selector = nn.Sequential(
@@ -136,7 +153,7 @@ class SymbolicMemoryReasoner(BaseModel):
     def setup_kan_grid(self, inputs):
         # Update the grid of all KAN layers based on the provided inputs
         for kan_layer in self.kan_layers:
-            kan_layer.update_grid(inputs)
+            kan_layer.update_grid_from_samples(inputs)
 
     def _execute_kan(self, prob_per_classifier, input_concepts):
         # Execute all the KAN layers
@@ -146,8 +163,13 @@ class SymbolicMemoryReasoner(BaseModel):
             eq_outputs.append(eq_output)
         # Stack the outputs along the class dimension
         eq_outputs = torch.stack(eq_outputs, dim=1).squeeze() # Shape: (bsz, n_equations)
-        # Combine the outputs using the selector probabilities
-        y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
+
+        if self.memory_size == 1:
+            # Associate the output of the unique KAN to all the classes
+            y_hat = eq_outputs.unsqueeze(-1).unsqueeze(-1).expand(-1, len(self.y_names), -1)
+        else:
+            # Combine the outputs using the selector probabilities
+            y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
 
         # Get the explanations (the selected equations)
         if self.training:
@@ -296,7 +318,7 @@ class SymbolicMemoryReasoner(BaseModel):
                                                    hard=True, 
                                                    dim=1)
         else:
-            prob_per_classifier = torch.ones((bsz, 1, len(self.y_names)), device=latent.device)
+            prob_per_classifier = torch.ones((bsz, 1, len(self.y_names), 1), device=latent.device)
             selection_dist = torch.tensor([0.0], device=latent.device)
 
         ## Equation execution block ##
