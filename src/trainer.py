@@ -100,10 +100,9 @@ class Trainer:
         if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner':
             # setup the model (e.g., setup equations if prior knowledge is used)
             self.model.model.setup_memory()
-
+            # If KAN are used, we need to setup the grid for each kan in the memory.
+            # This operation is required for any kind of task (classification, regression, ...).
             if self.model.model.equation_learning_strategy=='kan':
-                # If KAN are used, we need to setup the grid for each kan in the memory.
-                # This operation is required for any kind of task (classification, regression, ...).
                 self.model.model.setup_kan_grid(c_trues)
                 
         self.trainer.fit(self.model, 
@@ -154,7 +153,7 @@ class Trainer:
                         output = self.model.forward(inputs)
                         output = self.model.model.filter_output_for_metrics(**output)
                         
-                        # Move to CPU immediately and detach to free GPU memory
+                        # Move to CPU and detach to free GPU memory
                         y_pred = output[0].detach().cpu()
                         y_cpu = y.detach().cpu()
                         
@@ -181,11 +180,10 @@ class Trainer:
                         task_f1, task_acc = None, None
                         mse = np.mean((y - y_preds) ** 2)
                         mae = np.mean(np.abs(y - y_preds))
-                        r2 = 1 - (np.sum((y - y_preds) ** 2) / np.sum((y - np.mean(y)) ** 2))
                         rmse = np.sqrt(mse)
                     else:
                         task_f1, task_acc = f1_acc_metrics(y, y_preds)
-                        mse, mae, r2, rmse = None, None, None, None
+                        mse, mae, rmse = None, None, None
 
                     # Append to list instead of concatenating DataFrames
                     intervention_results.append({
@@ -195,7 +193,6 @@ class Trainer:
                         'accuracy': task_acc,
                         'mse': mse,
                         'mae': mae,
-                        'r2': r2,
                         'rmse': rmse
                     })
                     

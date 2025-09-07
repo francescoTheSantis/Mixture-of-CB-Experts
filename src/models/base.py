@@ -22,7 +22,8 @@ class BaseModel(nn.Module):
                  c_groups=None,
                  encoder: BaseEncoder=None,
                  backbone_latent_size=None,
-                 concept_type='binary'
+                 concept_type='binary',
+                 disjoint_training=False,
                  ):
         super().__init__()
         
@@ -42,6 +43,7 @@ class BaseModel(nn.Module):
         self.int_idxs = int_idxs
         self.has_concepts = None # This value has to be overriden by the inheriting class
         self.noise = noise
+        self.disjoint_training = disjoint_training
 
         self.logic_reasoning = False # This value has to be overriden by the inheriting class if it is a logic-based model
 
@@ -178,8 +180,12 @@ class BaseModel(nn.Module):
         # intervene
         c_hat = self._intervene(c_hat, c_true, int_idxs)
 
-        # switch to hard concepts if the corresponding variable is true
-        input_concepts = self._handle_hard_concepts(c_hat, int_idxs)
+        # Check whether disjoint training is enabled
+        if self.disjoint_training and self.training:
+            input_concepts = c_true
+        else:
+            # switch to hard concepts if the corresponding variable is true
+            input_concepts = self._handle_hard_concepts(c_hat, int_idxs)
 
         return c_hat, input_concepts
 
@@ -272,13 +278,14 @@ class BaseModel(nn.Module):
         else:
             raise NotImplementedError(f"Task {self.task} not implemented for metrics computation.")
 
-        # concepts
-        if self.task == 'regression':
-            # output will be shape (batch_size, num_concepts)
-            pass
-        elif self.task == 'classification':
-            # output will be shape (batch_size, num_concepts)
-            c_hat = torch.where(c_hat > 0.5, 1, 0)
+        # Filter concepts
+        if self.has_concepts:
+            if self.task == 'regression':
+                # output will be shape (batch_size, num_concepts)
+                pass
+            elif self.task == 'classification':
+                # output will be shape (batch_size, num_concepts)
+                c_hat = torch.where(c_hat > 0.5, 1, 0)
 
         return y_hat, c_hat
 

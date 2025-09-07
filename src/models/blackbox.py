@@ -21,6 +21,7 @@ class BlackBox(BaseModel):
                  encoder: BaseEncoder=None,
                  backbone_latent_size=None,
                  concept_type='binary',
+                 disjoint_training=False,
                  **kwargs
                  ):
         super().__init__(
@@ -38,7 +39,8 @@ class BlackBox(BaseModel):
                  c_groups,
                  encoder,
                  backbone_latent_size,
-                 concept_type
+                 concept_type,
+                 disjoint_training
                  )
 
         self.has_concepts = False

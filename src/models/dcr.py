@@ -28,6 +28,7 @@ class DeepConceptReasoner(BaseModel):
                  concept_loss_form=nn.BCELoss(),
                  backbone_latent_size=None,
                  concept_type='binary',
+                 disjoint_training=False,
                  **kwargs
                  ):
         super().__init__(
@@ -45,7 +46,8 @@ class DeepConceptReasoner(BaseModel):
                  c_groups,
                  encoder,
                  backbone_latent_size,
-                 concept_type
+                 concept_type,
+                 disjoint_training
         )
         self.logic_reasoning = True
         self.n_roles = 3

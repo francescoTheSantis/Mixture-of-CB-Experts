@@ -57,8 +57,7 @@ def main():
     try:
         # List the paths containing the results
         paths = [
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/general_sweep/2025-09-01_16-49-15",
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/general_sweep/2025-09-01_21-26-47",
+            "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-07_17-30-53",
         ]
 
         result_figs = "figs"
@@ -90,19 +89,19 @@ def main():
                         result = pd.read_csv(file, header=0)
 
                     # Select the last row of the dataframe where we test the model
-                    # if 'test_task_acc' and 'test_concept_acc' are not in the dataframe, skip the experiment
-                    if 'test_task_acc' not in result.columns:
-                        d['task'] = result['test_task_mse'].iloc[-1]
+                    # if 'test/y/acc' and 'test_concept_acc' are not in the dataframe, skip the experiment
+                    if 'test/y/acc' not in result.columns:
+                        d['task'] = result['test/y/mse'].iloc[-1]
                     else:
-                        d['task'] = result['test_task_acc'].iloc[-1]
+                        d['task'] = result['test/y/acc'].iloc[-1]
 
                     if conf['model']['metadata']['name']=='blackbox':
                         d['concept'] = 0
                     else:
-                        if 'test_concept_acc' not in result.columns:
-                            d['concept'] = result['test_concept_mse'].iloc[-1]
+                        if 'test/c/acc' not in result.columns:
+                            d['concept'] = result['test/c/mse'].iloc[-1]
                         else:
-                            d['concept'] = result['test_concept_acc'].iloc[-1]
+                            d['concept'] = result['test/c/acc'].iloc[-1]
 
                     print(d)
                     

@@ -23,6 +23,7 @@ class ConceptBottleneckModel(BaseModel):
                  encoder=None,
                  backbone_latent_size=None,
                  concept_type='binary',
+                 disjoint_training=False,
                  **kwargs
                  ):
         
@@ -41,7 +42,8 @@ class ConceptBottleneckModel(BaseModel):
                  c_groups,
                  encoder,
                  backbone_latent_size,
-                 concept_type
+                 concept_type,
+                 disjoint_training
                  )
 
         self.task_interpretable = task_interpretable

@@ -25,6 +25,7 @@ class ConceptEmbeddingModel(BaseModel):
                  concept_loss_form=nn.BCELoss(),
                  backbone_latent_size=None,
                  concept_type='binary',
+                 disjoint_training=False,
                  **kwargs
                  ):
 
@@ -43,7 +44,8 @@ class ConceptEmbeddingModel(BaseModel):
                  c_groups,
                  encoder,
                  backbone_latent_size,
-                 concept_type
+                 concept_type,
+                 disjoint_training
                  )
 
         self.embedding_size = embedding_size
@@ -68,7 +70,7 @@ class ConceptEmbeddingModel(BaseModel):
     def forward(self, input):
         x, c_true, int_idxs = self.encode(input)
         
-        c_emb, c_dict = self.bottleneck(
+        _, c_dict = self.bottleneck(
             x,
             c_true=c_true,
             intervention_idxs=int_idxs,

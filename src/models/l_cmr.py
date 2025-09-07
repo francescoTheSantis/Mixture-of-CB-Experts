@@ -34,6 +34,7 @@ class LinearMemoryReasoner(BaseModel):
                  backbone_latent_size=None,
                  concept_type='binary',
                  bias=None,
+                 disjoint_training=False,
                  **kwargs
                  ):
 
@@ -52,7 +53,8 @@ class LinearMemoryReasoner(BaseModel):
             c_groups,
             encoder,
             backbone_latent_size,
-            concept_type
+            concept_type,
+            disjoint_training
         )
 
         self.embedding_size = embedding_size

@@ -27,6 +27,7 @@ class LinearConceptEmbeddingModel(BaseModel):
                  concept_loss_form=nn.BCELoss(),
                  backbone_latent_size=None,
                  concept_type='binary',
+                 disjoint_training=False,
                  **kwargs
                  ):
 
@@ -45,7 +46,8 @@ class LinearConceptEmbeddingModel(BaseModel):
                  c_groups,
                  encoder,
                  backbone_latent_size,
-                 concept_type
+                 concept_type,
+                 disjoint_training
                  )
 
         self.embedding_size = embedding_size

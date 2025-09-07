@@ -277,7 +277,8 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             backbone_latent_size = backbone_latent_size,
             concept_type = concept_type,
             hard_concepts = hard_concepts,
-            known_equations = known_equations
+            known_equations = known_equations,
+            disjoint_training = cfg.disjoint_training
         )
 
         cfg = setup_encoder(cfg, input_size, backbone_latent_size)

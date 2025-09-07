@@ -12,4 +12,4 @@ metadata:
   lr: 0.001
   name: pendulum
   data_type: image
-  concept_type: continuous
+  concept_type: float # Continuous concepts

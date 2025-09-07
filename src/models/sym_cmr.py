@@ -42,6 +42,7 @@ class SymbolicMemoryReasoner(BaseModel):
                  known_equations=None,
                  equation_learning_strategy=None,
                  use_memory=True,
+                 disjoint_training=False,
                  **kwargs
                  ):
 
@@ -60,7 +61,8 @@ class SymbolicMemoryReasoner(BaseModel):
             c_groups,
             encoder,
             backbone_latent_size,
-            concept_type
+            concept_type,
+            disjoint_training
         )
 
         self.embedding_size = embedding_size
@@ -87,12 +89,6 @@ class SymbolicMemoryReasoner(BaseModel):
         # Equations handling
         self.equation_learning_strategy = equation_learning_strategy
         self.known_equations = known_equations
-
-        # # Define the Memory 
-        # if self.use_memory:
-        #     self.classifier_selector = nn.Sequential(
-        #         nn.Linear(backbone_latent_size,  self.memory_size * len(y_names)),
-        #     )
 
         # Handle parameter inconsistencies
         if len(self.known_equations)>1 and not self.use_memory:
@@ -136,19 +132,6 @@ class SymbolicMemoryReasoner(BaseModel):
                 )
         else:
             raise ValueError(f"Unknown selector model: {self.selector_model}")
-            
-    ###### Symbolic regression related methods ######
-    def setup_symbolic_reg_equations(self):
-        learned_equations = self._fit_symbolic_reg_model()
-        # Rename the equations to use 'c0', 'c1', ... as variable names
-        renamed_equations = []
-        name = 'x'
-        for eq in learned_equations:
-            for i, _ in enumerate(self.c_names):
-                eq = re.sub(rf'\b{name}{i}\b', f'c{i}', eq)
-            renamed_equations.append(eq)
-        self.known_equations = renamed_equations
-        self._prepare_equations(renamed_equations)
 
     ###### KAN related methods ######
     def setup_kan_grid(self, inputs):
