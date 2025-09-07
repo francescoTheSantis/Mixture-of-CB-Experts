@@ -3,6 +3,7 @@ params:
   _target_: "src.models.blackbox.BlackBox"
   activation: ${activation}
   latent_size: ${dataset.latent_size}
+  num_layers: 1
 
   # These values can be overridden by the dataset configuration
   encoder:
