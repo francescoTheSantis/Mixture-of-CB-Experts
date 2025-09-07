@@ -5,6 +5,8 @@ import os
 import torch
 import pandas as pd
 import scienceplots
+import warnings
+import yaml
 
 # I used scienceplots for the style of the plots, but you can use any other style you want.
 plt.style.use(['science', 'ieee', 'no-latex'])
@@ -48,6 +50,85 @@ def get_df_name(df):
         return 'CIFAR10'
     elif df=='cifar100':
         return 'CIFAR100'
+
+def get_exp_from_path(paths):
+    # Collect all the experiments in the given paths
+    exps_path = []
+    lmr_paths = []
+    for path in paths:
+        exps = os.listdir(path)
+        exps_path += [os.path.join(path, exp) for exp in exps if 'multirun' not in exp]
+
+    performance = pd.DataFrame()
+
+    # Iterate over all the experiments and collect the performance metrics and the config
+    for exp in exps_path:
+        d = {}
+        conf_file = os.path.join(exp, '.hydra/config.yaml')
+        result_file = os.path.join(exp, 'logs/experiment_metrics/version_0/metrics.csv')  
+        if os.path.exists(conf_file) and os.path.exists(result_file):
+            with open(conf_file, 'r') as file:
+                conf = yaml.safe_load(file)
+            d['seed'] = conf['seed']
+            d['dataset'] = conf['dataset']['metadata']['name']
+            d['model'] = conf['model']['metadata']['name']
+            d['memory_size'] = conf['memory_size']
+            d['concept_percentage'] = conf['concept_percentage']
+
+            with open(result_file, 'r') as file:
+                result = pd.read_csv(file, header=0)
+
+            # Select the last row of the dataframe where we test the model
+            # if 'test/y/acc' and 'test_concept_acc' are not in the dataframe, skip the experiment
+            if 'test/y/acc' not in result.columns:
+                d['task'] = result['test/y/mse'].iloc[-1]
+            else:
+                d['task'] = result['test/y/acc'].iloc[-1]
+
+            if conf['model']['metadata']['name']=='blackbox':
+                d['concept'] = 0
+            else:
+                if 'test/c/acc' not in result.columns:
+                    d['concept'] = result['test/c/mse'].iloc[-1]
+                else:
+                    d['concept'] = result['test/c/acc'].iloc[-1]
+
+            print(d)
+            
+            if d['model'] == 'l_cmr' and d['seed']==1:
+                expl_dict = d.copy()
+                expl_dict['path'] = exp
+                lmr_paths.append(expl_dict)
+
+            performance = pd.concat([performance, pd.DataFrame([d])], ignore_index=True)
+
+    return performance, lmr_paths
+
+def get_intervention_from_path(paths):
+    performance = pd.DataFrame()
+
+    exps_path = []
+    lmr_paths = []
+    for path in paths:
+        exps = os.listdir(path)
+        exps_path += [os.path.join(path, exp) for exp in exps if 'multirun' not in exp]
+
+    for exp in exps_path:
+        conf_file = os.path.join(exp, '.hydra/config.yaml')
+        result_file = os.path.join(exp, 'logs/experiment_metrics/version_0/interventions.csv')        
+        if os.path.exists(conf_file) and os.path.exists(result_file):
+            with open(result_file, 'r') as file:
+                d = pd.read_csv(result_file)[['noise','p_int','f1','accuracy','mse']]
+            
+            with open(conf_file, 'r') as file:
+                conf = yaml.safe_load(file)
+            d['seed'] = conf['seed']
+            d['dataset'] = conf['dataset']['metadata']['name']
+            d['model'] = conf['model']['metadata']['name']
+
+            performance = pd.concat([performance, d], ignore_index=True)
+
+    return performance
 
 def plot_intervention_results(df, 
                                 metric='accuracy', 

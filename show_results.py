@@ -42,7 +42,7 @@ model_styles = {
     'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:gray', 'size': marker_size},
     'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:cyan', 'size': marker_size},
-    'm_licem': {'marker': 's', 'name': 'M-LICEM', 'color': 'tab:green', 'size': marker_size},
+    'l_cmr': {'marker': 's', 'name': 'L-CMR', 'color': 'tab:green', 'size': marker_size},
     #'m_licem_local': {'marker': 'X', 'name': 'M-LICEM Local', 'color': 'tab:red', 'size': marker_size}
 }
 
@@ -54,377 +54,212 @@ tick_font = {'size': 28}
 
 def main():
 
+    result_figs = "figs"
+    os.makedirs(result_figs, exist_ok=True)
+
+    ##################################################
+    ############### Collect results ##################
+    ##################################################
+
+    # List the paths containing the results
+    paths = [
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-07_17-30-53",
+    ]
+
     try:
-        # List the paths containing the results
-        paths = [
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-07_17-30-53",
-        ]
-
-        result_figs = "figs"
-        os.makedirs(result_figs, exist_ok=True)
-
-        ###### Collect results regarding concept/task performance ######
-
-        exps_path = []
-        lmr_paths = []
-        for path in paths:
-            exps = os.listdir(path)
-            exps_path += [os.path.join(path, exp) for exp in exps if 'multirun' not in exp]
-
-        performance = pd.DataFrame()
-
-        for exp in exps_path:
-            d = {}
-            conf_file = os.path.join(exp, '.hydra/config.yaml')
-            result_file = os.path.join(exp, 'logs/experiment_metrics/version_0/metrics.csv')  
-            if os.path.exists(conf_file) and os.path.exists(result_file):
-                try:
-                    with open(conf_file, 'r') as file:
-                        conf = yaml.safe_load(file)
-                    d['seed'] = conf['seed']
-                    d['dataset'] = conf['dataset']['metadata']['name']
-                    d['model'] = conf['model']['metadata']['name']
-
-                    with open(result_file, 'r') as file:
-                        result = pd.read_csv(file, header=0)
-
-                    # Select the last row of the dataframe where we test the model
-                    # if 'test/y/acc' and 'test_concept_acc' are not in the dataframe, skip the experiment
-                    if 'test/y/acc' not in result.columns:
-                        d['task'] = result['test/y/mse'].iloc[-1]
-                    else:
-                        d['task'] = result['test/y/acc'].iloc[-1]
-
-                    if conf['model']['metadata']['name']=='blackbox':
-                        d['concept'] = 0
-                    else:
-                        if 'test/c/acc' not in result.columns:
-                            d['concept'] = result['test/c/mse'].iloc[-1]
-                        else:
-                            d['concept'] = result['test/c/acc'].iloc[-1]
-
-                    print(d)
-                    
-                    if d['model'] == 'm_licem' and d['seed']==1:
-                        expl_dict = d.copy()
-                        expl_dict['path'] = exp
-                        lmr_paths.append(expl_dict)
-
-                    performance = pd.concat([performance, pd.DataFrame([d])], ignore_index=True)
-                except:
-                    pass
-
-        # Count number of seeds
-        num_seeds = performance['seed'].unique().max()
-        print(f"Number of unique seeds: {num_seeds}")
-
-        # Filter the performance dataframe to keep only the models in model_styles 
-        # and datasets in custom_order.
-        performance = performance[performance['model'].isin(model_styles.keys()) & \
-                                performance['dataset'].isin(custom_order)]
-
-        ######### Only for the LinearMemoryReasoner with seed=1, plot explanations #########
-        # plot_explanations(lmr_paths)
-
-        ########## Task & Concept Accuracy Plot ##########
-
-        #df = performance.copy()
-        # Filter data for 'task' and 'concept'
-        task_df = performance.copy()
-        task_df = task_df.rename(columns={'task': 'accuracy'})
-        concept_df = performance.copy()
-        concept_df = concept_df.rename(columns={'concept': 'accuracy'})
-
-        # Compute mean and std for 'task'
-        task_stats = task_df.groupby(['model', 'dataset']).agg(
-            avg_accuracy_task=('accuracy', 'mean'),
-            std_accuracy_task=('accuracy', 'std')
-        ).reset_index().fillna(0)
-
-        # Compute mean and std for 'concept'
-        concept_stats = concept_df.groupby(['model', 'dataset']).agg(
-            avg_accuracy_concept=('accuracy', 'mean'),
-            std_accuracy_concept=('accuracy', 'std')
-        ).reset_index().fillna(0)
-
-        # If the dataset = 'cebab', then divide by 100
-        task_stats.loc[task_stats['dataset'] == 'cebab', 'avg_accuracy_task'] /= 100
-        task_stats.loc[task_stats['dataset'] == 'cebab', 'std_accuracy_task'] /= 100
-        concept_stats.loc[concept_stats['dataset'] == 'cebab', 'avg_accuracy_concept'] /= 100
-        concept_stats.loc[concept_stats['dataset'] == 'cebab', 'std_accuracy_concept'] /= 100
-
-        # Merge the two DataFrames on 'model' and 'dataset'
-        merged_stats = pd.merge(task_stats, concept_stats, on=['model', 'dataset'])
-
-        merged_stats = merged_stats.sort_values('dataset')
-        merged_stats['dataset'] = pd.Categorical(merged_stats['dataset'], categories=custom_order, ordered=True)
-
-        ########## Task Accuracy Table ##########
-
-        task_avg = task_stats[['model', 'dataset', 'avg_accuracy_task']]
-        task_std = task_stats[['model', 'dataset', 'std_accuracy_task']]
-
-        # Merge task_avg and task_std dataframes on 'model' and 'dataset'
-        merged_task = pd.merge(task_avg, task_std, on=['model', 'dataset'])
-
-        # Create a pivot table with the desired format
-        pivot_table_avg = task_avg.pivot(index='model', columns='dataset', values=['avg_accuracy_task'])
-        pivot_table_avg.columns = pivot_table_avg.columns.get_level_values(1)
-        pivot_table_std = task_std.pivot(index='model', columns='dataset', values=['std_accuracy_task'])
-        pivot_table_std.columns = pivot_table_std.columns.get_level_values(1)
-
-        final_table = pd.DataFrame()
-        for i, row in pivot_table_avg.iterrows():
-            d={}
-            for j in pivot_table_std.columns:
-                acc = row[j]*100
-                # From std to SE
-                std = 1.96 * (pivot_table_std.loc[i, j]*100) / num_seeds
-                d[j] = f"{acc:.2f} ± {std:.2f}"
-            # add a column to the final_table dataframe called row.name which contains d
-            final_table = pd.concat([final_table, pd.DataFrame(d, index=[row.name])], axis=0)
-            
-        # Reindex the columns of final_table according to the custom order
-        final_table = final_table.reindex(columns=custom_order)
-
-        # Replace the model and dataset names
-        final_table.index = final_table.index.map(lambda x: model_styles[x]['name'] if x in model_styles else x)
-        final_table.columns = final_table.columns.map(lambda x: get_df_name(x))
-
-        print('\n\nTask Accuracy Table:')
-        print('-------------------')
-        print(final_table)
-
-        # store the table in a csv file
-        final_table.to_csv('figs/task_accuracy.csv', index=True)
-
-
-        ########## Concept Accuracy Table ##########
-
-        task_avg = concept_stats[['model', 'dataset', 'avg_accuracy_concept']]
-        task_std = concept_stats[['model', 'dataset', 'std_accuracy_concept']]
-
-        # Merge task_avg and task_std dataframes on 'model' and 'dataset'
-        merged_task = pd.merge(task_avg, task_std, on=['model', 'dataset'])
-
-        # Create a pivot table with the desired format
-        pivot_table_avg = task_avg.pivot(index='model', columns='dataset', values=['avg_accuracy_concept'])
-        pivot_table_avg.columns = pivot_table_avg.columns.get_level_values(1)
-        pivot_table_std = task_std.pivot(index='model', columns='dataset', values=['std_accuracy_concept'])
-        pivot_table_std.columns = pivot_table_std.columns.get_level_values(1)
-
-        final_table = pd.DataFrame()
-        for i, row in pivot_table_avg.iterrows():
-            d={}
-            for j in pivot_table_std.columns:
-                acc = row[j]*100
-                # From std to SE
-                std = 1.96 * (pivot_table_std.loc[i, j]*100) / num_seeds
-                d[j] = f"{acc:.2f} ± {std:.2f}"
-            # add a column to the final_table dataframe called row.name which contains d
-            final_table = pd.concat([final_table, pd.DataFrame(d, index=[row.name])], axis=0)
-            
-        # Reindex the columns of final_table according to the custom order
-        final_table = final_table.reindex(columns=custom_order)
-
-        # Replace the model and dataset names
-        final_table.index = final_table.index.map(lambda x: model_styles[x]['name'] if x in model_styles else x)
-        final_table.columns = final_table.columns.map(lambda x: get_df_name(x))
-
-        print('\n\nConcept Accuracy Table:')
-        print('-------------------')
-        print(final_table)
-
-        # store the table in a csv file
-        final_table.to_csv('figs/concept_accuracy.csv', index=True)
-
-
-        ########## Collect intervention results ##########
-
-        performance = pd.DataFrame()
-
-        for exp in exps_path:
-            conf_file = os.path.join(exp, '.hydra/config.yaml')
-            result_file = os.path.join(exp, 'logs/experiment_metrics/version_0/interventions.csv')        
-            if os.path.exists(conf_file) and os.path.exists(result_file):
-                with open(result_file, 'r') as file:
-                    d = pd.read_csv(result_file)[['noise','p_int','f1','accuracy','mse']]
-                
-                with open(conf_file, 'r') as file:
-                    conf = yaml.safe_load(file)
-                d['seed'] = conf['seed']
-                d['dataset'] = conf['dataset']['metadata']['name']
-                d['model'] = conf['model']['metadata']['name']
-
-                performance = pd.concat([performance, d], ignore_index=True)
-
-        # Filter the performance dataframe to keep only the models in model_styles 
-        # and datasets in custom_order.
-        performance = performance[performance['model'].isin(model_styles.keys()) & \
-                                performance['dataset'].isin(custom_order)]
-
-        ########## Intervention plots ##########
-        noises = list(performance['noise'].unique())
-        for noise in noises:
-            plot_intervention_results(performance, 
-                                      metric='accuracy', 
-                                      unique_noises=[noise], 
-                                      title_font=title_font, 
-                                      label_font=label_font, 
-                                      tick_font=tick_font, 
-                                      legend_font=legend_font,
-                                      custom_order=custom_order,
-                                      model_styles=model_styles,
-                                      relative_accuracy=False)
-            
-            plot_intervention_results(performance, 
-                                      metric='accuracy', 
-                                      unique_noises=[noise], 
-                                      title_font=title_font, 
-                                      label_font=label_font, 
-                                      tick_font=tick_font, 
-                                      legend_font=legend_font,
-                                      custom_order=custom_order,
-                                      model_styles=model_styles,
-                                      relative_accuracy=True)
+        performance, lmr_paths = get_exp_from_path(paths)
     except Exception as e:
-        print(f"Error occurred while showing results: {e}")
+        raise ValueError(f"Error occurred while getting experiments from path: {e}")
+
+    # Count number of seeds
+    num_seeds = performance['seed'].unique().max()
+    print(f"Number of unique seeds: {num_seeds}")
+
+    # Filter the performance dataframe to keep only the models in model_styles 
+    # and datasets in custom_order.
+    performance = performance[performance['model'].isin(model_styles.keys()) & \
+                            performance['dataset'].isin(custom_order)]
+
+    ######### Only for the LinearMemoryReasoner with seed=1, plot explanations #########
+    plot_explanations(lmr_paths)
+
+    ########## Task & Concept Accuracy Plot ##########
+
+    #df = performance.copy()
+    # Filter data for 'task' and 'concept'
+    task_df = performance.copy()
+    task_df = task_df.rename(columns={'task': 'accuracy'})
+    concept_df = performance.copy()
+    concept_df = concept_df.rename(columns={'concept': 'accuracy'})
+
+    # Compute mean and std for 'task'
+    task_stats = task_df.groupby(['model', 'dataset']).agg(
+        avg_accuracy_task=('accuracy', 'mean'),
+        std_accuracy_task=('accuracy', 'std')
+    ).reset_index().fillna(0)
+
+    # Compute mean and std for 'concept'
+    concept_stats = concept_df.groupby(['model', 'dataset']).agg(
+        avg_accuracy_concept=('accuracy', 'mean'),
+        std_accuracy_concept=('accuracy', 'std')
+    ).reset_index().fillna(0)
+
+    # If the dataset = 'cebab', then divide by 100
+    task_stats.loc[task_stats['dataset'] == 'cebab', 'avg_accuracy_task'] /= 100
+    task_stats.loc[task_stats['dataset'] == 'cebab', 'std_accuracy_task'] /= 100
+    concept_stats.loc[concept_stats['dataset'] == 'cebab', 'avg_accuracy_concept'] /= 100
+    concept_stats.loc[concept_stats['dataset'] == 'cebab', 'std_accuracy_concept'] /= 100
+
+    # Merge the two DataFrames on 'model' and 'dataset'
+    merged_stats = pd.merge(task_stats, concept_stats, on=['model', 'dataset'])
+
+    merged_stats = merged_stats.sort_values('dataset')
+    merged_stats['dataset'] = pd.Categorical(merged_stats['dataset'], categories=custom_order, ordered=True)
+
+    ########## Task Accuracy Table ##########
+
+    task_avg = task_stats[['model', 'dataset', 'avg_accuracy_task']]
+    task_std = task_stats[['model', 'dataset', 'std_accuracy_task']]
+
+    # Merge task_avg and task_std dataframes on 'model' and 'dataset'
+    merged_task = pd.merge(task_avg, task_std, on=['model', 'dataset'])
+
+    # Create a pivot table with the desired format
+    pivot_table_avg = task_avg.pivot(index='model', columns='dataset', values=['avg_accuracy_task'])
+    pivot_table_avg.columns = pivot_table_avg.columns.get_level_values(1)
+    pivot_table_std = task_std.pivot(index='model', columns='dataset', values=['std_accuracy_task'])
+    pivot_table_std.columns = pivot_table_std.columns.get_level_values(1)
+
+    final_table = pd.DataFrame()
+    for i, row in pivot_table_avg.iterrows():
+        d={}
+        for j in pivot_table_std.columns:
+            acc = row[j]*100
+            # From std to SE
+            std = 1.96 * (pivot_table_std.loc[i, j]*100) / num_seeds
+            d[j] = f"{acc:.2f} ± {std:.2f}"
+        # add a column to the final_table dataframe called row.name which contains d
+        final_table = pd.concat([final_table, pd.DataFrame(d, index=[row.name])], axis=0)
+        
+    # Reindex the columns of final_table according to the custom order
+    final_table = final_table.reindex(columns=custom_order)
+
+    # Replace the model and dataset names
+    final_table.index = final_table.index.map(lambda x: model_styles[x]['name'] if x in model_styles else x)
+    final_table.columns = final_table.columns.map(lambda x: get_df_name(x))
+
+    print('\n\nTask Accuracy Table:')
+    print('-------------------')
+    print(final_table)
+
+    # store the table in a csv file
+    final_table.to_csv('figs/task_accuracy.csv', index=True)
 
 
-    ##### Visualize ablation over the memory. #######
+    ########## Concept Accuracy Table ##########
+
+    task_avg = concept_stats[['model', 'dataset', 'avg_accuracy_concept']]
+    task_std = concept_stats[['model', 'dataset', 'std_accuracy_concept']]
+
+    # Merge task_avg and task_std dataframes on 'model' and 'dataset'
+    merged_task = pd.merge(task_avg, task_std, on=['model', 'dataset'])
+
+    # Create a pivot table with the desired format
+    pivot_table_avg = task_avg.pivot(index='model', columns='dataset', values=['avg_accuracy_concept'])
+    pivot_table_avg.columns = pivot_table_avg.columns.get_level_values(1)
+    pivot_table_std = task_std.pivot(index='model', columns='dataset', values=['std_accuracy_concept'])
+    pivot_table_std.columns = pivot_table_std.columns.get_level_values(1)
+
+    final_table = pd.DataFrame()
+    for i, row in pivot_table_avg.iterrows():
+        d={}
+        for j in pivot_table_std.columns:
+            acc = row[j]*100
+            # From std to SE
+            std = 1.96 * (pivot_table_std.loc[i, j]*100) / num_seeds
+            d[j] = f"{acc:.2f} ± {std:.2f}"
+        # add a column to the final_table dataframe called row.name which contains d
+        final_table = pd.concat([final_table, pd.DataFrame(d, index=[row.name])], axis=0)
+        
+    # Reindex the columns of final_table according to the custom order
+    final_table = final_table.reindex(columns=custom_order)
+
+    # Replace the model and dataset names
+    final_table.index = final_table.index.map(lambda x: model_styles[x]['name'] if x in model_styles else x)
+    final_table.columns = final_table.columns.map(lambda x: get_df_name(x))
+
+    print('\n\nConcept Accuracy Table:')
+    print('-------------------')
+    print(final_table)
+
+    # store the table in a csv file
+    final_table.to_csv('figs/concept_accuracy.csv', index=True)
+
+    ##################################################
+    ########## Collect intervention results ##########
+    ##################################################
 
     try:
-        paths = [
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/memory_ablation/2025-09-01_16-49-15"
-        ]
+        performance = get_intervention_from_path(paths)
+    except Exception as e:
+        raise ValueError(f"Error occurred while getting intervention results from path: {e}")
 
-        result_figs = "figs"
-        os.makedirs(result_figs, exist_ok=True)
+    # Filter the performance dataframe to keep only the models in model_styles 
+    # and datasets in custom_order.
+    performance = performance[performance['model'].isin(model_styles.keys()) & \
+                            performance['dataset'].isin(custom_order)]
 
-        ###### Collect results regarding concept/task performance ######
+    ########## Intervention plots ##########
+    noises = list(performance['noise'].unique())
+    for noise in noises:
+        plot_intervention_results(performance, 
+                                    metric='accuracy', 
+                                    unique_noises=[noise], 
+                                    title_font=title_font, 
+                                    label_font=label_font, 
+                                    tick_font=tick_font, 
+                                    legend_font=legend_font,
+                                    custom_order=custom_order,
+                                    model_styles=model_styles,
+                                    relative_accuracy=False)
+        
+        plot_intervention_results(performance, 
+                                    metric='accuracy', 
+                                    unique_noises=[noise], 
+                                    title_font=title_font, 
+                                    label_font=label_font, 
+                                    tick_font=tick_font, 
+                                    legend_font=legend_font,
+                                    custom_order=custom_order,
+                                    model_styles=model_styles,
+                                    relative_accuracy=True)
 
-        exps_path = []
-        lmr_paths = []
-        for path in paths:
-            exps = os.listdir(path)
-            exps_path += [os.path.join(path, exp) for exp in exps if 'multirun' not in exp]
+    ##################################################
+    ###### Visualize ablation over the memory. #######
+    ##################################################
 
-        performance = pd.DataFrame()
-
-        for exp in exps_path:
-            d = {}
-            conf_file = os.path.join(exp, '.hydra/config.yaml')
-            result_file = os.path.join(exp, 'logs/experiment_metrics/version_0/metrics.csv')  
-            if os.path.exists(conf_file) and os.path.exists(result_file):
-                try:
-                    with open(conf_file, 'r') as file:
-                        conf = yaml.safe_load(file)
-                    d['seed'] = conf['seed']
-                    d['dataset'] = conf['dataset']['metadata']['name']
-                    d['model'] = conf['model']['metadata']['name']
-                    d['memory_size'] = conf['memory_size']
-
-                    with open(result_file, 'r') as file:
-                        result = pd.read_csv(file, header=0)
-
-                    # Select the last row of the dataframe where we test the model
-                    # if 'test_task_acc' and 'test_concept_acc' are not in the dataframe, skip the experiment
-                    if 'test_task_acc' not in result.columns:
-                        d['task'] = result['test_task_mse'].iloc[-1]
-                    else:
-                        d['task'] = result['test_task_acc'].iloc[-1]
-
-                    if conf['model']['metadata']['name']=='blackbox':
-                        d['concept'] = 0
-                    else:
-                        if 'test_concept_acc' not in result.columns:
-                            d['concept'] = result['test_concept_mse'].iloc[-1]
-                        else:
-                            d['concept'] = result['test_concept_acc'].iloc[-1]
-
-                    print(d)
-                    
-                    if d['model'] == 'm_licem' and d['seed']==1:
-                        expl_dict = d.copy()
-                        expl_dict['path'] = exp
-                        lmr_paths.append(expl_dict)
-
-                    performance = pd.concat([performance, pd.DataFrame([d])], ignore_index=True)
-                except:
-                    pass
-
+    paths = [
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/memory_ablation/2025-09-01_16-49-15"
+    ]
+    try:
+        performance, _ = get_exp_from_path(paths)
         plot_memory_ablation(performance, model_styles, title_font, label_font, tick_font)
-    
     except Exception as e:
         print(f"Error occurred while plotting memory ablation results: {e}")
 
-
+    ############################################################
     ###### Visualize the results of concept size ablation ######
-    try:
-        paths = [
+    ############################################################
+
+    paths = [
             "/home/fdesantis/projects/Linear-Memory-Reasoner/output/ablation_concept_size/2025-09-01_16-51-41"
         ]
-
-        result_figs = "figs"
-        os.makedirs(result_figs, exist_ok=True)
-
-        ###### Collect results regarding concept/task performance ######
-
-        exps_path = []
-        lmr_paths = []
-        for path in paths:
-            exps = os.listdir(path)
-            exps_path += [os.path.join(path, exp) for exp in exps if 'multirun' not in exp]
-
-        performance = pd.DataFrame()
-
-        for exp in exps_path:
-            d = {}
-            conf_file = os.path.join(exp, '.hydra/config.yaml')
-            result_file = os.path.join(exp, 'logs/experiment_metrics/version_0/metrics.csv')  
-            if os.path.exists(conf_file) and os.path.exists(result_file):
-                try:
-                    with open(conf_file, 'r') as file:
-                        conf = yaml.safe_load(file)
-                    d['seed'] = conf['seed']
-                    d['dataset'] = conf['dataset']['metadata']['name']
-                    d['model'] = conf['model']['metadata']['name']
-                    d['memory_size'] = conf['memory_size']
-                    d['concept_percentage'] = conf['concept_percentage']
-
-                    with open(result_file, 'r') as file:
-                        result = pd.read_csv(file, header=0)
-
-                    # Select the last row of the dataframe where we test the model
-                    # if 'test_task_acc' and 'test_concept_acc' are not in the dataframe, skip the experiment
-                    if 'test_task_acc' not in result.columns:
-                        d['task'] = result['test_task_mse'].iloc[-1]
-                    else:
-                        d['task'] = result['test_task_acc'].iloc[-1]
-
-                    if conf['model']['metadata']['name']=='blackbox':
-                        d['concept'] = 0
-                    else:
-                        if 'test_concept_acc' not in result.columns:
-                            d['concept'] = result['test_concept_mse'].iloc[-1]
-                        else:
-                            d['concept'] = result['test_concept_acc'].iloc[-1]
-
-                    print(d)
-                    
-                    if d['model'] == 'm_licem' and d['seed']==1:
-                        expl_dict = d.copy()
-                        expl_dict['path'] = exp
-                        lmr_paths.append(expl_dict)
-
-                    performance = pd.concat([performance, pd.DataFrame([d])], ignore_index=True)
-                except:
-                    pass
-
+    try:
+        performance, _ = get_exp_from_path(paths)
         # Plot the results on the concept size ablation
         plot_concept_size_ablation(performance, model_styles, title_font, label_font, tick_font)
     except Exception as e:
-        print(f"Error occurred while plotting concept size ablation results: {e}")
+        print(f"Error occurred while plotting memory ablation results: {e}")
 
 
 if __name__ == "__main__":
