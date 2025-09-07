@@ -99,16 +99,9 @@ class Trainer:
 
         if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner':
             # setup the model (e.g., setup equations if prior knowledge is used)
-            self.model.model.setup_equations()
+            self.model.model.setup_memory()
 
-            if self.model.model.equation_learning_strategy=='sym_reg_alg':
-                # If a symbolic regression algorithm is used, 
-                # we need to store the true concepts and targets in the model in order to setup the equations.
-                self.model.model.c_trues = c_trues
-                self.model.model.y_trues = y_trues
-                # Setup equations for the symbolic regression
-                self.model.model.setup_symbolic_reg_equations()
-            elif self.model.model.equation_learning_strategy=='kan':
+            if self.model.model.equation_learning_strategy=='kan':
                 # If KAN are used, we need to setup the grid for each kan in the memory.
                 # This operation is required for any kind of task (classification, regression, ...).
                 self.model.model.setup_kan_grid(c_trues)
@@ -182,17 +175,6 @@ class Trainer:
                         y_preds = self.model.scaler.inverse_transform(y_preds)
 
                     y_preds = y_preds.numpy()
-
-                    # Process predictions
-                    # if len(self.cfg.model.params.y_names)==1 and self.cfg.dataset.metadata.task != 'regression':
-                    #     if self.model.model.__class__.__name__ in ['DeepConceptReasoner', 'ConceptMemoryReasoner']:
-                    #         y_preds = (y_preds > 0.5).long().numpy()
-                    #     else:
-                    #         y_preds = (y_preds > 0.).long().numpy()
-                    # elif self.cfg.dataset.metadata.task == 'regression':
-                    #     y_preds = y_preds.numpy()
-                    # else:
-                    #     y_preds = y_preds.numpy()
 
                     # Calculate metrics
                     if self.cfg.dataset.metadata.task == 'regression':
