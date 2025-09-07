@@ -4,6 +4,7 @@ import torch_concepts.nn as pyc_nn
 from src.models.base import BaseModel
 import torch.nn.functional as F
 from torch_concepts.nn import concept_embedding_mixture
+from src.models.encoders.mlp import MLPEncoder
 
 class LinearMemoryReasoner(BaseModel):
     def __init__(self, 
@@ -25,6 +26,7 @@ class LinearMemoryReasoner(BaseModel):
                  encoder=None,
                  mc_approx=10,
                  embedding_memory=True,
+                 selector_model='linear',
                  intervene_on_selection=True,
                  linear_classifier_selection=False,
                  sampling=True,
@@ -64,6 +66,7 @@ class LinearMemoryReasoner(BaseModel):
         self.memory_size = memory_size
         self.intervene_on_selection = intervene_on_selection
         self.linear_classifier_selection = linear_classifier_selection
+        self.selector_model = selector_model
 
         self.bias = None if bias is None else bias
 
@@ -86,9 +89,19 @@ class LinearMemoryReasoner(BaseModel):
         # selects a linear equation for each class in y_names.
         selector_input_size = embedding_size * len(c_names) if self.intervene_on_selection else backbone_latent_size
         selector_output_size = memory_size if self.linear_classifier_selection else memory_size * len(y_names)
-        self.classifier_selector = nn.Sequential(
-            nn.Linear(selector_input_size, selector_output_size),
-        )
+        if self.selector_model == 'linear':
+            self.classifier_selector = nn.Sequential(
+                nn.Linear(selector_input_size, selector_output_size),
+            )
+        elif self.selector_model == 'mlp':
+            self.classifier_selector = MLPEncoder(
+                input_size=selector_input_size,
+                output_size=selector_output_size,
+                hidden_size=selector_input_size,
+                activation=activation,
+            )
+        else:
+            raise ValueError(f"Unknown selector model: {self.selector_model}")
 
         # The memory containing the set linear equations for each class in self.y_names.
         # It can be instantiated in two ways:

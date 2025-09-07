@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
 from src.models.base import BaseModel
+from src.models.encoders.mlp import MLPEncoder
 import torch.nn.functional as F
 from torch_concepts.nn import concept_embedding_mixture
 import re
@@ -34,6 +35,7 @@ class SymbolicMemoryReasoner(BaseModel):
                  weight_reg=0,
                  encoder=None,
                  mc_approx=10,
+                 selector_model='linear',
                  concept_loss_form=nn.BCELoss(),
                  backbone_latent_size=None,
                  concept_type='binary',
@@ -67,10 +69,12 @@ class SymbolicMemoryReasoner(BaseModel):
         self.weight_reg = weight_reg
         self.output_size = output_size
         self.backbone_latent_size = backbone_latent_size
+        self.activation = activation
 
         self.mc_approx = mc_approx
         self.memory_size = memory_size
         self.use_memory = use_memory
+        self.selector_model = selector_model
 
         # We need to use the Concept embedding model to produce both concept predictions and embeddings.
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
@@ -84,11 +88,11 @@ class SymbolicMemoryReasoner(BaseModel):
         self.equation_learning_strategy = equation_learning_strategy
         self.known_equations = known_equations
 
-        # Define the Memory 
-        if self.use_memory:
-            self.classifier_selector = nn.Sequential(
-                nn.Linear(backbone_latent_size,  self.memory_size * len(y_names)),
-            )
+        # # Define the Memory 
+        # if self.use_memory:
+        #     self.classifier_selector = nn.Sequential(
+        #         nn.Linear(backbone_latent_size,  self.memory_size * len(y_names)),
+        #     )
 
         # Handle parameter inconsistencies
         if len(self.known_equations)>1 and not self.use_memory:
@@ -106,9 +110,6 @@ class SymbolicMemoryReasoner(BaseModel):
                 raise ValueError("Known equations must be provided when using 'prior_knowledge' strategy.")
             self._prepare_equations(self.known_equations) # We process the known equations to convert them to torch executable modules
             self.memory_size = len(self.known_equations) # Override memory size to match the number of known equations
-            self.classifier_selector = nn.Sequential(
-                nn.Linear(self.backbone_latent_size,  self.memory_size * len(self.y_names)),
-            )
         elif self.equation_learning_strategy == 'kan':
             kan_params = {
                     'width': [len(self.c_names), len(self.c_names)+1, self.output_size],
@@ -122,6 +123,20 @@ class SymbolicMemoryReasoner(BaseModel):
                 kan_layer = KAN(**kan_params)
                 self.kan_layers.append(kan_layer)
 
+        if self.selector_model == 'linear':
+            self.classifier_selector = nn.Sequential(
+                nn.Linear(self.backbone_latent_size,  self.memory_size * len(self.y_names)),
+            )
+        elif self.selector_model == 'mlp':
+            self.classifier_selector = MLPEncoder(
+                input_size=self.backbone_latent_size,
+                output_size=self.memory_size * len(self.y_names),
+                hidden_size=self.backbone_latent_size,
+                activation=self.activation
+                )
+        else:
+            raise ValueError(f"Unknown selector model: {self.selector_model}")
+            
     ###### Symbolic regression related methods ######
     def setup_symbolic_reg_equations(self):
         learned_equations = self._fit_symbolic_reg_model()
