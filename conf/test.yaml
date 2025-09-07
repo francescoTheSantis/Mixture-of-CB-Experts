@@ -9,8 +9,8 @@ hydra:
   sweeper:
     params:
       seed: 1
-      dataset: mnist_arithmetic # , cub, mnist_addition, cebab, awa2, cub_incomplete, awa2_incomplete, cifar10, cifar100
-      model: sym_cmr_prior # sym_cmr_kan
+      dataset: mnist_addition # , cub, mnist_addition, cebab, awa2, cub_incomplete, awa2_incomplete, cifar10, cifar100
+      model: cbm_mlp #sym_cmr_prior # sym_cmr_kan
       max_epochs: 100
 gpus: [1]
 

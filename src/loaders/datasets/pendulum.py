@@ -28,7 +28,7 @@ from torch.utils.data import DataLoader
 from env import DATA_PATH
 
 # set the directory
-PENDULUM_DIR = f'{DATA_PATH}pendulum'
+PENDULUM_DIR = f'{DATA_PATH}/pendulum'
 
 # pendulum's attributes
 IMG_COLUMN = 'img_dir'

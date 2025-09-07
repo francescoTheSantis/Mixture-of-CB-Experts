@@ -61,7 +61,8 @@ class loader(object):
                  class_attributes=None,
                  extract_embeddings=True,
                  data_path=None,
-                 dataset_already_created=False
+                 dataset_already_created=False,
+                 formulas=None
                  ):
         self.name = name
         self.batch_size = batch_size
@@ -75,6 +76,7 @@ class loader(object):
         self.concept_percentage = concept_percentage
         self.data_path = data_path
         self.dataset_already_created = dataset_already_created
+        self.formulas = formulas
 
         self.transform = transforms.Compose([
                 transforms.Resize((224, 224)),
@@ -226,6 +228,10 @@ class loader(object):
         elif self.name == "pendulum":
             concept_names = concept_names_pendulum
             task_names = task_names_pendulum
+            concept_groups = None
+        elif self.name == "dsprites":
+            concept_names = ['value_orientation', 'value_x_position', 'value_y_position']
+            task_names = task_names_dsprites
             concept_groups = None
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")

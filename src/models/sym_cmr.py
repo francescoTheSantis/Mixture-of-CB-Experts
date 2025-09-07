@@ -146,8 +146,8 @@ class SymbolicMemoryReasoner(BaseModel):
         for i in range(self.memory_size):
             # Train symbolic regression on current subset
             model = PySRRegressor(
-                niterations=4,#40,
-                populations=3,#30,
+                niterations=40,
+                populations=30,
                 binary_operators=["+", "-", "*", "/"],
                 unary_operators=["square", "exp", "log"],
                 model_selection="best",
