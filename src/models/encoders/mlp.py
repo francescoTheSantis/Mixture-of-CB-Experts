@@ -19,15 +19,19 @@ class MLPEncoder(BaseEncoder):
                  hidden_size=64, 
                  activation='ReLU', 
                  dropout=0.1,
+                 num_layers=1,
                  **kwargs):
         super().__init__(input_size, output_size, input_transform)
         
-        self.mlp = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            getattr(nn, activation)(),
-            nn.Dropout(dropout) if dropout is not None else nn.Identity(),
-            nn.Linear(hidden_size, output_size)
-        )
+        layers = []
+        in_features = input_size
+        for _ in range(num_layers):
+            layers.append(nn.Linear(in_features, hidden_size))
+            layers.append(getattr(nn, activation)())
+            layers.append(nn.Dropout(dropout) if dropout is not None else nn.Identity())
+            in_features = hidden_size
+        layers.append(nn.Linear(in_features, output_size))
+        self.mlp = nn.Sequential(*layers)
 
     def forward(self, x):
         if self.input_transform is not None:
