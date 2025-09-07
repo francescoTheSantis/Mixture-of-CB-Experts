@@ -49,6 +49,8 @@ class DSprites(Dataset):
             for concept in concepts:
                 if concept not in self.available_concepts:
                     raise ValueError(f"Concept '{concept}' not found. Available concepts: {self.available_concepts}")
+            # Sort the concepts according to available concepts
+            self.concepts = sorted(self.concepts, key=lambda x: self.available_concepts.index(x))
 
         # Shapes dictionary index: shape
         self.ids_to_shapes = {1: 'square', 2: 'circle', 3: 'heart'}
@@ -94,7 +96,32 @@ class DSprites(Dataset):
         var_dict = dict(zip(self.concepts, [concept_values[i] for i in range(concept_values.shape[0])]))
         target = self.torch_formulas[shape](**var_dict)
 
-        return (image, concept_values, torch.tensor(target, dtype=torch.float32), shape)
+        return (image.unsqueeze(0), concept_values, torch.tensor(target, dtype=torch.float32), shape)
+
+
+def plot_samples(dataset, num_samples=10, figsize=(15, 3)):
+    """
+    Plot sample images from the DSprites dataset.
+    """
+    import matplotlib.pyplot as plt
+    
+    fig, axes = plt.subplots(1, num_samples, figsize=figsize)
+    if num_samples == 1:
+        axes = [axes]
+    
+    for i in range(num_samples):
+        image, concepts, target, shape = dataset[i]
+        
+        # Remove the channel dimension and convert to numpy for plotting
+        img_array = image.squeeze(0).numpy()
+        
+        axes[i].imshow(img_array, cmap='gray')
+        axes[i].set_title(f'{shape}\nTarget: {target.item():.3f}')
+        axes[i].axis('off')
+    
+    plt.tight_layout()
+    plt.show()
+
 
 if __name__ == "__main__":
     # Example 1: Using exponential formula with y_position
@@ -106,6 +133,10 @@ if __name__ == "__main__":
             'heart': 'sin(value_orientation * value_x_position) + cos(value_y_position^2) * exp(-0.5 * (value_x_position - value_y_position)^2)'},
     )
 
-    for i in range(30):
+    # Plot samples to visualize the dataset
+    plot_samples(dataset1, num_samples=10)
+    
+    # Print some sample information
+    for i in range(10):
         image, concepts, target, shape = dataset1[i]
-        print(f"Sample {i}: Concepts: {concepts}, Target: {target.item()}, Shape: {shape}")
+        print(f"Sample {i}: Concepts: {concepts}, Target: {target.item():.3f}, Shape: {shape}")

@@ -3,14 +3,14 @@ defaults:
   - _self_
 
 loader: 
-  name: dsprites
+  name: dsprites_simple
   selected_concepts: ['value_orientation', 'value_x_position', 'value_y_position']
   # Concepts available: value_shape, value_scale, value_orientation, value_x_position, value_y_position
 
   # Formulas for the dataset
   formulas: 
-    oval: "cos(value_orientation)"
-    square: "exp(10*(value_x_position + value_y_position))"
+    circle: "exp(10*value_orientation)"
+    square: "value_x_position * value_y_position"
     heart: "value_orientation^2 + value_x_position^2 + value_y_position^2"
 
 # Dataset parameters
@@ -19,10 +19,10 @@ metadata:
   lr: 0.001
   name: dsprites
   data_type: image
-  concept_type: ['integer', 'float', 'float', 'float', 'float'] 
+  concept_type: ['float', 'float', 'float'] 
 
 # for this dataset, the equations connecting the concepts to the task are known
 equations: 
-  - "cos(value_orientation)"
-  - "exp(10*(value_x_position + value_y_position))"
+  - "exp(10*value_orientation)"
+  - "value_x_position * value_y_position"
   - "value_orientation^2 + value_x_position^2 + value_y_position^2"
