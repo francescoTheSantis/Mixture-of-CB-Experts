@@ -9,12 +9,12 @@ hydra:
   sweeper:
     params:
       seed: 1
-      dataset: dsprites_simple 
-      model: sym_cmr_prior 
-      memory_size: 4 
+      dataset: mnist_arithmetic 
+      model: sym_cmr_kan
+      memory_size: 4
 gpus: [0]
 
-max_epochs: 200
+max_epochs: 50
 patience: 100
 
 scale_target: False

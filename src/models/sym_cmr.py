@@ -110,8 +110,8 @@ class SymbolicMemoryReasoner(BaseModel):
             for i in range(self.memory_size):
                 kan_params['ckpt_path'] = os.path.join(os.getcwd(), f'kan{i}_ckpt')
                 kan_layer = KAN(**kan_params)
-                # for param in kan_layer.get_params():
-                #     param.requires_grad = True
+                for param in kan_layer.get_params():
+                    param.requires_grad = True
                 self.kan_layers.append(kan_layer)
         
     ###### Setup methods ######
@@ -138,9 +138,10 @@ class SymbolicMemoryReasoner(BaseModel):
             raise ValueError(f"Unknown selector model: {self.selector_model}")
 
     ###### KAN related methods ######
-    def setup_kan_grid(self, inputs):
+    def setup_kan_grid(self, inputs):        
         # Update the grid of all KAN layers based on the provided inputs
         for kan_layer in self.kan_layers:
+            kan_layer.to(inputs.device)
             kan_layer.update_grid_from_samples(inputs)
 
     def _execute_kan(self, prob_per_classifier, input_concepts):
@@ -165,6 +166,23 @@ class SymbolicMemoryReasoner(BaseModel):
         else:
             explanations = self._get_explanations(prob_per_classifier, y_hat)
         return y_hat, explanations
+    
+    def substitute_equations_kan(self):
+        for i, kan_layer in enumerate(self.kan_layers):
+            # Save the symbolic formula of the KAN layer
+            # equation = kan_layer.symbolic_formula()[0]
+            # de-standardize if needed
+            # if self.task == 'regression' and self.scale_target:
+            #     y_mean = self.scaler.mean_.item()
+            #     y_std = self.scaler.std_.item()
+            #     equation = ((equation * y_std + y_mean))
+            # TODO: if de-standardize, fix the de-standardized equations in the memory
+            
+            # Prune the KAN layer to simplify the equation
+            # kan_layer.prune()
+
+            # Substitute the KAN layers with their symbolic equations
+            kan_layer.auto_symbolic()
         
     ###### Equation conversion methods ######
     def _prepare_equations(self, equations):
@@ -257,19 +275,18 @@ class SymbolicMemoryReasoner(BaseModel):
         return explanations
 
     def _setup_string_equations(self):
-        # if the self.string_equations have not been computed yet, compute them
-        if not hasattr(self, 'string_equations'):
-            if self.equation_learning_strategy=='prior_knowledge':
-                equations = self.known_equations
-            elif self.equation_learning_strategy=='kan':
-                equations = [kan_layer.symbolic_formula()[0] for kan_layer in self.kan_layers]
-                # de-standardize if needed
-                if self.task == 'regression' and self.scale_target:
-                    y_mean = self.scaler.mean_.item()
-                    y_std = self.scaler.std_.item()
-                    equations = [((eq * y_std + y_mean)) for eq in equations]
-            # convert to string
-            self.string_equations = [str(eq) for eq in equations]
+        # if the self.string_equations have not been computed yet, compute them        if not hasattr(self, 'string_equations'):
+        if self.equation_learning_strategy=='prior_knowledge':
+            equations = self.known_equations
+        elif self.equation_learning_strategy=='kan':
+            equations = [kan_layer.symbolic_formula()[0] for kan_layer in self.kan_layers]
+            # # de-standardize if needed # TODO
+            # if self.task == 'regression' and self.scale_target:
+            #     y_mean = self.scaler.mean_.item()
+            #     y_std = self.scaler.std_.item()
+            #     equations = [((eq * y_std + y_mean)) for eq in equations]
+        # convert to string
+        self.string_equations = [str(eq) for eq in equations]
 
     ###### Forward and loss methods ######
     def compute_tau(self, global_step, tau_init=2, tau_min=0.05, decay_rate=0.99):

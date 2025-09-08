@@ -103,11 +103,21 @@ class Trainer:
             # If KAN are used, we need to setup the grid for each kan in the memory.
             # This operation is required for any kind of task (classification, regression, ...).
             if self.model.model.equation_learning_strategy=='kan':
-                self.model.model.setup_kan_grid(c_trues)
+                self.model.model.setup_kan_grid(c_trues.to(self.cfg.gpus[0]))
                 
         self.trainer.fit(self.model, 
                          train_dataloader, 
                          val_dataloader, ckpt_path=ckpt_path)
+        
+        # Prining, auto_symbolic 
+        # if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner' and self.model.model.equation_learning_strategy=='kan':
+        #     self.model.model.substitute_equations_kan()
+        
+        #     # print("Fine-tuning the model...")
+        #     # self.model.model.fine_tune = True
+        #     # self.trainer.fit(self.model, 
+        #     #                  train_dataloader, 
+        #     #                  val_dataloader)
 
     def test(self, test_dataloader, ckpt_path=None):
         # Load the best model and test

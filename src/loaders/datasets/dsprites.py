@@ -157,9 +157,9 @@ if __name__ == "__main__":
         random_seed = 1,
         concepts=['value_orientation', 'value_x_position', 'value_y_position'],
         formulas={
-            'square': 'exp(value_orientation)/10', 
-            'circle': 'exp(value_orientation)/10', 
-            'heart': 'exp(value_orientation)/10'},
+            'square': 'exp(-((value_orientation - 3.14)^2)/3)', 
+            'circle': 'exp(-((value_orientation - 3.14)^2)/3)', 
+            'heart': 'exp(-((value_orientation - 3.14)^2)/3)'},
     )
 
     # Plot samples to visualize the dataset

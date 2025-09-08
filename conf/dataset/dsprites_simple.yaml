@@ -7,13 +7,13 @@ loader:
   selected_concepts: ['value_orientation', 'value_x_position', 'value_y_position']
   n_samples: 30000
   # Concepts available: value_shape, value_scale, value_orientation, value_x_position, value_y_position
-  batch_size: 512
+  batch_size: 128
 
   # Formulas for the dataset
   formulas: 
-    circle: "exp(-value_orientation^2)"
-    square: "exp(-value_orientation^2)"
-    heart: "exp(-value_orientation^2)"
+    circle: "exp(-((value_orientation - 3.14)^2)/3)"
+    square: "exp(-((value_orientation - 3.14)^2)/3)"
+    heart: "exp(-((value_orientation - 3.14)^2)/3)"
 
 # Dataset parameters
 metadata:
@@ -25,4 +25,4 @@ metadata:
 
 # for this dataset, the equations connecting the concepts to the task are known
 equations: 
-  - "exp(-c0^2)"
+  - "exp(-((c0 - 3.14)^2)/3)"
