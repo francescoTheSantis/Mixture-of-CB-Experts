@@ -157,15 +157,15 @@ if __name__ == "__main__":
         random_seed = 1,
         concepts=['value_orientation', 'value_x_position', 'value_y_position'],
         formulas={
-            'square': 'exp(value_orientation)', 
-            'circle': 'exp(value_orientation)', 
-            'heart': 'exp(value_orientation)'},
+            'square': 'exp(value_orientation)/10', 
+            'circle': 'exp(value_orientation)/10', 
+            'heart': 'exp(value_orientation)/10'},
     )
 
     # Plot samples to visualize the dataset
     plot_samples(root, dataset1, num_samples=10)
 
     # Print some sample information
-    for i in range(10):
+    for i in range(100):
         image, concepts, target, shape = dataset1[i]
         print(f"Sample {i}: Concepts: {concepts}, Target: {target.item():.3f}, Shape: {shape}")

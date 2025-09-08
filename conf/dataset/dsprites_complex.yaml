@@ -12,8 +12,8 @@ loader:
   # Formulas for the dataset
   formulas: 
     circle: "cos(value_orientation)"
-    square: "exp((value_x_position + value_y_position))"
-    heart: "value_orientation^2 + value_x_position^2 + value_y_position^2"
+    square: "exp(value_x_position + value_y_position)"
+    heart: "value_orientation * (value_x_position + value_y_position)"
 
 # Dataset parameters
 metadata:
@@ -26,5 +26,5 @@ metadata:
 # for this dataset, the equations connecting the concepts to the task are known
 equations: 
   - "cos(c0)"
-  - "exp((c1 + c2))"
-  - "c0 + c1^2 + c2^3"
+  - "exp(c1 + c2)"
+  - "c0 * (c1 + c2)"

@@ -8,13 +8,12 @@ hydra:
       dir: test/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 2
-      dataset: dsprites_simple # , cub, mnist_addition, cebab, awa2, cub_incomplete, awa2_incomplete, cifar10, cifar100
-      model: sym_cmr_prior # sym_cmr_prior, l_cmr, blackbox
-      memory_size: 4 #, 10 #, 50, 100, 200, 500
+      seed: 1
+      dataset: dsprites_simple 
+      model: sym_cmr_prior 
+      memory_size: 4 
 gpus: [0]
 
-batch_size: 512
 max_epochs: 200
 patience: 100
 

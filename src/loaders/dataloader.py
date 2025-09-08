@@ -19,6 +19,7 @@ from src.loaders.datasets.mnist_arithmetic import CONCEPT_NAMES as mnist_arithme
 from src.loaders.datasets.pendulum import PendulumDataset
 from src.loaders.datasets.pendulum import CONCEPT_NAMES as concept_names_pendulum
 from src.loaders.datasets.pendulum import TASK_NAMES as task_names_pendulum
+from src.loaders.datasets.dsprites import DSprites
 
 from torch.utils.data import DataLoader, random_split
 from env import DATA_PATH
@@ -375,7 +376,6 @@ class loader(object):
             loader = PendulumDataset(already_created=self.dataset_already_created)
             loaded_train, loaded_val, loaded_test = loader.collator()
         elif self.name in ["dsprites_simple", "dsprites_complex"]:
-            from src.loaders.datasets.dsprites import DSprites
             assert self.formulas is not None, "Formulas must be provided for dsprites dataset"
             dsprites_dataset = DSprites(concepts=self.selected_concepts,
                                         formulas=self.formulas,

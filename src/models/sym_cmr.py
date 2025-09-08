@@ -43,6 +43,8 @@ class SymbolicMemoryReasoner(BaseModel):
                  equation_learning_strategy=None,
                  use_memory=True,
                  disjoint_training=False,
+                 decay_rate='exp',
+                 embedding_memory=False,
                  **kwargs
                  ):
 
@@ -72,6 +74,8 @@ class SymbolicMemoryReasoner(BaseModel):
         self.output_size = output_size
         self.backbone_latent_size = backbone_latent_size
         self.activation = activation
+        self.decay_rate = decay_rate
+        self.embedding_memory = embedding_memory
 
         self.mc_approx = mc_approx
         self.memory_size = memory_size
@@ -91,8 +95,6 @@ class SymbolicMemoryReasoner(BaseModel):
         # Handle parameter inconsistencies
         if len(self.known_equations)>1 and not self.use_memory:
             raise ValueError("If multiple equations are provided, memory must be used to select among them.")
-        elif len(self.known_equations)==1 and self.use_memory:
-            raise ValueError("Only one equation provided, memory will not be used.")
         
         if self.equation_learning_strategy not in ['prior_knowledge', 'kan']:
             raise ValueError(f"Unknown equation learning strategy: {self.equation_learning_strategy}")
@@ -119,20 +121,6 @@ class SymbolicMemoryReasoner(BaseModel):
                 raise ValueError("Known equations must be provided when using 'prior_knowledge' strategy.")
             self._prepare_equations(self.known_equations) # We process the known equations to convert them to torch executable modules
             self.memory_size = len(self.known_equations) # Override memory size to match the number of known equations
-        # elif self.equation_learning_strategy == 'kan':
-        #     kan_params = {
-        #             'width': [len(self.c_names), len(self.c_names)+1, self.output_size],
-        #             'grid': 5,
-        #             'k': 4,
-        #     }
-        #     # Instantiate as many KAN Layers as the memory size
-        #     self.kan_layers = nn.ModuleList()
-        #     for i in range(self.memory_size):
-        #         kan_params['ckpt_path'] = os.path.join(os.getcwd(), f'kan{i}_ckpt')
-        #         kan_layer = KAN(**kan_params)
-        #         for param in kan_layer.get_params():
-        #             param.requires_grad = True
-        #         self.kan_layers.append(kan_layer)
 
         if self.selector_model == 'linear':
             self.classifier_selector = nn.Sequential(
@@ -193,7 +181,6 @@ class SymbolicMemoryReasoner(BaseModel):
         for eq in equations:
             self._convert_equation_to_torch(eq, variables)
 
-
     def _convert_equation_to_torch(self, equation_str, variables):
         if self.equation_learning_strategy != 'prior_knowledge':
             raise NotImplementedError("This method is only implemented for 'prior_knowledge' strategy.")
@@ -239,8 +226,12 @@ class SymbolicMemoryReasoner(BaseModel):
         # Stack the outputs along the class dimension
         eq_outputs = torch.stack(eq_outputs, dim=1).squeeze() # Shape: (bsz, n_equations)
 
-        # Combine the outputs using the selector probabilities
-        y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
+        if self.memory_size == 1:
+            # Associate the output of the unique KAN to all the classes
+            y_hat = eq_outputs.unsqueeze(-1).unsqueeze(-1).expand(-1, len(self.y_names), -1)
+        else:
+            # Combine the outputs using the selector probabilities
+            y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
 
         if discard_explanations:
             return y_hat
@@ -282,8 +273,14 @@ class SymbolicMemoryReasoner(BaseModel):
 
     ###### Forward and loss methods ######
     def compute_tau(self, global_step, tau_init=2, tau_min=0.05, decay_rate=0.99):
-        # Exponential decay to decrease tau over time
-        tau = max(tau_min, tau_init * decay_rate ** global_step)
+        if self.decay_rate == 'linear':
+            # Linear decay to decrease tau over time
+            tau = max(tau_min, tau_init - decay_rate * global_step)
+        elif self.decay_rate == 'exp':
+            # Exponential decay to decrease tau over time
+            tau = max(tau_min, tau_init * decay_rate ** global_step)
+        else:
+            raise ValueError(f"Unknown decay rate: {self.decay_rate}")
         return tau
 
     def forward(self, input):
