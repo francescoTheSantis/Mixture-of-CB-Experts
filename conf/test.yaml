@@ -9,10 +9,10 @@ hydra:
   sweeper:
     params:
       seed: 2
-      dataset: mnist_arithmetic # , cub, mnist_addition, cebab, awa2, cub_incomplete, awa2_incomplete, cifar10, cifar100
-      model: sym_cmr_kan # sym_cmr_prior, l_cmr, blackbox
+      dataset: dsprites_simple # , cub, mnist_addition, cebab, awa2, cub_incomplete, awa2_incomplete, cifar10, cifar100
+      model: sym_cmr_prior # sym_cmr_prior, l_cmr, blackbox
       memory_size: 4 #, 10 #, 50, 100, 200, 500
-gpus: [1]
+gpus: [0]
 
 batch_size: 512
 max_epochs: 200
@@ -28,9 +28,5 @@ selector_model: mlp
 
 int_prob: 0
 task_penalty: 1.0
-
-dataset:
-  metadata:
-    lr: 0.001
 
 note: test_prior

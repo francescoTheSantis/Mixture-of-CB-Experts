@@ -5,13 +5,15 @@ defaults:
 loader: 
   name: dsprites_simple
   selected_concepts: ['value_orientation', 'value_x_position', 'value_y_position']
+  n_samples: 30000
   # Concepts available: value_shape, value_scale, value_orientation, value_x_position, value_y_position
+  batch_size: 512
 
   # Formulas for the dataset
   formulas: 
-    circle: "exp(10*value_orientation)"
-    square: "exp(10*value_orientation)"
-    heart: "exp(10*value_orientation)"
+    circle: "exp(value_orientation)"
+    square: "exp(value_orientation)"
+    heart: "exp(value_orientation)"
 
 # Dataset parameters
 metadata:
@@ -23,6 +25,6 @@ metadata:
 
 # for this dataset, the equations connecting the concepts to the task are known
 equations: 
-  - "exp(10*value_orientation)"
-  - "value_x_position * value_y_position"
-  - "value_orientation^2 + value_x_position^2 + value_y_position^2"
+  - "exp(c0)"
+  - "exp(c0)"
+  - "exp(c0)"

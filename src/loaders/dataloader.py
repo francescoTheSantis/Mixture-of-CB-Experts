@@ -63,7 +63,8 @@ class loader(object):
                  data_path=None,
                  dataset_already_created=False,
                  formulas=None,
-                 seed=42
+                 seed=42,
+                 n_samples=None,
                  ):
         self.name = name
         self.batch_size = batch_size
@@ -79,6 +80,7 @@ class loader(object):
         self.dataset_already_created = dataset_already_created
         self.formulas = formulas
         self.seed = seed
+        self.n_samples = n_samples
 
         self.transform = transforms.Compose([
                 transforms.Resize((224, 224)),
@@ -283,9 +285,9 @@ class loader(object):
             train_dataset, val_dataset = random_split(train_dataset, 
                                               [train_size, val_size])
         elif self.name == 'mnist_arithmetic':
-            train_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=7000, img_size=224)
-            val_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=1000, img_size=224)
-            test_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=False, num_samples=2000, img_size=224)
+            train_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=int(self.n_samples*0.7), img_size=224)
+            val_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=int(self.n_samples*0.1), img_size=224)
+            test_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=False, num_samples=int(self.n_samples*0.2), img_size=224)
             # Get the equations x sample in the test-set
             operators = test_dataset.operator_list
             equations = []
@@ -377,7 +379,9 @@ class loader(object):
             assert self.formulas is not None, "Formulas must be provided for dsprites dataset"
             dsprites_dataset = DSprites(concepts=self.selected_concepts,
                                         formulas=self.formulas,
-                                        split='train')
+                                        split='train',
+                                        num_samples=self.n_samples,
+                                        random_seed=self.seed)
             # split the dataset into train, validation and test sets
             total_size = len(dsprites_dataset)
             train_size = int(0.7 * total_size)

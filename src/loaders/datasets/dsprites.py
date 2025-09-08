@@ -9,7 +9,7 @@ import os
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
-from env import HOME, DATA_PATH
+from env import HOME
 
 def load_dsprites_dataset():
     """
@@ -101,7 +101,8 @@ class DSprites(Dataset):
                     num_samples: Number of samples to randomly select from the dataset (optional)
                     random_seed: Seed for random number generator (optional)
         """
-        real_idx = self._indices[idx]
+
+        real_idx = int(self._indices[idx])
         sample = self.dataset[real_idx]
         
         # Extract image and convert to tensor
@@ -153,17 +154,17 @@ if __name__ == "__main__":
     # Example 1: Using exponential formula with y_position
     dataset1 = DSprites(
         num_samples = 10000,
-        random_seed = 42,
+        random_seed = 1,
         concepts=['value_orientation', 'value_x_position', 'value_y_position'],
         formulas={
-            'square': 'exp(10*(value_orientation))', 
-            'circle': 'exp(10*(value_orientation))', 
-            'heart': 'exp(10*(value_orientation))'},
+            'square': 'exp(value_orientation)', 
+            'circle': 'exp(value_orientation)', 
+            'heart': 'exp(value_orientation)'},
     )
 
     # Plot samples to visualize the dataset
-    plot_samples(dataset1, num_samples=10)
-    
+    plot_samples(root, dataset1, num_samples=10)
+
     # Print some sample information
     for i in range(10):
         image, concepts, target, shape = dataset1[i]

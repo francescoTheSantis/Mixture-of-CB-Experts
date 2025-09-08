@@ -4,6 +4,7 @@ defaults:
 
 loader: 
   name: mnist_arithmetic
+  n_samples: 10000
 
 # Dataset parameters
 metadata:
