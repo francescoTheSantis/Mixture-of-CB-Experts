@@ -11,9 +11,9 @@ loader:
 
   # Formulas for the dataset
   formulas: 
-    circle: "exp(value_orientation)/10"
-    square: "exp(value_orientation)/10"
-    heart: "exp(value_orientation)/10"
+    circle: "exp(-value_orientation^2)"
+    square: "exp(-value_orientation^2)"
+    heart: "exp(-value_orientation^2)"
 
 # Dataset parameters
 metadata:
@@ -25,4 +25,4 @@ metadata:
 
 # for this dataset, the equations connecting the concepts to the task are known
 equations: 
-  - "exp(c0)/10"
+  - "exp(-c0^2)"
