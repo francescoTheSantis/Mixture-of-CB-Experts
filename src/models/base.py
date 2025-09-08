@@ -95,7 +95,8 @@ class BaseModel(nn.Module):
         # If noise is provided, create a convex combination of the input and noise
         if self.noise!=None:
             eps = torch.randn_like(x)
-            x = eps * self.noise + x * (1-self.noise)
+            h = eps * self.noise + h * (1-self.noise)
+            h_concepts = eps * self.noise + h_concepts * (1-self.noise)
             del eps
             
         if self.training or self.test_interventions:
