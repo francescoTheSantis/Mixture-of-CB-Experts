@@ -306,9 +306,12 @@ def generate_data_path(cfg):
     data_path += f"/{img_backbone_name}" if get_type_from_name(cfg.dataset.metadata.name) == 'image' \
                                                     else f"/{text_backbone_name}"
 
-    if cfg.dataset.loader.concept_percentage != None:
-        data_path += f"_{str(cfg.dataset.loader.concept_percentage).replace('.', '')}"
+    # Add seed
+    data_path += f"/seed_{cfg.seed}"
 
+    if cfg.dataset.loader.concept_percentage != None:
+        # Add concept percentage if it is not None
+        data_path += f"_{str(cfg.dataset.loader.concept_percentage).replace('.', '')}"
 
     train_path = f"{data_path}/train.pt"
     val_path = f"{data_path}/val.pt"

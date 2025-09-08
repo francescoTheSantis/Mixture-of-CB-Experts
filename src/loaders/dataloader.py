@@ -62,7 +62,8 @@ class loader(object):
                  extract_embeddings=True,
                  data_path=None,
                  dataset_already_created=False,
-                 formulas=None
+                 formulas=None,
+                 seed=42
                  ):
         self.name = name
         self.batch_size = batch_size
@@ -77,6 +78,7 @@ class loader(object):
         self.data_path = data_path
         self.dataset_already_created = dataset_already_created
         self.formulas = formulas
+        self.seed = seed
 
         self.transform = transforms.Compose([
                 transforms.Resize((224, 224)),
@@ -241,13 +243,13 @@ class loader(object):
     def load_data(self, cfg=None):
         # Load the data
         if self.name in ['xor', 'trigonometry', 'dot', 'checkmark']:
-            dataset = ToyDataset(self.name, size=1000, random_state=42)
+            dataset = ToyDataset(self.name, size=1000, random_state=self.seed)
             # split the dataset
             train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
                 dataset, [0.7, 0.1, 0.2]
             )
         elif self.name in ['or', 'nor', 'xnor']:
-            dataset = ToyDataset('xor', size=1000, random_state=42)
+            dataset = ToyDataset('xor', size=1000, random_state=self.seed)
             # split the dataset
             if self.name == 'xnor':
                 dataset.target_labels = 1 - dataset.target_labels

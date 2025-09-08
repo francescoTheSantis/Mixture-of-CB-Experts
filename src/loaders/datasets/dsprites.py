@@ -5,6 +5,11 @@ from datasets import load_dataset
 from typing import List, Callable, Optional, Dict, Any
 import sympy
 import sympytorch
+import os
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
+from env import HOME, DATA_PATH
 
 def load_dsprites_dataset():
     """
@@ -23,10 +28,12 @@ class DSprites(Dataset):
     """
     
     def __init__(
-        self, 
-        concepts: List[str], 
+        self,
+        concepts: List[str],
         formulas: Callable[[Dict[str, str]], str],
-        split: str = "train"
+        split: str = "train", # The huggingface repo contains only the train split
+        num_samples: Optional[int] = None,
+        random_seed: Optional[int] = None
     ):
         """
         Initialize the DSprites dataset.
@@ -35,8 +42,18 @@ class DSprites(Dataset):
             concepts: List of concept names to extract (e.g., ['value_y_position', 'value_orientation'])
             formula: Function that takes a dict of concept values and returns the target value
             split: Dataset split to use ('train' by default)
+            num_samples: Number of samples to randomly select from the dataset (optional)
+            random_seed: Seed for random number generator (optional)
         """
         self.dataset = load_dataset("dpdl-benchmark/dsprites")[split]
+        # Subsample indices if requested
+        full_indices = np.arange(len(self.dataset))
+        if num_samples is not None:
+            rng = np.random.default_rng(random_seed)
+            self._indices = rng.choice(full_indices, size=num_samples, replace=False)
+        else:
+            self._indices = full_indices
+        self._num_samples = len(self._indices)
         self.formulas = formulas
         self.available_concepts = [col for col in self.dataset.column_names if col.startswith('value_')]
 
@@ -65,12 +82,14 @@ class DSprites(Dataset):
             self.torch_formulas[shape] = torch_exp
 
     def __len__(self) -> int:
-        return len(self.dataset)
+        return self._num_samples
     
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         """
         Get an item from the dataset.
         
+                num_samples: Optional[int] = None,
+                random_seed: Optional[int] = None
         Args:
             idx: Index of the item to retrieve
             
@@ -79,8 +98,11 @@ class DSprites(Dataset):
             - 'image': The image as a tensor
             - 'concepts': Dictionary with concept values
             - 'target': Target value computed using the formula
+                    num_samples: Number of samples to randomly select from the dataset (optional)
+                    random_seed: Seed for random number generator (optional)
         """
-        sample = self.dataset[idx]
+        real_idx = self._indices[idx]
+        sample = self.dataset[real_idx]
         
         # Extract image and convert to tensor
         image = torch.tensor(np.array(sample['image']), dtype=torch.float32)
@@ -99,7 +121,7 @@ class DSprites(Dataset):
         return (image.unsqueeze(0), concept_values, torch.tensor(target, dtype=torch.float32), shape)
 
 
-def plot_samples(dataset, num_samples=10, figsize=(15, 3)):
+def plot_samples(root, dataset, num_samples=10, figsize=(15, 3)):
     """
     Plot sample images from the DSprites dataset.
     """
@@ -108,29 +130,35 @@ def plot_samples(dataset, num_samples=10, figsize=(15, 3)):
     fig, axes = plt.subplots(1, num_samples, figsize=figsize)
     if num_samples == 1:
         axes = [axes]
-    
     for i in range(num_samples):
         image, concepts, target, shape = dataset[i]
-        
         # Remove the channel dimension and convert to numpy for plotting
         img_array = image.squeeze(0).numpy()
-        
         axes[i].imshow(img_array, cmap='gray')
-        axes[i].set_title(f'{shape}\nTarget: {target.item():.3f}')
+        axes[i].set_title(f'{shape}\nTarget: {target.item():.3f}' + \
+                          f'\nConcepts: {", ".join([f"{c}: {concepts[j].item():.2f}" for j, c in enumerate(dataset.concepts)])}')
         axes[i].axis('off')
     
     plt.tight_layout()
+    plt.savefig(f"{root}/dsprites_samples.pdf")
     plt.show()
 
 
 if __name__ == "__main__":
+    
+    # Create the directory continaing the dsprties figures
+    root = f"{HOME}/figs/dsprites"
+    os.makedirs(root, exist_ok=True)
+
     # Example 1: Using exponential formula with y_position
     dataset1 = DSprites(
+        num_samples = 10000,
+        random_seed = 42,
         concepts=['value_orientation', 'value_x_position', 'value_y_position'],
         formulas={
-            'square': 'cos(value_orientation)', 
-            'circle': 'exp(10*(value_x_position + value_y_position))', 
-            'heart': 'sin(value_orientation * value_x_position) + cos(value_y_position^2) * exp(-0.5 * (value_x_position - value_y_position)^2)'},
+            'square': 'exp(10*(value_orientation))', 
+            'circle': 'exp(10*(value_orientation))', 
+            'heart': 'exp(10*(value_orientation))'},
     )
 
     # Plot samples to visualize the dataset

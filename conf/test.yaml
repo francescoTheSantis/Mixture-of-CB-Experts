@@ -8,12 +8,29 @@ hydra:
       dir: test/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 1
-      dataset: xor #, mnist_addition, mnist_arithmetic # , cub, mnist_addition, cebab, awa2, cub_incomplete, awa2_incomplete, cifar10, cifar100
-      model: blackbox, cbm_linear, cem, dcr, cmr, licem, cem, l_cmr #, blackbox, dcr, cmr, cem #sym_cmr_prior # sym_cmr_kan
-      max_epochs: 50
-gpus: [2]
+      seed: 2
+      dataset: mnist_arithmetic # , cub, mnist_addition, cebab, awa2, cub_incomplete, awa2_incomplete, cifar10, cifar100
+      model: sym_cmr_kan # sym_cmr_prior, l_cmr, blackbox
+      memory_size: 4 #, 10 #, 50, 100, 200, 500
+gpus: [1]
 
-# wandb:
-#   project: null
-#   entity: null 
+batch_size: 512
+max_epochs: 200
+patience: 100
+
+scale_target: False
+disjoint_training: True
+
+use_stored_dataset: True
+extract_embeddings: True
+
+selector_model: mlp
+
+int_prob: 0
+task_penalty: 1.0
+
+dataset:
+  metadata:
+    lr: 0.001
+
+note: test_prior

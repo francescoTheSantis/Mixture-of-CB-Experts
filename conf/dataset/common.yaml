@@ -5,6 +5,7 @@ loader:
   device: ${gpus}
   extract_embeddings: ${extract_embeddings}
   concept_percentage: ${concept_percentage}
+  seed: ${seed}
 
 latent_size: ${latent_size}
 

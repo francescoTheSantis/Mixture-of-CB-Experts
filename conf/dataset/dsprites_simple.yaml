@@ -10,8 +10,8 @@ loader:
   # Formulas for the dataset
   formulas: 
     circle: "exp(10*value_orientation)"
-    square: "value_x_position * value_y_position"
-    heart: "value_orientation^2 + value_x_position^2 + value_y_position^2"
+    square: "exp(10*value_orientation)"
+    heart: "exp(10*value_orientation)"
 
 # Dataset parameters
 metadata:
