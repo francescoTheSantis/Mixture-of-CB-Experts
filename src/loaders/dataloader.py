@@ -235,7 +235,7 @@ class loader(object):
             task_names = task_names_pendulum
             concept_groups = None
         elif self.name in ["dsprites_simple", "dsprites_complex"]:
-            concept_names = ['value_orientation', 'value_x_position', 'value_y_position']
+            concept_names = self.selected_concepts
             task_names = ['custom_target']
             concept_groups = None
         else:

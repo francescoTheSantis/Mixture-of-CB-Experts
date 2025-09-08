@@ -127,10 +127,10 @@ class LinearMemoryReasoner(BaseModel):
         return tau
 
     def forward(self, input):
-        latent, c_true, int_idxs = self.encode(input)
+        latent, x_concepts, c_true, int_idxs = self.encode(input)
         bsz = latent.shape[0]
 
-        c_hat, _ = self.bottleneck(latent)
+        c_hat, _ = self.bottleneck(x_concepts)
 
         c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 

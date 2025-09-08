@@ -8,11 +8,10 @@ hydra:
       dir: test/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 1
-      dataset: dsprites_simple
-      model: sym_cmr_kan
-      memory_size: 1
-    
+      seed: 1, 2, 3
+      dataset: dsprites_simple, mnist_arithmetic
+      model: sym_cmr_prior, blackbox
+
 gpus: [3]
 
 max_epochs: 500
@@ -27,6 +26,6 @@ extract_embeddings: True
 selector_model: mlp
 
 int_prob: 0
-task_penalty: 1
+task_penalty: 1.0
 
 note: test_prior

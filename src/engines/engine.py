@@ -159,7 +159,7 @@ class Engine(pl.LightningModule):
                 # Prune the KAN layers
                 for kan_layer in self.model.kan_layers:
                     # prune each kan layer
-                    kan_layer.prune()
+                    #kan_layer.prune()
 
                     # Set the symbolic equation in the kan layer
                     kan_layer.auto_symbolic()

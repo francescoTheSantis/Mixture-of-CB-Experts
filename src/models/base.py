@@ -2,6 +2,7 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 from src.models.encoders.base import BaseEncoder
+import copy
 
 class BaseModel(nn.Module):
     """
@@ -69,13 +70,21 @@ class BaseModel(nn.Module):
                 self.concept_loss_form.append(nn.BCELoss())
             else:
                 self.concept_loss_form.append(nn.MSELoss())
+
+        # Instantiate another encoder for the concepts. This encoder is a copy of the main encoder.
+        # It will be used to encode the concepts when disjoint training is enabled.
+        if self.disjoint_training:
+            self.concept_encoder = copy.deepcopy(encoder)
+            # Freeze the weights of the concept encoder
+            for param in self.concept_encoder.parameters():
+                param.requires_grad = True
                 
     def encode(self, input):
         x = input['x']
         c_true = input['c']
          
         # Pass the input through the encoder
-        x = self.encoder(x)
+        h = self.encoder(x)
 
         # If noise is provided, create a convex combination of the input and noise
         if self.noise!=None:
@@ -92,8 +101,14 @@ class BaseModel(nn.Module):
         else:
             int_idxs = torch.zeros_like(c_true)
         int_idxs = int_idxs.bool()
+
+        # encode the concepts using the concept encoder
+        if self.disjoint_training:
+            h_concepts = self.concept_encoder(x)
+        else:
+            h_concepts = h
         
-        return x, c_true, int_idxs
+        return h, h_concepts, c_true, int_idxs
     
     def _logic_model_checker(self):
         """
@@ -137,15 +152,15 @@ class BaseModel(nn.Module):
         and the values do not need to undergo any further transformation.
         """
         if self.hard_concepts:
+            # Boolean concepts
             binary_mask = torch.tensor([c_type == 'binary' for c_type in self.concept_type], device=c_hat.device)
-            integer_mask = torch.tensor([c_type == 'integer' for c_type in self.concept_type], device=c_hat.device)
-
-            # Combine with int_idxs
             binary_mask = binary_mask & ~int_idxs
-            integer_mask = integer_mask & ~int_idxs
-
             c_hat = torch.where(binary_mask, (c_hat > 0.5).float(), c_hat) if binary_mask.any() else c_hat
-            c_hat = torch.where(integer_mask, c_hat.round(), c_hat) if integer_mask.any() else c_hat
+
+            # Integer concepts
+            # integer_mask = torch.tensor([c_type == 'integer' for c_type in self.concept_type], device=c_hat.device)
+            # integer_mask = integer_mask & ~int_idxs
+            # c_hat = torch.where(integer_mask, c_hat.round(), c_hat) if integer_mask.any() else c_hat
         return c_hat
 
     def _apply_concept_activation(self, c_hat, int_idxs):

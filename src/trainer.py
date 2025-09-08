@@ -109,15 +109,9 @@ class Trainer:
                          train_dataloader, 
                          val_dataloader, ckpt_path=ckpt_path)
         
-        # Prining, auto_symbolic 
-        # if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner' and self.model.model.equation_learning_strategy=='kan':
-        #     self.model.model.substitute_equations_kan()
-        
-        #     # print("Fine-tuning the model...")
-        #     # self.model.model.fine_tune = True
-        #     # self.trainer.fit(self.model, 
-        #     #                  train_dataloader, 
-        #     #                  val_dataloader)
+        # Substitute the equations if KAN layers are used
+        if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner' and self.model.model.equation_learning_strategy=='kan':
+            self.model.model.substitute_equations_kan()
 
     def test(self, test_dataloader, ckpt_path=None):
         # Load the best model and test

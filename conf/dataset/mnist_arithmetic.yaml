@@ -4,12 +4,13 @@ defaults:
 
 loader: 
   name: mnist_arithmetic
-  n_samples: 10000
+  n_samples: 50000
+  batch_size: 512
 
 # Dataset parameters
 metadata:
   task: regression
-  lr: 0.0005
+  lr: 0.0001
   name: mnist_arithmetic
   data_type: image
   concept_type: ['integer', 'integer'] 

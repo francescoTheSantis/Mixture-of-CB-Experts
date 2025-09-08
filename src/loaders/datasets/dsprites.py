@@ -155,11 +155,11 @@ if __name__ == "__main__":
     dataset1 = DSprites(
         num_samples = 10000,
         random_seed = 1,
-        concepts=['value_orientation', 'value_x_position', 'value_y_position'],
+        concepts=['value_x_position', 'value_y_position'],
         formulas={
-            'square': 'exp(-((value_orientation - 3.14)^2)/3)', 
-            'circle': 'exp(-((value_orientation - 3.14)^2)/3)', 
-            'heart': 'exp(-((value_orientation - 3.14)^2)/3)'},
+            'square': 'exp(-(value_x_position^2 + value_y_position^2))', 
+            'circle': 'exp(-(value_x_position^2 + value_y_position^2))', 
+            'heart': 'exp(-(value_x_position^2 + value_y_position^2))'},
     )
 
     # Plot samples to visualize the dataset

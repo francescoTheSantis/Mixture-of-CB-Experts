@@ -178,7 +178,7 @@ class SymbolicMemoryReasoner(BaseModel):
             #     equation = ((equation * y_std + y_mean))
             # TODO: if de-standardize, fix the de-standardized equations in the memory
             
-            # Prune the KAN layer to simplify the equation
+            # Prune the KAN layer to simplify the equation TODO: prune raise error due to tensors on different device
             # kan_layer.prune()
 
             # Substitute the KAN layers with their symbolic equations
@@ -301,11 +301,11 @@ class SymbolicMemoryReasoner(BaseModel):
         return tau
 
     def forward(self, input):
-        latent, c_true, int_idxs = self.encode(input)
+        latent, x_concepts, c_true, int_idxs = self.encode(input)
         bsz = latent.shape[0]
 
         ## Concept encoder and concept processing block ##
-        c_hat, _ = self.bottleneck(latent)
+        c_hat, _ = self.bottleneck(x_concepts)
 
         c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 

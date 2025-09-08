@@ -68,9 +68,9 @@ class ConceptBottleneckModel(BaseModel):
 
 
     def forward(self, input):
-        x, c_true, int_idxs = self.encode(input)
-        
-        c_hat, _ = self.bottleneck(x)
+        x, x_concepts, c_true, int_idxs = self.encode(input)
+
+        c_hat, _ = self.bottleneck(x_concepts)
 
         c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 

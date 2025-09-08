@@ -75,7 +75,7 @@ class DeepConceptReasoner(BaseModel):
         self.task_loss_form = nn.BCELoss()
 
     def forward(self, input):
-        x, c_true, int_idxs = self.encode(input)
+        x, _, c_true, int_idxs = self.encode(input)
 
         c_emb, c_dict = self.bottleneck(
             x,

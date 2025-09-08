@@ -119,10 +119,10 @@ class ConceptMemoryReasoner(BaseModel):
         return c_rec_per_classifier
 
     def forward(self, input):
-        latent, c_true, int_idxs = self.encode(input)
+        latent, x_concepts, c_true, int_idxs = self.encode(input)
 
         _, c_dict = self.bottleneck(
-            latent,
+            x_concepts,
             c_true=c_true,
             intervention_idxs=int_idxs,
             intervention_rate=1.,

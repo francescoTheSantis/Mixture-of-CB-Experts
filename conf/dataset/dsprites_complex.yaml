@@ -5,7 +5,7 @@ defaults:
 loader: 
   name: dsprites_complex
   selected_concepts: ['value_orientation', 'value_x_position', 'value_y_position']
-  n_samples: 30000
+  n_samples: 50000
   # Concepts available: value_shape, value_scale, value_orientation, value_x_position, value_y_position
   batch_size: 512
 

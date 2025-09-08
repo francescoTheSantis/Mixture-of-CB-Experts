@@ -28,6 +28,8 @@ custom_order = ['xor', \
                 #'celeba',
                 'cifar10',
                 'cifar100',
+                'dsprites_simple',
+                'mnist_arithmetic',
                 ]
 
 # Define a dictionary to associate marker, name, and color to each model.
@@ -63,7 +65,7 @@ def main():
 
     # List the paths containing the results
     paths = [
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-07_17-30-53",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-08_17-39-46",
     ]
 
     try:
@@ -239,7 +241,7 @@ def main():
     ##################################################
 
     paths = [
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/memory_ablation/2025-09-01_16-49-15"
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-08_17-39-46"
     ]
     try:
         performance, _ = get_exp_from_path(paths)
@@ -252,7 +254,7 @@ def main():
     ############################################################
 
     paths = [
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/output/ablation_concept_size/2025-09-01_16-51-41"
+            "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-08_17-39-46"
         ]
     try:
         performance, _ = get_exp_from_path(paths)

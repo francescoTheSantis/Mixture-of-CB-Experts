@@ -93,7 +93,7 @@ class LinearConceptEmbeddingModel(BaseModel):
 
 
     def forward(self, input):
-        latent, c_true, int_idxs = self.encode(input)
+        latent, _, c_true, int_idxs = self.encode(input)
         
         c_emb, c_dict = self.bottleneck(
             latent,

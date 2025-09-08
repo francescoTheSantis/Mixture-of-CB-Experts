@@ -80,7 +80,7 @@ def get_exp_from_path(paths):
 
             # Select the last row of the dataframe where we test the model
             # if 'test/y/acc' and 'test_concept_acc' are not in the dataframe, skip the experiment
-            if 'test/y/acc' not in result.columns:
+            if 'test/y/mse' not in result.columns:
                 d['task'] = result['test/y/mse'].iloc[-1]
             else:
                 d['task'] = result['test/y/acc'].iloc[-1]
@@ -88,7 +88,7 @@ def get_exp_from_path(paths):
             if conf['model']['metadata']['name']=='blackbox':
                 d['concept'] = 0
             else:
-                if 'test/c/acc' not in result.columns:
+                if 'test/c/mse' not in result.columns:
                     d['concept'] = result['test/c/mse'].iloc[-1]
                 else:
                     d['concept'] = result['test/c/acc'].iloc[-1]

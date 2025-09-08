@@ -68,8 +68,8 @@ class ConceptEmbeddingModel(BaseModel):
 
 
     def forward(self, input):
-        x, c_true, int_idxs = self.encode(input)
-        
+        x, _, c_true, int_idxs = self.encode(input)
+
         _, c_dict = self.bottleneck(
             x,
             c_true=c_true,
@@ -80,7 +80,8 @@ class ConceptEmbeddingModel(BaseModel):
 
         c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 
-        # It is necessary to compute again since 
+        # It is necessary to compute again since the embeddings 
+        # may have changed due to the interventions
         c_emb = self.bottleneck.linear(x)
         c_emb = concept_embedding_mixture(c_emb, input_concepts)
 
