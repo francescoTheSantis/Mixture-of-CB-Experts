@@ -101,7 +101,7 @@ class SymbolicMemoryReasoner(BaseModel):
         
         if self.equation_learning_strategy == 'kan':
             kan_params = {
-                    'width': [len(self.c_names), len(self.c_names)+1, self.output_size],
+                    'width': [len(self.c_names), len(self.c_names), self.output_size], # TODO change the hidden size to len(self.c_names)+1 for higher performance
                     'grid': 5,
                     'k': 4,
             }
