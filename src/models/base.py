@@ -86,6 +86,12 @@ class BaseModel(nn.Module):
         # Pass the input through the encoder
         h = self.encoder(x)
 
+        # encode the concepts using the concept encoder
+        if self.disjoint_training:
+            h_concepts = self.concept_encoder(x)
+        else:
+            h_concepts = h
+        
         # If noise is provided, create a convex combination of the input and noise
         if self.noise!=None:
             eps = torch.randn_like(x)
@@ -102,12 +108,6 @@ class BaseModel(nn.Module):
             int_idxs = torch.zeros_like(c_true)
         int_idxs = int_idxs.bool()
 
-        # encode the concepts using the concept encoder
-        if self.disjoint_training:
-            h_concepts = self.concept_encoder(x)
-        else:
-            h_concepts = h
-        
         return h, h_concepts, c_true, int_idxs
     
     def _logic_model_checker(self):
