@@ -21,7 +21,7 @@ scale_target: True
 
 ## Shared Concept-based model parameters
 task_penalty: 1.0
-int_prob: 0.0
+int_prob: 0.25
 hard_concepts: False
 joint_training: False
 # It controls whether the concept and task predictors are trained jointly or in parallel.
