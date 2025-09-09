@@ -34,6 +34,7 @@ class LinearMemoryReasoner(BaseModel):
                  concept_type='binary',
                  bias=None,
                  disjoint_training=False,
+                 concept_penalty=1.0,
                  **kwargs
                  ):
 
@@ -53,7 +54,8 @@ class LinearMemoryReasoner(BaseModel):
             encoder,
             backbone_latent_size,
             concept_type,
-            disjoint_training
+            disjoint_training,
+            concept_penalty
         )
 
         self.embedding_size = embedding_size
@@ -127,10 +129,10 @@ class LinearMemoryReasoner(BaseModel):
         return tau
 
     def forward(self, input):
-        latent, x_concepts, c_true, int_idxs = self.encode(input)
+        latent, latent_concepts, c_true, int_idxs = self.encode(input)
         bsz = latent.shape[0]
 
-        c_hat, _ = self.bottleneck(x_concepts)
+        c_hat, _ = self.bottleneck(latent_concepts)
 
         c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 

@@ -118,8 +118,8 @@ def get_backbone_latent_size(backbone):
 def get_type_from_name(dataset_name):
     if dataset_name in ['mnist_addition', 'cub', 'cub_incomplete', \
                         'awa2', 'awa2_incomplete', 'xor', 'celeba', \
-                        'cifar10', 'cifar100', 'mnist_arithmetic','pendulum', \
-                            'dsprites', 'dsprites_simple', 'dsprites_complex']:
+                        'cifar10', 'cifar100', 'mnist_arithmetic', 'mnist_arithmetic_hard', \
+                        'pendulum', 'dsprites', 'dsprites_simple', 'dsprites_complex']:
         return 'image'
     else:
         return 'text'

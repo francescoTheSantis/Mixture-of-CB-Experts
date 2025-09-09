@@ -1,0 +1,22 @@
+defaults:
+  - common
+  - _self_
+
+loader: 
+  name: mnist_arithmetic_hard
+  n_samples: 50000
+  batch_size: 512
+
+# Dataset parameters
+metadata:
+  task: regression
+  lr: 0.0001
+  name: mnist_arithmetic_hard
+  data_type: image
+  concept_type: ['integer', 'integer'] 
+
+
+# for this dataset, the equations connecting the concepts to the task are known
+equations: 
+  - "c0 * c1"
+  - "c0 / c1" 

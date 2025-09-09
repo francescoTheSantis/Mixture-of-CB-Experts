@@ -185,7 +185,7 @@ class loader(object):
             concept_names = train_dataset.concept_names
             task_names = train_dataset.task_names
             concept_groups = None
-        elif self.name in ['mnist_arithmetic']:
+        elif self.name in ['mnist_arithmetic', 'mnist_arithmetic_hard']:
             concept_names = mnist_arithmetic_concept_names
             task_names = ['Result']
             concept_groups = None
@@ -297,6 +297,18 @@ class loader(object):
             # Create a dataframe and save it
             equations_df = pd.DataFrame(equations, columns=['equation'])
             equations_df.to_csv(f"{self.data_path}/mnist_arithmetic_equations.csv", index=False)
+        elif self.name == 'mnist_arithmetic_hard':
+            train_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=int(self.n_samples*0.7), img_size=224, operators=('x', '/'))
+            val_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=True, num_samples=int(self.n_samples*0.1), img_size=224, operators=('x', '/'))
+            test_dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, train=False, num_samples=int(self.n_samples*0.2), img_size=224, operators=('x', '/'))
+            # Get the equations x sample in the test-set
+            operators = test_dataset.operator_list
+            equations = []
+            for i in range(len(operators)):
+                equations.append(f"c0 {operators[i]} c1")
+            # Create a dataframe and save it
+            equations_df = pd.DataFrame(equations, columns=['equation'])
+            equations_df.to_csv(f"{self.data_path}/mnist_arithmetic_hard_equations.csv", index=False)            
         elif self.name == 'cub' and self.concept_percentage is None:
             train_dataset = CUBDataset(root=DATA_PATH, split='train')
             val_dataset = CUBDataset(root=DATA_PATH, split='val')

@@ -5,6 +5,7 @@ defaults:
 params:
   _target_: "src.models.dcr.DeepConceptReasoner"
   task_penalty: ${task_penalty}
+  concept_penalty: ${concept_penalty}
   int_prob: ${int_prob}
   temperature: 100
   embedding_size: ${embedding_size}

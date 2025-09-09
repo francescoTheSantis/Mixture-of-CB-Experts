@@ -50,6 +50,10 @@ def get_df_name(df):
         return 'CIFAR10'
     elif df=='cifar100':
         return 'CIFAR100'
+    elif df=='dsprites_simple':
+        return 'dSprites-Simple'
+    elif df=='mnist_arithmetic':
+        return 'MNIST-Arith.'
 
 def get_exp_from_path(paths):
     # Collect all the experiments in the given paths
@@ -65,42 +69,52 @@ def get_exp_from_path(paths):
     for exp in exps_path:
         d = {}
         conf_file = os.path.join(exp, '.hydra/config.yaml')
-        result_file = os.path.join(exp, 'logs/experiment_metrics/version_0/metrics.csv')  
-        if os.path.exists(conf_file) and os.path.exists(result_file):
-            with open(conf_file, 'r') as file:
-                conf = yaml.safe_load(file)
-            d['seed'] = conf['seed']
-            d['dataset'] = conf['dataset']['metadata']['name']
-            d['model'] = conf['model']['metadata']['name']
-            d['memory_size'] = conf['memory_size']
-            d['concept_percentage'] = conf['concept_percentage']
+        result_file = os.path.join(exp, 'logs/experiment_metrics/version_0/metrics.csv') 
+        try: 
+            if os.path.exists(conf_file) and os.path.exists(result_file):
+                with open(conf_file, 'r') as file:
+                    conf = yaml.safe_load(file)
+                d['seed'] = conf['seed']
+                d['dataset'] = conf['dataset']['metadata']['name']
+                d['model'] = conf['model']['metadata']['name']
+                d['memory_size'] = conf['memory_size']
+                d['concept_percentage'] = conf['concept_percentage']
 
-            with open(result_file, 'r') as file:
-                result = pd.read_csv(file, header=0)
+                with open(result_file, 'r') as file:
+                    result = pd.read_csv(file, header=0)
 
-            # Select the last row of the dataframe where we test the model
-            # if 'test/y/acc' and 'test_concept_acc' are not in the dataframe, skip the experiment
-            if 'test/y/mse' not in result.columns:
-                d['task'] = result['test/y/mse'].iloc[-1]
-            else:
-                d['task'] = result['test/y/acc'].iloc[-1]
-
-            if conf['model']['metadata']['name']=='blackbox':
-                d['concept'] = 0
-            else:
-                if 'test/c/mse' not in result.columns:
-                    d['concept'] = result['test/c/mse'].iloc[-1]
+                # Select the last row of the dataframe where we test the model
+                # if 'test/y/acc' and 'test_concept_acc' are not in the dataframe, skip the experiment
+                if 'test/y/mse' in result.columns:
+                    d['task'] = result['test/y/mse'].iloc[-1]
                 else:
-                    d['concept'] = result['test/c/acc'].iloc[-1]
+                    d['task'] = result['test/y/acc'].iloc[-1]
 
-            print(d)
-            
-            if d['model'] == 'l_cmr' and d['seed']==1:
-                expl_dict = d.copy()
-                expl_dict['path'] = exp
-                lmr_paths.append(expl_dict)
+                if conf['model']['metadata']['name']=='blackbox':
+                    d['concept'] = 0
+                else:
+                    if 'test/c/mse' in result.columns:
+                        d['concept'] = result['test/c/mse'].iloc[-1]
+                    else:
+                        d['concept'] = result['test/c/acc'].iloc[-1]
 
-            performance = pd.concat([performance, pd.DataFrame([d])], ignore_index=True)
+                print(d)
+                
+                if d['model'] == 'l_cmr' and d['seed']==1:
+                    expl_dict = d.copy()
+                    expl_dict['path'] = exp
+                    lmr_paths.append(expl_dict)
+
+                performance = pd.concat([performance, pd.DataFrame([d])], ignore_index=True)
+        except Exception as e:
+            print(f"Error while processing {exp}: {e}")
+            continue
+
+    # Filter the dataset according to the following conditions:
+    # - if dataset is mnist_arithmetic, keep only memory_size=4
+    # - if dataset is dsprites_simple, keep only memory_size=3
+    performance = performance[~((performance['dataset']=='mnist_arithmetic') & (performance['memory_size']!=4))]
+    performance = performance[~((performance['dataset']=='dsprites_simple') & (performance['memory_size']!=3))]
 
     return performance, lmr_paths
 

@@ -5,10 +5,11 @@ defaults:
 params:
   _target_: "src.models.sym_cmr.SymbolicMemoryReasoner"
   task_penalty: ${task_penalty}
+  concept_penalty: ${concept_penalty}
   int_prob: ${int_prob}
   memory_size: ${memory_size}
   embedding_size: ${embedding_size}
-  mc_approx: 100
+  mc_approx: 10
   weight_reg: 1e-5
   equation_learning_strategy: "kan" 
 

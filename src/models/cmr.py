@@ -32,6 +32,7 @@ class ConceptMemoryReasoner(BaseModel):
                  backbone_latent_size=None,
                  concept_type='binary',
                  disjoint_training=False,
+                 concept_penalty=1.0,
                  **kwargs
                  ):
         super().__init__(
@@ -51,6 +52,7 @@ class ConceptMemoryReasoner(BaseModel):
             backbone_latent_size,
             concept_type,
             disjoint_training,
+            concept_penalty
         )
         self.logic_reasoning = True
         

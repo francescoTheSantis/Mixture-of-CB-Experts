@@ -108,10 +108,6 @@ class Trainer:
         self.trainer.fit(self.model, 
                          train_dataloader, 
                          val_dataloader, ckpt_path=ckpt_path)
-        
-        # Substitute the equations if KAN layers are used
-        if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner' and self.model.model.equation_learning_strategy=='kan':
-            self.model.model.substitute_equations_kan()
 
     def test(self, test_dataloader, ckpt_path=None):
         # Load the best model and test

@@ -43,8 +43,9 @@ class SymbolicMemoryReasoner(BaseModel):
                  equation_learning_strategy=None,
                  use_memory=True,
                  disjoint_training=False,
-                 decay_rate='exp',
+                 decay_rate='cosine',
                  embedding_memory=False,
+                 concept_penalty=1.0,
                  **kwargs
                  ):
 
@@ -64,7 +65,8 @@ class SymbolicMemoryReasoner(BaseModel):
             encoder,
             backbone_latent_size,
             concept_type,
-            disjoint_training
+            disjoint_training,
+            concept_penalty
         )
 
         self.embedding_size = embedding_size
@@ -76,6 +78,8 @@ class SymbolicMemoryReasoner(BaseModel):
         self.activation = activation
         self.decay_rate = decay_rate
         self.embedding_memory = embedding_memory
+        self.show_explanations = False
+        self.equations_for_explanations_ready = False
 
         self.mc_approx = mc_approx
         self.memory_size = memory_size
@@ -109,6 +113,8 @@ class SymbolicMemoryReasoner(BaseModel):
             self.kan_layers = nn.ModuleList()
             for i in range(self.memory_size):
                 kan_params['ckpt_path'] = os.path.join(os.getcwd(), f'kan{i}_ckpt')
+                # generate a random seed in order to have different initializations
+                kan_params['seed'] = np.random.randint(0, 10000)
                 kan_layer = KAN(**kan_params)
                 for param in kan_layer.get_params():
                     param.requires_grad = True
@@ -166,23 +172,6 @@ class SymbolicMemoryReasoner(BaseModel):
         else:
             explanations = self._get_explanations(prob_per_classifier, y_hat)
         return y_hat, explanations
-    
-    def substitute_equations_kan(self):
-        for i, kan_layer in enumerate(self.kan_layers):
-            # Save the symbolic formula of the KAN layer
-            # equation = kan_layer.symbolic_formula()[0]
-            # de-standardize if needed
-            # if self.task == 'regression' and self.scale_target:
-            #     y_mean = self.scaler.mean_.item()
-            #     y_std = self.scaler.std_.item()
-            #     equation = ((equation * y_std + y_mean))
-            # TODO: if de-standardize, fix the de-standardized equations in the memory
-            
-            # Prune the KAN layer to simplify the equation TODO: prune raise error due to tensors on different device
-            # kan_layer.prune()
-
-            # Substitute the KAN layers with their symbolic equations
-            kan_layer.auto_symbolic()
         
     ###### Equation conversion methods ######
     def _prepare_equations(self, equations):
@@ -269,22 +258,29 @@ class SymbolicMemoryReasoner(BaseModel):
         y_idx = y_hat.argmax(dim=1).squeeze().unsqueeze(1).expand(-1, exp_selection.size(1)).unsqueeze(-1)
         eq_idx = torch.gather(exp_selection, 2, y_idx).squeeze(-1).argmax(1)
 
-        self._setup_string_equations()
+        if self.show_explanations:
+            if not self.equations_for_explanations_ready:
+                self._setup_string_equations()
+            explanations = [self.string_equations[idx.item()] for _, idx in enumerate(eq_idx)]
+        else:
+            explanations = None
 
-        explanations = [self.string_equations[idx.item()] for _, idx in enumerate(eq_idx)]
         return explanations
 
     def _setup_string_equations(self):
-        # if the self.string_equations have not been computed yet, compute them        if not hasattr(self, 'string_equations'):
+        # If set to true, this function will never be called again
+        self.equations_for_explanations_ready = True
+
         if self.equation_learning_strategy=='prior_knowledge':
             equations = self.known_equations
         elif self.equation_learning_strategy=='kan':
-            equations = [kan_layer.symbolic_formula()[0] for kan_layer in self.kan_layers]
-            # # de-standardize if needed # TODO
-            # if self.task == 'regression' and self.scale_target:
-            #     y_mean = self.scaler.mean_.item()
-            #     y_std = self.scaler.std_.item()
-            #     equations = [((eq * y_std + y_mean)) for eq in equations]
+            equations = []
+            for kan_layer in self.kan_layers:
+                # TODO: change to auto_symbolic when the function is fixed
+                # kan_layer.auto_symbolic()
+                # equations.append(kan_layer.symbolic_formula()[0][0])
+                equations.append("volevi")
+
         # convert to string
         self.string_equations = [str(eq) for eq in equations]
 
@@ -296,6 +292,9 @@ class SymbolicMemoryReasoner(BaseModel):
         elif self.decay_rate == 'exp':
             # Exponential decay to decrease tau over time
             tau = max(tau_min, tau_init * decay_rate ** global_step)
+        elif self.decay_rate == 'cosine':
+            # Cosine decay to decrease tau over time
+            tau = tau_min + (tau_init - tau_min) * (1 + np.cos(np.pi * global_step / 10000)) / 2
         else:
             raise ValueError(f"Unknown decay rate: {self.decay_rate}")
         return tau

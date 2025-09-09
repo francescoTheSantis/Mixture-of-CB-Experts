@@ -140,7 +140,7 @@ def plot_sample(x, c, y, root, idx):
 # Example usage
 if __name__ == "__main__":
     root = DATA_PATH
-    dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, num_samples=5, img_size=224)
+    dataset = ArithmeticMNISTDataset(mnist_root=DATA_PATH, num_samples=10, img_size=224, operators=('x', '/'))
     root = f"{HOME}/figs/mnist_arithmetic_examples"
     os.makedirs(root, exist_ok=True)
     for idx in range(10):

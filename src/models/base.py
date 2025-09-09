@@ -25,6 +25,7 @@ class BaseModel(nn.Module):
                  backbone_latent_size=None,
                  concept_type='binary',
                  disjoint_training=False,
+                 concept_penalty=1.0
                  ):
         super().__init__()
         
@@ -45,6 +46,7 @@ class BaseModel(nn.Module):
         self.has_concepts = None # This value has to be overriden by the inheriting class
         self.noise = noise
         self.disjoint_training = disjoint_training
+        self.concept_penalty = concept_penalty
 
         self.logic_reasoning = False # This value has to be overriden by the inheriting class if it is a logic-based model
 
@@ -233,8 +235,8 @@ class BaseModel(nn.Module):
         # normalize over the number of concepts to avoid high concept loss
         concept_loss /= c.shape[1]
 
-        # combine the two losses by considering the task penalty regularization
-        loss = concept_loss + self.task_penalty * task_loss
+        # combine the two losses by considering the task & concept penalty regularization
+        loss = self.concept_penalty * concept_loss + self.task_penalty * task_loss
         return loss
 
     def get_intervened_concepts_predictions(self, labels, groups=None):

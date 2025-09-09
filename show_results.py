@@ -15,18 +15,18 @@ plt.style.use(['science', 'ieee', 'no-latex'])
 
 # Define the custom order
 # If the experiment you run does not contain a dataset, just remove it from the list.
-custom_order = ['xor', \
+custom_order = [#'xor', \
                 #'dot', \
                 #'checkmark', \
                 #'trigonometry', \
-                'mnist_addition', \
-                'cub', \
-                'awa2',
-                'awa2_incomplete',
-                'cub_incomplete',
+                #'mnist_addition', \
+                #'cub', \
+                #'awa2',
+                #'awa2_incomplete',
+                #'cub_incomplete',
                 #'cebab',
                 #'celeba',
-                'cifar10',
+                #'cifar10',
                 'cifar100',
                 'dsprites_simple',
                 'mnist_arithmetic',
@@ -45,7 +45,8 @@ model_styles = {
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:gray', 'size': marker_size},
     'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:cyan', 'size': marker_size},
     'l_cmr': {'marker': 's', 'name': 'L-CMR', 'color': 'tab:green', 'size': marker_size},
-    #'m_licem_local': {'marker': 'X', 'name': 'M-LICEM Local', 'color': 'tab:red', 'size': marker_size}
+    'lm_sym_cmr_prior': {'marker': 'X', 'name': 'M-Sym-True', 'color': 'tab:brown', 'size': marker_size},
+    'lm_sym_cmr_kan': {'marker': 'X', 'name': 'M-Sym-Kan', 'color': 'tab:olive', 'size': marker_size},
 }
 
 # Call the function with the desired metric and font properties
@@ -65,7 +66,8 @@ def main():
 
     # List the paths containing the results
     paths = [
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-08_17-39-46",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-08_20-41-17",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-08_20-41-27"
     ]
 
     try:
@@ -83,7 +85,7 @@ def main():
                             performance['dataset'].isin(custom_order)]
 
     ######### Only for the LinearMemoryReasoner with seed=1, plot explanations #########
-    plot_explanations(lmr_paths)
+    # plot_explanations(lmr_paths)
 
     ########## Task & Concept Accuracy Plot ##########
 
@@ -241,8 +243,10 @@ def main():
     ##################################################
 
     paths = [
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-08_17-39-46"
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-08_20-41-17",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-08_20-41-27"
     ]
+
     try:
         performance, _ = get_exp_from_path(paths)
         plot_memory_ablation(performance, model_styles, title_font, label_font, tick_font)
@@ -254,8 +258,9 @@ def main():
     ############################################################
 
     paths = [
-            "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-08_17-39-46"
-        ]
+        "",
+    ]
+
     try:
         performance, _ = get_exp_from_path(paths)
         # Plot the results on the concept size ablation
