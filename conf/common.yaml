@@ -17,7 +17,7 @@ num_workers: 10
 ## These parameters can be overridden by the dataset config
 latent_size: 64
 batch_size: 128
-scale_target: True
+scale_target: False
 
 ## Shared Concept-based model parameters
 task_penalty: 1.0

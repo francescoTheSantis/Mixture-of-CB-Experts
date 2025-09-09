@@ -13,8 +13,8 @@ import sympytorch
 import numpy as np
 import os
 from kan import KAN
-# # os.environ["JULIA_NUM_THREADS"] = "8" # Set the number of threads for Julia (used by PySR)
-# from pysr import PySRRegressor
+# Efficient implementation of KAN:
+from src.models.efficient_kan.kan import KAN as EfficientKAN
 
 class SymbolicMemoryReasoner(BaseModel):
     def __init__(self, 
@@ -41,7 +41,6 @@ class SymbolicMemoryReasoner(BaseModel):
                  concept_type='binary',
                  known_equations=None,
                  equation_learning_strategy=None,
-                 use_memory=True,
                  disjoint_training=False,
                  decay_rate='cosine',
                  embedding_memory=False,
@@ -83,7 +82,6 @@ class SymbolicMemoryReasoner(BaseModel):
 
         self.mc_approx = mc_approx
         self.memory_size = memory_size
-        self.use_memory = use_memory
         self.selector_model = selector_model
 
         self.bottleneck = pyc_nn.LinearConceptBottleneck(
@@ -96,29 +94,33 @@ class SymbolicMemoryReasoner(BaseModel):
         self.equation_learning_strategy = equation_learning_strategy
         self.known_equations = known_equations
 
-        # Handle parameter inconsistencies
-        if len(self.known_equations)>1 and not self.use_memory:
-            raise ValueError("If multiple equations are provided, memory must be used to select among them.")
-        
         if self.equation_learning_strategy not in ['prior_knowledge', 'kan']:
             raise ValueError(f"Unknown equation learning strategy: {self.equation_learning_strategy}")
         
         if self.equation_learning_strategy == 'kan':
-            kan_params = {
-                    'width': [len(self.c_names), len(self.c_names), self.output_size], # TODO change the hidden size to len(self.c_names)+1 for higher performance
-                    'grid': 5,
-                    'k': 4,
-            }
-            # Instantiate as many KAN Layers as the memory size
-            self.kan_layers = nn.ModuleList()
-            for i in range(self.memory_size):
-                kan_params['ckpt_path'] = os.path.join(os.getcwd(), f'kan{i}_ckpt')
-                # generate a random seed in order to have different initializations
-                kan_params['seed'] = np.random.randint(0, 10000)
-                kan_layer = KAN(**kan_params)
-                for param in kan_layer.get_params():
-                    param.requires_grad = True
-                self.kan_layers.append(kan_layer)
+            if self.output_size == 1:
+                kan_params = {
+                        'width': [len(self.c_names), len(self.c_names)+1, self.output_size], 
+                        'grid': 5,
+                        'k': 4,
+                }
+                # Instantiate as many KAN Layers as the memory size
+                self.kan_layers = nn.ModuleList()
+                for i in range(self.memory_size):
+                    kan_params['ckpt_path'] = os.path.join(os.getcwd(), f'kan{i}_ckpt')
+                    # generate a random seed in order to have different initializations
+                    kan_params['seed'] = np.random.randint(0, 10000)
+                    kan_layer = KAN(**kan_params)
+                    for param in kan_layer.get_params():
+                        param.requires_grad = True
+                    self.kan_layers.append(kan_layer)
+            else:
+                self.kan_layers = nn.ModuleList()
+                for i in range(self.memory_size):
+                    kan_layers = EfficientKAN([len(self.c_names), len(self.c_names)+1, self.output_size])
+                    for param in kan_layers.parameters():
+                        param.requires_grad = True
+                    self.kan_layers.append(kan_layers)
         
     ###### Setup methods ######
     def setup_memory(self):
@@ -148,7 +150,9 @@ class SymbolicMemoryReasoner(BaseModel):
         # Update the grid of all KAN layers based on the provided inputs
         for kan_layer in self.kan_layers:
             kan_layer.to(inputs.device)
-            kan_layer.update_grid_from_samples(inputs)
+            # if the values are in the range [-1, 1], we do not apply the grid update
+            if torch.min(inputs) < -1 or torch.max(inputs) > 1:
+                kan_layer.update_grid_from_samples(inputs)
 
     def _execute_kan(self, prob_per_classifier, input_concepts):
         # Execute all the KAN layers
@@ -159,12 +163,15 @@ class SymbolicMemoryReasoner(BaseModel):
         # Stack the outputs along the class dimension
         eq_outputs = torch.stack(eq_outputs, dim=1).squeeze() # Shape: (bsz, n_equations)
 
-        if self.memory_size == 1:
-            # Associate the output of the unique KAN to all the classes
-            y_hat = eq_outputs.unsqueeze(-1).unsqueeze(-1).expand(-1, len(self.y_names), -1)
-        else:
-            # Combine the outputs using the selector probabilities
-            y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
+        if self.task == 'regression':
+            if self.memory_size == 1:
+                # Associate the output of the unique KAN to all the classes
+                y_hat = eq_outputs.unsqueeze(-1).unsqueeze(-1).expand(-1, len(self.y_names), -1)
+            else:
+                # Combine the outputs using the selector probabilities
+                y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
+        elif self.task == 'classification':
+            y_hat = torch.einsum('bmts,bmt->bts', prob_per_classifier, eq_outputs)
 
         # Get the explanations (the selected equations)
         if self.training:
@@ -314,7 +321,7 @@ class SymbolicMemoryReasoner(BaseModel):
             n_samples = 1
 
         ## Memory block ##
-        if self.use_memory and self.memory_size>1:
+        if self.memory_size>1:
             classifier_selector_logits = self.classifier_selector(latent)
             # Reshape the logits to have dimension (bsz, memory_size, n_classes)
             classifier_selector_logits = classifier_selector_logits.view(-1, self.memory_size, len(self.y_names))

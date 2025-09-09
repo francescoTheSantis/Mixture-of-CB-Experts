@@ -5,6 +5,7 @@ from src.models.base import BaseModel
 import torch.nn.functional as F
 from torch_concepts.nn import concept_embedding_mixture
 from src.models.encoders.mlp import MLPEncoder
+import numpy as np
 
 class LinearMemoryReasoner(BaseModel):
     def __init__(self, 
@@ -32,6 +33,7 @@ class LinearMemoryReasoner(BaseModel):
                  concept_loss_form=nn.BCELoss(),
                  backbone_latent_size=None,
                  concept_type='binary',
+                 decay_rate='cosine',
                  bias=None,
                  disjoint_training=False,
                  concept_penalty=1.0,
@@ -69,6 +71,7 @@ class LinearMemoryReasoner(BaseModel):
         self.memory_size = memory_size
         self.linear_classifier_selection = linear_classifier_selection
         self.selector_model = selector_model
+        self.decay_rate = decay_rate
 
         self.bias = None if bias is None else bias
 
@@ -123,9 +126,18 @@ class LinearMemoryReasoner(BaseModel):
         if self.bias == 'global':
             self.bias_params = nn.Parameter(torch.zeros(len(self.y_names))) 
 
-    def compute_tau(self, global_step, tau_init=1, tau_min=0.05, decay_rate=0.99):
-        # Exponential decay to decrease tau over time
-        tau = max(tau_min, tau_init * decay_rate ** global_step)
+    def compute_tau(self, global_step, tau_init=2, tau_min=0.05, decay_rate=0.99):
+        if self.decay_rate == 'linear':
+            # Linear decay to decrease tau over time
+            tau = max(tau_min, tau_init - decay_rate * global_step)
+        elif self.decay_rate == 'exp':
+            # Exponential decay to decrease tau over time
+            tau = max(tau_min, tau_init * decay_rate ** global_step)
+        elif self.decay_rate == 'cosine':
+            # Cosine decay to decrease tau over time
+            tau = tau_min + (tau_init - tau_min) * (1 + np.cos(np.pi * global_step / 10000)) / 2
+        else:
+            raise ValueError(f"Unknown decay rate: {self.decay_rate}")
         return tau
 
     def forward(self, input):
