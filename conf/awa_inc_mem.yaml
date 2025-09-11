@@ -5,13 +5,13 @@ defaults:
 hydra:
   mode: MULTIRUN
   sweep:
-      dir: output/cifar100_mem/${now:%Y-%m-%d_%H-%M-%S}
+      dir: output/awa2_inc_mem/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
       seed: 1, 2, 3, 4, 5
-      dataset: cifar100
+      dataset: awa2_incomplete
       model: l_cmr, cmr, sym_cmr
       memory_size: 1, 2, 3, 4, 5, 10, 20, 50 
 
-# Small backbone for toy datasets
-img_backbone_name: resnet50
+# Bigger backbone for real world datasets
+img_backbone_name: facebook/dinov2-base

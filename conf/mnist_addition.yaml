@@ -1,0 +1,16 @@
+defaults:
+  - common
+  - _self_
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+      dir: output/mnist_addition/${now:%Y-%m-%d_%H-%M-%S}
+  sweeper:
+    params:
+      seed: 1, 2, 3, 4, 5
+      dataset: mnist_addition
+      model: blackbox, cbm_linear, cem, dcr, licem
+
+# Small backbone for toy datasets
+img_backbone_name: resnet50

@@ -1,0 +1,17 @@
+defaults:
+  - common
+  - _self_
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+      dir: output/mnist_addition_mem/${now:%Y-%m-%d_%H-%M-%S}
+  sweeper:
+    params:
+      seed: 1, 2, 3, 4, 5
+      dataset: mnist_addition
+      model: l_cmr, cmr, sym_cmr
+      memory_size: 1, 2, 3, 4, 5, 10, 20, 50 
+
+# Small backbone for toy datasets
+img_backbone_name: resnet50
