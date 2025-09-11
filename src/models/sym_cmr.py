@@ -110,7 +110,7 @@ class SymbolicMemoryReasoner(BaseModel):
             # implementation for all the other cases.
             # The advantage in using the original KAN implementation is that it allows to extract the symbolic formula learned by the model.
 
-            width = [len(self.c_names), len(self.c_names)+1, self.output_size]
+            width = [len(self.c_names), len(self.c_names), self.output_size]
 
             if self.output_size == 1:
                 kan_params = {
@@ -165,15 +165,15 @@ class SymbolicMemoryReasoner(BaseModel):
             raise ValueError(f"Unknown selector model: {self.selector_model}")
 
     ###### KAN related methods ######
-    def setup_kan_grid(self, inputs):  
-        inputs = inputs if inputs.ndim > 1 else inputs.unsqueeze(1)
+    def setup_kan_grid(self, grid_inputs):  
+        grid_inputs = grid_inputs if grid_inputs.ndim > 1 else grid_inputs.unsqueeze(1)
         # Update the grid of all KAN layers based on the provided inputs
         for kan_layer in self.kan_layers:
-            kan_layer.to(inputs.device)
+            kan_layer.to(grid_inputs.device)
             # if the values are in the range [-1, 1], we do not apply the grid update
-            if torch.min(inputs) < -1 or torch.max(inputs) > 1:
-                kan_layer.update_grid_from_samples(inputs)
-    
+            if torch.min(grid_inputs) < -1 or torch.max(grid_inputs) > 1:
+                kan_layer.update_grid_from_samples(grid_inputs)
+
     # def prune_kan_layers(self):
     #     kan_layers = nn.ModuleList()
     #     # Prune each KAN layer by removing unnecessary edges and nodes
@@ -318,7 +318,7 @@ class SymbolicMemoryReasoner(BaseModel):
                 kan_layer.plot(folder=os.path.join(os.getcwd(), f'kan{i}_ckpt'))
                 #kan_layer.auto_symbolic(lib=USER_DEFINED_SYMBOLS)
                 #kan_layer.auto_symbolic()
-                equations.append(kan_layer.symbolic_formula()[0][0])
+                #equations.append(kan_layer.symbolic_formula()[0][0])
 
         # convert to string
         self.string_equations = [str(eq) for eq in equations]
@@ -339,10 +339,6 @@ class SymbolicMemoryReasoner(BaseModel):
         return tau
 
     def forward(self, input):
-
-        # Increase regularization strength over time
-        if self.global_step % 50 == 0 and self.lamb < 0.05 and self.regularize:
-            self.lamb += 0.01
 
         latent, x_concepts, c_true, int_idxs = self.encode(input)
         bsz = latent.shape[0]
