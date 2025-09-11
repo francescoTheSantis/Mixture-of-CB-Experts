@@ -20,6 +20,7 @@ from src.loaders.datasets.pendulum import PendulumDataset
 from src.loaders.datasets.pendulum import CONCEPT_NAMES as concept_names_pendulum
 from src.loaders.datasets.pendulum import TASK_NAMES as task_names_pendulum
 from src.loaders.datasets.dsprites import DSprites
+from src.loaders.datasets.mnist_exponential import MNISTExponential
 
 from torch.utils.data import DataLoader, random_split
 from env import DATA_PATH
@@ -238,6 +239,10 @@ class loader(object):
             concept_names = self.selected_concepts
             task_names = ['custom_target']
             concept_groups = None
+        elif self.name == "mnist_exponential":
+            concept_names = ['digit']
+            task_names = ['exponential']
+            concept_groups = None
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
         
@@ -308,7 +313,15 @@ class loader(object):
                 equations.append(f"c0 {operators[i]} c1")
             # Create a dataframe and save it
             equations_df = pd.DataFrame(equations, columns=['equation'])
-            equations_df.to_csv(f"{self.data_path}/mnist_arithmetic_hard_equations.csv", index=False)            
+            equations_df.to_csv(f"{self.data_path}/mnist_arithmetic_hard_equations.csv", index=False)     
+        elif self.name == "mnist_exponential":
+            train_set = MNISTExponential(train=True)
+            test_dataset = MNISTExponential(train=False)
+            # Split the dataset into train, validation and test sets
+            total_size = len(train_set)
+            train_size = int(0.9 * total_size)
+            val_size = total_size - train_size
+            train_dataset, val_dataset = random_split(train_set, [train_size, val_size])
         elif self.name == 'cub' and self.concept_percentage is None:
             train_dataset = CUBDataset(root=DATA_PATH, split='train')
             val_dataset = CUBDataset(root=DATA_PATH, split='val')

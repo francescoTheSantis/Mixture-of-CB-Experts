@@ -114,6 +114,9 @@ class Engine(pl.LightningModule):
     def shared_step(self, batch):
         # batch['x'] will be a tensor for image and toy datasets, and a dict for text datasets.
 
+        # Maintain the shape of c to be (batch_size, n_concepts)
+        batch['c'] = batch['c'] if batch['c'].ndim > 1 else batch['c'].unsqueeze(-1)
+
         # model forward
         model_output = self.forward(batch)
 
@@ -150,12 +153,14 @@ class Engine(pl.LightningModule):
             self.log('train_selection_entropy', selection_entropy)
         return loss
 
-    def on_train_end(self):
-        # If the model is the symbolic memory reasoner and
-        # KANs are used to learn the equations, we need to
-        # substitute the learnt splines with the symbolic equations.
-        if self.model_name == 'SymbolicMemoryReasoner':
-            self.model.show_explanations = True
+    # def on_train_epoch_end(self):
+    #     # If the model is the symbolic memory reasoner and
+    #     # KANs are used to learn the equations, we need to
+    #     # update the KAN grid every 10 epochs.
+    #     if self.model_name == 'SymbolicMemoryReasoner':
+    #         if self.model.equation_learning_strategy=='kan':
+    #             if self.current_epoch % 10 == 0:
+    #                 self.model.setup_kan_grid(self.c_trues)
 
     def validation_step(self, batch, batch_idx):
         loss, model_output = self.shared_step(batch)
@@ -178,6 +183,16 @@ class Engine(pl.LightningModule):
             self.log('val_selection_entropy', selection_entropy)
         return loss 
     
+    def on_test_start(self):
+        # If the model is the symbolic memory reasoner and
+        # KANs are used to learn the equations, 
+        if self.model_name == 'SymbolicMemoryReasoner':
+            # if self.model.equation_learning_strategy=='kan' and self.model.regularize:
+            #     # Prune the model
+            #     self.model.prune_kan_layers()
+        # substitute the learned splines with the symbolic equations.
+            self.model.show_explanations = True
+
     def test_step(self, batch, batch_idx):
         loss, model_output = self.shared_step(batch)
         self.log("test_loss", loss.item())
@@ -209,7 +224,6 @@ class Engine(pl.LightningModule):
             return tensor * self.model.y_std + self.model.y_mean
         else:
             return tensor
-
 
     def on_test_epoch_end(self):
         # The whole function is only executed for: LinearMemoryReasoner, SymbolicMemoryReasoner.

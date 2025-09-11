@@ -1,0 +1,17 @@
+defaults:
+  - common
+  - _self_
+
+loader: 
+  name: mnist_exponential
+  batch_size: 128
+
+# Dataset parameters
+metadata:
+  task: regression
+  lr: 0.001
+  name: mnist_exponential
+  data_type: image
+  concept_type: [integer]
+
+latent_size: 64

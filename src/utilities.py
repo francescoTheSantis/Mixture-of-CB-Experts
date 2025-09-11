@@ -119,7 +119,8 @@ def get_type_from_name(dataset_name):
     if dataset_name in ['mnist_addition', 'cub', 'cub_incomplete', \
                         'awa2', 'awa2_incomplete', 'xor', 'celeba', \
                         'cifar10', 'cifar100', 'mnist_arithmetic', 'mnist_arithmetic_hard', \
-                        'pendulum', 'dsprites', 'dsprites_simple', 'dsprites_complex']:
+                        'pendulum', 'dsprites', 'dsprites_simple', 'dsprites_complex', \
+                        'mnist_exponential']:
         return 'image'
     else:
         return 'text'
@@ -263,7 +264,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         )
 
         hard_concepts = cfg.hard_concepts
-        concept_type = prepare_concept_type(cfg.dataset.metadata.concept_type, cfg.engine.c_names)
+        concept_type = prepare_concept_type(cfg.dataset.metadata.concept_type, cfg.engine.c_names, cfg.dataset.metadata.name)
 
         # If cfg.dataset.equations exists, then we want to use the known equations,
         # null otherwise
@@ -286,11 +287,13 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
 
     return cfg
 
-def prepare_concept_type(c_types, c_names):
+def prepare_concept_type(c_types, c_names, dataset_name):
     n_concepts = len(c_names)
     if isinstance(c_types, list):
         return c_types
     else:
+        if dataset_name == 'mnist_exponential':
+            return c_types
         return [c_types] * n_concepts
 
 def generate_data_path(cfg):

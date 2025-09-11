@@ -111,6 +111,9 @@ class BaseModel(nn.Module):
             int_idxs = torch.zeros_like(c_true)
         int_idxs = int_idxs.bool()
 
+        # Maintain the same 2d format even if only one concept is provided
+        int_idxs = int_idxs.unsqueeze(-1) if int_idxs.ndim == 1 else int_idxs
+
         return h, h_concepts, c_true, int_idxs
     
     def _logic_model_checker(self):
@@ -180,6 +183,7 @@ class BaseModel(nn.Module):
 
         # Combine binary_mask with int_mask
         binary_mask = binary_mask & ~int_idxs
+        binary_mask = binary_mask if binary_mask.ndim > 1 else binary_mask.unsqueeze(-1)
 
         # Apply activations using masks
         c_hat = torch.where(binary_mask, torch.sigmoid(c_hat), c_hat)
@@ -246,7 +250,7 @@ class BaseModel(nn.Module):
         will be replaced with their respective ground-truth values.
         """
         bsz = labels.shape[0]
-        n_concepts = labels.shape[1]
+        n_concepts = 1 if labels.ndim==1 else labels.shape[1]
 
         return (torch.rand(bsz, 1, device=labels.device) < self.int_prob).expand(bsz, n_concepts).int()
 

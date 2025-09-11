@@ -16,6 +16,10 @@ from kan import KAN
 # Efficient implementation of KAN:
 from src.models.efficient_kan.kan import KAN as EfficientKAN
 
+# This is intended to be the list of symbols that the user can understand
+# when looking at the equations produced by the model.
+USER_DEFINED_SYMBOLS = ['x','x^2','exp','sin','cos'] 
+
 class SymbolicMemoryReasoner(BaseModel):
     def __init__(self, 
                  output_size,
@@ -45,6 +49,7 @@ class SymbolicMemoryReasoner(BaseModel):
                  decay_rate='cosine',
                  embedding_memory=False,
                  concept_penalty=1.0,
+                 regularize=True,
                  **kwargs
                  ):
 
@@ -79,6 +84,7 @@ class SymbolicMemoryReasoner(BaseModel):
         self.embedding_memory = embedding_memory
         self.show_explanations = False
         self.equations_for_explanations_ready = False
+        self.regularize = regularize
 
         self.mc_approx = mc_approx
         self.memory_size = memory_size
@@ -98,11 +104,19 @@ class SymbolicMemoryReasoner(BaseModel):
             raise ValueError(f"Unknown equation learning strategy: {self.equation_learning_strategy}")
         
         if self.equation_learning_strategy == 'kan':
+            ##### NOTE #####
+            # The original KAN implementation is really slow when dealing with high dimensional inputs and outputs.
+            # for this reason we the original implmentation for regression tasks with a single output, and we use an efficient
+            # implementation for all the other cases.
+            # The advantage in using the original KAN implementation is that it allows to extract the symbolic formula learned by the model.
+
+            width = [len(self.c_names), len(self.c_names)+1, self.output_size]
+
             if self.output_size == 1:
                 kan_params = {
-                        'width': [len(self.c_names), len(self.c_names)+1, self.output_size], 
+                        'width': width, 
                         'grid': 5,
-                        'k': 4,
+                        'k': 3,
                 }
                 # Instantiate as many KAN Layers as the memory size
                 self.kan_layers = nn.ModuleList()
@@ -113,11 +127,16 @@ class SymbolicMemoryReasoner(BaseModel):
                     kan_layer = KAN(**kan_params)
                     for param in kan_layer.get_params():
                         param.requires_grad = True
+                    if self.regularize:
+                        self.lamb = 0.02 # increase for higher sparsity (e.g., 0.1, 0.2, ...)
+                        old_save_act, old_symbolic_enabled = kan_layer.disable_symbolic_in_fit(self.lamb)
+                        kan_layer.symbolic_enabled = old_symbolic_enabled
+                        kan_layer.save_act  = old_save_act
                     self.kan_layers.append(kan_layer)
             else:
                 self.kan_layers = nn.ModuleList()
                 for i in range(self.memory_size):
-                    kan_layers = EfficientKAN([len(self.c_names), len(self.c_names)+1, self.output_size])
+                    kan_layers = EfficientKAN(width)
                     for param in kan_layers.parameters():
                         param.requires_grad = True
                     self.kan_layers.append(kan_layers)
@@ -146,19 +165,31 @@ class SymbolicMemoryReasoner(BaseModel):
             raise ValueError(f"Unknown selector model: {self.selector_model}")
 
     ###### KAN related methods ######
-    def setup_kan_grid(self, inputs):        
+    def setup_kan_grid(self, inputs):  
+        inputs = inputs if inputs.ndim > 1 else inputs.unsqueeze(1)
         # Update the grid of all KAN layers based on the provided inputs
         for kan_layer in self.kan_layers:
             kan_layer.to(inputs.device)
             # if the values are in the range [-1, 1], we do not apply the grid update
             if torch.min(inputs) < -1 or torch.max(inputs) > 1:
                 kan_layer.update_grid_from_samples(inputs)
+    
+    # def prune_kan_layers(self):
+    #     kan_layers = nn.ModuleList()
+    #     # Prune each KAN layer by removing unnecessary edges and nodes
+    #     for kan_layer in self.kan_layers:
+    #         pruned_layer = kan_layer.prune()
+    #         kan_layers.append(pruned_layer)
+    #     self.kan_layers = kan_layers
 
     def _execute_kan(self, prob_per_classifier, input_concepts):
         # Execute all the KAN layers
         eq_outputs = []
         for i, kan_layer in enumerate(self.kan_layers):
-            eq_output = kan_layer(input_concepts)
+            if self.output_size==1 and self.regularize:
+                eq_output = kan_layer(input_concepts, singularity_avoiding=True, y_th=1000)
+            else:
+                eq_output = kan_layer(input_concepts)
             eq_outputs.append(eq_output)
         # Stack the outputs along the class dimension
         eq_outputs = torch.stack(eq_outputs, dim=1).squeeze() # Shape: (bsz, n_equations)
@@ -282,13 +313,14 @@ class SymbolicMemoryReasoner(BaseModel):
             equations = self.known_equations
         elif self.equation_learning_strategy=='kan':
             equations = []
-            for kan_layer in self.kan_layers:
-                # TODO: change to auto_symbolic when the function is fixed
-                # kan_layer.auto_symbolic()
-                # equations.append(kan_layer.symbolic_formula()[0][0])
-                equations.append("volevi")
+            for i, kan_layer in enumerate(self.kan_layers):
+                # Plot the kan layer
+                kan_layer.plot(folder=os.path.join(os.getcwd(), f'kan{i}_ckpt'))
+                #kan_layer.auto_symbolic(lib=USER_DEFINED_SYMBOLS)
+                #kan_layer.auto_symbolic()
+                equations.append(kan_layer.symbolic_formula()[0][0])
 
-        # convert to string
+        # convert to string
         self.string_equations = [str(eq) for eq in equations]
 
     ###### Forward and loss methods ######
@@ -307,6 +339,11 @@ class SymbolicMemoryReasoner(BaseModel):
         return tau
 
     def forward(self, input):
+
+        # Increase regularization strength over time
+        if self.global_step % 50 == 0 and self.lamb < 0.05 and self.regularize:
+            self.lamb += 0.01
+
         latent, x_concepts, c_true, int_idxs = self.encode(input)
         bsz = latent.shape[0]
 
@@ -351,8 +388,16 @@ class SymbolicMemoryReasoner(BaseModel):
             'selection_dist': selection_dist
         }
 
+    def kan_regularization_term(self):
+        reg_term = 0.0
+        for kan_layer in self.kan_layers:
+            reg_term += kan_layer.get_reg(reg_metric="edge_forward_spline_n", lamb_l1=1, lamb_entropy=2, lamb_coef=0, lamb_coefdiff=0)
+        return reg_term * self.lamb
+
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
+        if self.output_size == 1 and self.regularize:
+            loss += self.kan_regularization_term()
         return loss
     
 

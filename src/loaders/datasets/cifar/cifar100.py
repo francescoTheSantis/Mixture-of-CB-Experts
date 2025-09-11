@@ -16,13 +16,13 @@ def get_CIFAR100_CBM_dataloader(datapath, selected_idxs=None):
         "train": CIFAR100_CBM_dataloader(
             root=datapath,
             train=True,
-            download=False,
+            download=True,
             selected_idxs=selected_idxs
         ),
         "test": CIFAR100_CBM_dataloader(
             root=datapath,
             train=False,
-            download=False,
+            download=True,
             selected_idxs=selected_idxs 
         ),
     }

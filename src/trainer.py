@@ -104,6 +104,8 @@ class Trainer:
             # This operation is required for any kind of task (classification, regression, ...).
             if self.model.model.equation_learning_strategy=='kan':
                 self.model.model.setup_kan_grid(c_trues.to(self.cfg.gpus[0]))
+                # Save c_true sin model as it will used to update the grid during training
+                # self.model.grid_inputs = c_trues.to(self.cfg.gpus[0])
                 
         self.trainer.fit(self.model, 
                          train_dataloader, 
