@@ -110,7 +110,7 @@ class SymbolicMemoryReasoner(BaseModel):
             # implementation for all the other cases.
             # The advantage in using the original KAN implementation is that it allows to extract the symbolic formula learned by the model.
 
-            width = [len(self.c_names), len(self.c_names), self.output_size]
+            width = [len(self.c_names), len(self.c_names)+1, self.output_size]
 
             if self.output_size == 1:
                 kan_params = {
@@ -181,6 +181,15 @@ class SymbolicMemoryReasoner(BaseModel):
     #         pruned_layer = kan_layer.prune()
     #         kan_layers.append(pruned_layer)
     #     self.kan_layers = kan_layers
+
+    def get_learned_equations(self):
+        equations = []
+        if self.equation_learning_strategy !='kan' or self.output_size!=1:
+            raise ValueError("This method is only implemented for KAN with single output.")
+        for i, kan_layer in enumerate(self.kan_layers):
+            kan_layer.auto_symbolic()
+            equations.append(kan_layer.symbolic_formula()[0][0])
+        return equations
 
     def _execute_kan(self, prob_per_classifier, input_concepts):
         # Execute all the KAN layers
@@ -313,9 +322,8 @@ class SymbolicMemoryReasoner(BaseModel):
             equations = self.known_equations
         elif self.equation_learning_strategy=='kan':
             equations = []
-            for i, kan_layer in enumerate(self.kan_layers):
+            #for i, kan_layer in enumerate(self.kan_layers):
                 # Plot the kan layer
-                kan_layer.plot(folder=os.path.join(os.getcwd(), f'kan{i}_ckpt'))
                 #kan_layer.auto_symbolic(lib=USER_DEFINED_SYMBOLS)
                 #kan_layer.auto_symbolic()
                 #equations.append(kan_layer.symbolic_formula()[0][0])

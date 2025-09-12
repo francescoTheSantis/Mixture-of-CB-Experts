@@ -8,10 +8,10 @@ hydra:
       dir: output/cub_incomplete_mem/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 1, 2, 3, 4, 5
+      seed: 1 #, 2, 3, 4, 5
       dataset: cub_incomplete
-      model: l_cmr, cmr, sym_cmr
       memory_size: 1, 2, 3, 4, 5, 10, 20, 50 
+      model: l_cmr, cmr, sym_cmr_kan
 
 # Bigger backbone for real world datasets
 img_backbone_name: facebook/dinov2-base

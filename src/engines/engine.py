@@ -1,3 +1,4 @@
+import os
 from typing import Optional
 from torch import nn
 import torch
@@ -8,6 +9,7 @@ import pandas as pd
 import torch.nn.functional as F
 from torchmetrics import Metric, MetricCollection
 import sympy as sp
+import os
 
 from src.models.base import BaseModel
 
@@ -158,7 +160,7 @@ class Engine(pl.LightningModule):
         # KANs are used to learn the equations, we need to
         # update the KAN grid every 10 epochs.
         if self.model_name == 'SymbolicMemoryReasoner':
-            if self.model.equation_learning_strategy=='kan':
+            if self.model.equation_learning_strategy=='kan' and self.num_classes==1:
                 if self.current_epoch % 10 == 0 and self.current_epoch<=50:
                     self.model.setup_kan_grid(self.grid_inputs)
 
@@ -183,15 +185,15 @@ class Engine(pl.LightningModule):
             self.log('val_selection_entropy', selection_entropy)
         return loss 
     
-    def on_test_start(self):
-        # If the model is the symbolic memory reasoner and
-        # KANs are used to learn the equations, 
-        if self.model_name == 'SymbolicMemoryReasoner':
-            # if self.model.equation_learning_strategy=='kan' and self.model.regularize:
-            #     # Prune the model
-            #     self.model.prune_kan_layers()
-        # substitute the learned splines with the symbolic equations.
-            self.model.show_explanations = True
+    # def on_test_start(self):
+    #     # If the model is the symbolic memory reasoner and
+    #     # KANs are used to learn the equations, 
+    #     if self.model_name == 'SymbolicMemoryReasoner':
+    #         # if self.model.equation_learning_strategy=='kan' and self.model.regularize:
+    #         #     # Prune the model
+    #         #     self.model.prune_kan_layers()
+    #     # substitute the learned splines with the symbolic equations.
+    #         self.model.show_explanations = True
 
     def test_step(self, batch, batch_idx):
         loss, model_output = self.shared_step(batch)
@@ -207,7 +209,7 @@ class Engine(pl.LightningModule):
         # update the tensors required for the explanations.
         c = batch['c']
         y = batch['y']
-        if self.model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
+        if self.model_name in ['LinearMemoryReasoner']:
             if self.model_name == 'LinearMemoryReasoner':
                 self.explanations.append(model_output['explanations'])
             else:
@@ -227,7 +229,7 @@ class Engine(pl.LightningModule):
 
     def on_test_epoch_end(self):
         # The whole function is only executed for: LinearMemoryReasoner, SymbolicMemoryReasoner.
-        if self.model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
+        if self.model_name in ['LinearMemoryReasoner']:
             # If the name of the class is LinearMemoryReasoner,
             # store the tensors required for the explanations.
             if self.model_name == 'LinearMemoryReasoner':
@@ -235,18 +237,18 @@ class Engine(pl.LightningModule):
                 self.explanations = torch.cat(self.explanations, dim=0)
                 # Save the predicted_CBM to a .pt file
                 torch.save(self.explanations, f"{self.csv_log_dir}/pred_CBMs.pt")
-            elif self.model_name == 'SymbolicMemoryReasoner':
-                if self.dataset_name == 'mnist_arithmetic':
-                    # read the file containing the ordered list of rules
-                    true_eqs = pd.read_csv(f"{self.data_path}/mnist_arithmetic_equations.csv")
-                    # read all the rules that have been selected
-                    selected_eqs = pd.DataFrame(self.explanations, columns=['pred_equation'])
-                    # combine the two in a single dataframe
-                    combined_eqs = pd.DataFrame()
-                    combined_eqs['pred_equation'] = selected_eqs['pred_equation']
-                    combined_eqs['true_equation'] = true_eqs['equation']
-                    # save the dataframe to a csv file
-                    combined_eqs.to_csv(f"{self.csv_log_dir}/pred_equations.csv", index=False)
+            # elif self.model_name == 'SymbolicMemoryReasoner':
+            #     if self.dataset_name == 'mnist_arithmetic':
+            #         # read the file containing the ordered list of rules
+            #         true_eqs = pd.read_csv(f"{self.data_path}/mnist_arithmetic_equations.csv")
+            #         # read all the rules that have been selected
+            #         selected_eqs = pd.DataFrame(self.explanations, columns=['pred_equation'])
+            #         # combine the two in a single dataframe
+            #         combined_eqs = pd.DataFrame()
+            #         combined_eqs['pred_equation'] = selected_eqs['pred_equation']
+            #         combined_eqs['true_equation'] = true_eqs['equation']
+            #         # save the dataframe to a csv file
+            #         combined_eqs.to_csv(f"{self.csv_log_dir}/pred_equations.csv", index=False)
 
             self.c_trues = torch.cat(self.c_trues, dim=0)
             self.c_preds = torch.cat(self.c_preds, dim=0)
@@ -285,6 +287,13 @@ class Engine(pl.LightningModule):
             c_trues.to_csv(f"{self.csv_log_dir}/c_trues.csv", index=False)
             y_preds.to_csv(f"{self.csv_log_dir}/y_preds.csv", index=False)
             y_trues.to_csv(f"{self.csv_log_dir}/y_trues.csv", index=False)
+    
+        # Plot KAN layers
+        if self.model_name == 'SymbolicMemoryReasoner':
+            if self.model.equation_learning_strategy=='kan':
+                for i, kan_layer in enumerate(self.model.kan_layers):
+                    kan_layer.plot(folder=os.path.join(os.getcwd(), f'kan{i}_ckpt'))
+
 
     def configure_optimizers(self):
         return [self.optimizer], [self.scheduler]

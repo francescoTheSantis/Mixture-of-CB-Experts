@@ -19,7 +19,7 @@ loader:
 metadata:
   task: regression
   lr: 0.001
-  name: dsprites
+  name: dsprites_simple
   data_type: image
   concept_type: ['float', 'float'] 
 

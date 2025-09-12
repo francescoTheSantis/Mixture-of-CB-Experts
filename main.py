@@ -32,7 +32,6 @@ def main(cfg: DictConfig) -> None:
             data_path = data_path
         )
 
-
     # Loader instantiation
     loader = instantiate(cfg.dataset.loader)
 

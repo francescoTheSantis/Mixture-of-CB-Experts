@@ -45,8 +45,8 @@ model_styles = {
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:gray', 'size': marker_size},
     'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:cyan', 'size': marker_size},
     'l_cmr': {'marker': 's', 'name': 'L-CMR', 'color': 'tab:green', 'size': marker_size},
-    'lm_sym_cmr_prior': {'marker': 'X', 'name': 'M-Sym-True', 'color': 'tab:brown', 'size': marker_size},
-    'lm_sym_cmr_kan': {'marker': 'X', 'name': 'M-Sym-Kan', 'color': 'tab:olive', 'size': marker_size},
+    'm_sym_cmr_prior': {'marker': 'X', 'name': 'Sym-CMR-With-Prior', 'color': 'tab:brown', 'size': marker_size},
+    'm_sym_cmr_kan': {'marker': 'X', 'name': 'Sym-CMR', 'color': 'tab:olive', 'size': marker_size},
 }
 
 # Call the function with the desired metric and font properties
@@ -72,132 +72,132 @@ def main():
 
     try:
         performance, lmr_paths = get_exp_from_path(paths)
+
+        # Count number of seeds
+        num_seeds = performance['seed'].unique().max()
+        print(f"Number of unique seeds: {num_seeds}")
+
+        # Filter the performance dataframe to keep only the models in model_styles 
+        # and datasets in custom_order.
+        performance = performance[performance['model'].isin(model_styles.keys()) & \
+                                performance['dataset'].isin(custom_order)]
+
+        ######### Only for the LinearMemoryReasoner with seed=1, plot explanations #########
+        # plot_explanations(lmr_paths)
+
+        ########## Task & Concept Accuracy Plot ##########
+
+        #df = performance.copy()
+        # Filter data for 'task' and 'concept'
+        task_df = performance.copy()
+        task_df = task_df.rename(columns={'task': 'accuracy'})
+        concept_df = performance.copy()
+        concept_df = concept_df.rename(columns={'concept': 'accuracy'})
+
+        # Compute mean and std for 'task'
+        task_stats = task_df.groupby(['model', 'dataset']).agg(
+            avg_accuracy_task=('accuracy', 'mean'),
+            std_accuracy_task=('accuracy', 'std')
+        ).reset_index().fillna(0)
+
+        # Compute mean and std for 'concept'
+        concept_stats = concept_df.groupby(['model', 'dataset']).agg(
+            avg_accuracy_concept=('accuracy', 'mean'),
+            std_accuracy_concept=('accuracy', 'std')
+        ).reset_index().fillna(0)
+
+        # If the dataset = 'cebab', then divide by 100
+        task_stats.loc[task_stats['dataset'] == 'cebab', 'avg_accuracy_task'] /= 100
+        task_stats.loc[task_stats['dataset'] == 'cebab', 'std_accuracy_task'] /= 100
+        concept_stats.loc[concept_stats['dataset'] == 'cebab', 'avg_accuracy_concept'] /= 100
+        concept_stats.loc[concept_stats['dataset'] == 'cebab', 'std_accuracy_concept'] /= 100
+
+        # Merge the two DataFrames on 'model' and 'dataset'
+        merged_stats = pd.merge(task_stats, concept_stats, on=['model', 'dataset'])
+
+        merged_stats = merged_stats.sort_values('dataset')
+        merged_stats['dataset'] = pd.Categorical(merged_stats['dataset'], categories=custom_order, ordered=True)
+
+        ########## Task Accuracy Table ##########
+
+        task_avg = task_stats[['model', 'dataset', 'avg_accuracy_task']]
+        task_std = task_stats[['model', 'dataset', 'std_accuracy_task']]
+
+        # Merge task_avg and task_std dataframes on 'model' and 'dataset'
+        merged_task = pd.merge(task_avg, task_std, on=['model', 'dataset'])
+
+        # Create a pivot table with the desired format
+        pivot_table_avg = task_avg.pivot(index='model', columns='dataset', values=['avg_accuracy_task'])
+        pivot_table_avg.columns = pivot_table_avg.columns.get_level_values(1)
+        pivot_table_std = task_std.pivot(index='model', columns='dataset', values=['std_accuracy_task'])
+        pivot_table_std.columns = pivot_table_std.columns.get_level_values(1)
+
+        final_table = pd.DataFrame()
+        for i, row in pivot_table_avg.iterrows():
+            d={}
+            for j in pivot_table_std.columns:
+                acc = row[j]*100
+                # From std to SE
+                std = 1.96 * (pivot_table_std.loc[i, j]*100) / num_seeds
+                d[j] = f"{acc:.2f} ± {std:.2f}"
+            # add a column to the final_table dataframe called row.name which contains d
+            final_table = pd.concat([final_table, pd.DataFrame(d, index=[row.name])], axis=0)
+            
+        # Reindex the columns of final_table according to the custom order
+        final_table = final_table.reindex(columns=custom_order)
+
+        # Replace the model and dataset names
+        final_table.index = final_table.index.map(lambda x: model_styles[x]['name'] if x in model_styles else x)
+        final_table.columns = final_table.columns.map(lambda x: get_df_name(x))
+
+        print('\n\nTask Accuracy Table:')
+        print('-------------------')
+        print(final_table)
+
+        # store the table in a csv file
+        final_table.to_csv('figs/task_accuracy.csv', index=True)
+
+
+        ########## Concept Accuracy Table ##########
+
+        task_avg = concept_stats[['model', 'dataset', 'avg_accuracy_concept']]
+        task_std = concept_stats[['model', 'dataset', 'std_accuracy_concept']]
+
+        # Merge task_avg and task_std dataframes on 'model' and 'dataset'
+        merged_task = pd.merge(task_avg, task_std, on=['model', 'dataset'])
+
+        # Create a pivot table with the desired format
+        pivot_table_avg = task_avg.pivot(index='model', columns='dataset', values=['avg_accuracy_concept'])
+        pivot_table_avg.columns = pivot_table_avg.columns.get_level_values(1)
+        pivot_table_std = task_std.pivot(index='model', columns='dataset', values=['std_accuracy_concept'])
+        pivot_table_std.columns = pivot_table_std.columns.get_level_values(1)
+
+        final_table = pd.DataFrame()
+        for i, row in pivot_table_avg.iterrows():
+            d={}
+            for j in pivot_table_std.columns:
+                acc = row[j]*100
+                # From std to SE
+                std = 1.96 * (pivot_table_std.loc[i, j]*100) / num_seeds
+                d[j] = f"{acc:.2f} ± {std:.2f}"
+            # add a column to the final_table dataframe called row.name which contains d
+            final_table = pd.concat([final_table, pd.DataFrame(d, index=[row.name])], axis=0)
+            
+        # Reindex the columns of final_table according to the custom order
+        final_table = final_table.reindex(columns=custom_order)
+
+        # Replace the model and dataset names
+        final_table.index = final_table.index.map(lambda x: model_styles[x]['name'] if x in model_styles else x)
+        final_table.columns = final_table.columns.map(lambda x: get_df_name(x))
+
+        print('\n\nConcept Accuracy Table:')
+        print('-------------------')
+        print(final_table)
+
+        # store the table in a csv file
+        final_table.to_csv('figs/concept_accuracy.csv', index=True)
     except Exception as e:
-        raise ValueError(f"Error occurred while getting experiments from path: {e}")
-
-    # Count number of seeds
-    num_seeds = performance['seed'].unique().max()
-    print(f"Number of unique seeds: {num_seeds}")
-
-    # Filter the performance dataframe to keep only the models in model_styles 
-    # and datasets in custom_order.
-    performance = performance[performance['model'].isin(model_styles.keys()) & \
-                            performance['dataset'].isin(custom_order)]
-
-    ######### Only for the LinearMemoryReasoner with seed=1, plot explanations #########
-    # plot_explanations(lmr_paths)
-
-    ########## Task & Concept Accuracy Plot ##########
-
-    #df = performance.copy()
-    # Filter data for 'task' and 'concept'
-    task_df = performance.copy()
-    task_df = task_df.rename(columns={'task': 'accuracy'})
-    concept_df = performance.copy()
-    concept_df = concept_df.rename(columns={'concept': 'accuracy'})
-
-    # Compute mean and std for 'task'
-    task_stats = task_df.groupby(['model', 'dataset']).agg(
-        avg_accuracy_task=('accuracy', 'mean'),
-        std_accuracy_task=('accuracy', 'std')
-    ).reset_index().fillna(0)
-
-    # Compute mean and std for 'concept'
-    concept_stats = concept_df.groupby(['model', 'dataset']).agg(
-        avg_accuracy_concept=('accuracy', 'mean'),
-        std_accuracy_concept=('accuracy', 'std')
-    ).reset_index().fillna(0)
-
-    # If the dataset = 'cebab', then divide by 100
-    task_stats.loc[task_stats['dataset'] == 'cebab', 'avg_accuracy_task'] /= 100
-    task_stats.loc[task_stats['dataset'] == 'cebab', 'std_accuracy_task'] /= 100
-    concept_stats.loc[concept_stats['dataset'] == 'cebab', 'avg_accuracy_concept'] /= 100
-    concept_stats.loc[concept_stats['dataset'] == 'cebab', 'std_accuracy_concept'] /= 100
-
-    # Merge the two DataFrames on 'model' and 'dataset'
-    merged_stats = pd.merge(task_stats, concept_stats, on=['model', 'dataset'])
-
-    merged_stats = merged_stats.sort_values('dataset')
-    merged_stats['dataset'] = pd.Categorical(merged_stats['dataset'], categories=custom_order, ordered=True)
-
-    ########## Task Accuracy Table ##########
-
-    task_avg = task_stats[['model', 'dataset', 'avg_accuracy_task']]
-    task_std = task_stats[['model', 'dataset', 'std_accuracy_task']]
-
-    # Merge task_avg and task_std dataframes on 'model' and 'dataset'
-    merged_task = pd.merge(task_avg, task_std, on=['model', 'dataset'])
-
-    # Create a pivot table with the desired format
-    pivot_table_avg = task_avg.pivot(index='model', columns='dataset', values=['avg_accuracy_task'])
-    pivot_table_avg.columns = pivot_table_avg.columns.get_level_values(1)
-    pivot_table_std = task_std.pivot(index='model', columns='dataset', values=['std_accuracy_task'])
-    pivot_table_std.columns = pivot_table_std.columns.get_level_values(1)
-
-    final_table = pd.DataFrame()
-    for i, row in pivot_table_avg.iterrows():
-        d={}
-        for j in pivot_table_std.columns:
-            acc = row[j]*100
-            # From std to SE
-            std = 1.96 * (pivot_table_std.loc[i, j]*100) / num_seeds
-            d[j] = f"{acc:.2f} ± {std:.2f}"
-        # add a column to the final_table dataframe called row.name which contains d
-        final_table = pd.concat([final_table, pd.DataFrame(d, index=[row.name])], axis=0)
-        
-    # Reindex the columns of final_table according to the custom order
-    final_table = final_table.reindex(columns=custom_order)
-
-    # Replace the model and dataset names
-    final_table.index = final_table.index.map(lambda x: model_styles[x]['name'] if x in model_styles else x)
-    final_table.columns = final_table.columns.map(lambda x: get_df_name(x))
-
-    print('\n\nTask Accuracy Table:')
-    print('-------------------')
-    print(final_table)
-
-    # store the table in a csv file
-    final_table.to_csv('figs/task_accuracy.csv', index=True)
-
-
-    ########## Concept Accuracy Table ##########
-
-    task_avg = concept_stats[['model', 'dataset', 'avg_accuracy_concept']]
-    task_std = concept_stats[['model', 'dataset', 'std_accuracy_concept']]
-
-    # Merge task_avg and task_std dataframes on 'model' and 'dataset'
-    merged_task = pd.merge(task_avg, task_std, on=['model', 'dataset'])
-
-    # Create a pivot table with the desired format
-    pivot_table_avg = task_avg.pivot(index='model', columns='dataset', values=['avg_accuracy_concept'])
-    pivot_table_avg.columns = pivot_table_avg.columns.get_level_values(1)
-    pivot_table_std = task_std.pivot(index='model', columns='dataset', values=['std_accuracy_concept'])
-    pivot_table_std.columns = pivot_table_std.columns.get_level_values(1)
-
-    final_table = pd.DataFrame()
-    for i, row in pivot_table_avg.iterrows():
-        d={}
-        for j in pivot_table_std.columns:
-            acc = row[j]*100
-            # From std to SE
-            std = 1.96 * (pivot_table_std.loc[i, j]*100) / num_seeds
-            d[j] = f"{acc:.2f} ± {std:.2f}"
-        # add a column to the final_table dataframe called row.name which contains d
-        final_table = pd.concat([final_table, pd.DataFrame(d, index=[row.name])], axis=0)
-        
-    # Reindex the columns of final_table according to the custom order
-    final_table = final_table.reindex(columns=custom_order)
-
-    # Replace the model and dataset names
-    final_table.index = final_table.index.map(lambda x: model_styles[x]['name'] if x in model_styles else x)
-    final_table.columns = final_table.columns.map(lambda x: get_df_name(x))
-
-    print('\n\nConcept Accuracy Table:')
-    print('-------------------')
-    print(final_table)
-
-    # store the table in a csv file
-    final_table.to_csv('figs/concept_accuracy.csv', index=True)
+        print(f"Error occurred while getting experiments from path: {e}")
 
     ##################################################
     ########## Collect intervention results ##########
@@ -205,46 +205,53 @@ def main():
 
     try:
         performance = get_intervention_from_path(paths)
+
+        # Filter the performance dataframe to keep only the models in model_styles 
+        # and datasets in custom_order.
+        performance = performance[performance['model'].isin(model_styles.keys()) & \
+                                performance['dataset'].isin(custom_order)]
+
+        ########## Intervention plots ##########
+        noises = list(performance['noise'].unique())
+        for noise in noises:
+            plot_intervention_results(performance, 
+                                        metric='accuracy', 
+                                        unique_noises=[noise], 
+                                        title_font=title_font, 
+                                        label_font=label_font, 
+                                        tick_font=tick_font, 
+                                        legend_font=legend_font,
+                                        custom_order=custom_order,
+                                        model_styles=model_styles,
+                                        relative_accuracy=False)
+            
+            plot_intervention_results(performance, 
+                                        metric='accuracy', 
+                                        unique_noises=[noise], 
+                                        title_font=title_font, 
+                                        label_font=label_font, 
+                                        tick_font=tick_font, 
+                                        legend_font=legend_font,
+                                        custom_order=custom_order,
+                                        model_styles=model_styles,
+                                        relative_accuracy=True)
     except Exception as e:
-        raise ValueError(f"Error occurred while getting intervention results from path: {e}")
-
-    # Filter the performance dataframe to keep only the models in model_styles 
-    # and datasets in custom_order.
-    performance = performance[performance['model'].isin(model_styles.keys()) & \
-                            performance['dataset'].isin(custom_order)]
-
-    ########## Intervention plots ##########
-    noises = list(performance['noise'].unique())
-    for noise in noises:
-        plot_intervention_results(performance, 
-                                    metric='accuracy', 
-                                    unique_noises=[noise], 
-                                    title_font=title_font, 
-                                    label_font=label_font, 
-                                    tick_font=tick_font, 
-                                    legend_font=legend_font,
-                                    custom_order=custom_order,
-                                    model_styles=model_styles,
-                                    relative_accuracy=False)
-        
-        plot_intervention_results(performance, 
-                                    metric='accuracy', 
-                                    unique_noises=[noise], 
-                                    title_font=title_font, 
-                                    label_font=label_font, 
-                                    tick_font=tick_font, 
-                                    legend_font=legend_font,
-                                    custom_order=custom_order,
-                                    model_styles=model_styles,
-                                    relative_accuracy=True)
+        print(f"Error occurred while getting intervention results from path: {e}")
 
     ##################################################
     ###### Visualize ablation over the memory. #######
     ##################################################
 
     paths = [
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-08_20-41-17",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-08_20-41-27"
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/awa2_inc/2025-09-11_23-40-06",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/awa2_inc_mem/2025-09-11_23-40-06",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/awa2/2025-09-11_23-42-49",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/awa2_mem/2025-09-11_23-42-49",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cub_incomplete_mem/2025-09-11_23-49-39",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cub_mem/2025-09-11_23-50-07",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/dsprites_simple_mem/2025-09-11_23-51-42",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/mnist_addition_mem/2025-09-11_23-52-48",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/mnist_arithmetic_mem/2025-09-11_23-58-15"
     ]
 
     try:

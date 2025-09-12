@@ -8,9 +8,9 @@ hydra:
       dir: output/cifar10/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 1, 2, 3, 4, 5
+      seed: 1 #, 2, 3, 4, 5
       dataset: cifar10
       model: blackbox, cbm_linear, cem, dcr, licem
 
-# Small backbone for toy datasets
-img_backbone_name: resnet50
+# Bigger backbone for real world datasets
+img_backbone_name: facebook/dinov2-base

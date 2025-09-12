@@ -86,17 +86,19 @@ def get_exp_from_path(paths):
                 # Select the last row of the dataframe where we test the model
                 # if 'test/y/acc' and 'test_concept_acc' are not in the dataframe, skip the experiment
                 if 'test/y/mse' in result.columns:
-                    d['task'] = result['test/y/mse'].iloc[-1]
+                    d['task_mse'] = result['test/y/mse'].iloc[-1]
+                    d['task_mae'] = result['test/y/mae'].iloc[-1]
                 else:
-                    d['task'] = result['test/y/acc'].iloc[-1]
+                    d['task_acc'] = result['test/y/acc'].iloc[-1]
 
                 if conf['model']['metadata']['name']=='blackbox':
                     d['concept'] = 0
                 else:
                     if 'test/c/mse' in result.columns:
-                        d['concept'] = result['test/c/mse'].iloc[-1]
+                        d['concept_mse'] = result['test/c/mse'].iloc[-1]
+                        d['concept_mae'] = result['test/c/mae'].iloc[-1]
                     else:
-                        d['concept'] = result['test/c/acc'].iloc[-1]
+                        d['concept_acc'] = result['test/c/acc'].iloc[-1]
 
                 print(d)
                 
@@ -115,6 +117,9 @@ def get_exp_from_path(paths):
     # - if dataset is dsprites_simple, keep only memory_size=3
     performance = performance[~((performance['dataset']=='mnist_arithmetic') & (performance['memory_size']!=4))]
     performance = performance[~((performance['dataset']=='dsprites_simple') & (performance['memory_size']!=3))]
+
+    # Print unique memory sizes found in the data
+    print("Unique memory sizes found:", sorted(performance['memory_size'].unique()))
 
     return performance, lmr_paths
 
@@ -251,7 +256,6 @@ def plot_intervention_results(df,
     plt.savefig(f'figs/intervention_{str_store}{suffix}.pdf')
     plt.show()
 
-
 def plot_memory_ablation(performance, model_styles, title_font, label_font, tick_font):
 
     # Sort the points in the order of memory_size.
@@ -260,23 +264,69 @@ def plot_memory_ablation(performance, model_styles, title_font, label_font, tick
     num_seeds = performance['seed'].nunique()
 
     # Avg over the seeds for the performance metrics
-    performance = performance.groupby(['dataset', 'memory_size', 'model']).agg(
-        mean_task=('task', 'mean'),
-        std_task=('task', 'std'),
-        mean_concept=('concept', 'mean'),
-        std_concept=('concept', 'std')
-    ).reset_index()
+    if 'task_acc' in performance.columns and 'task_mae' in performance.columns:
+        # Handle both accuracy and MSE/MAE metrics
+        performance_acc = performance.dropna(subset=['task_acc']).groupby(['dataset', 'memory_size', 'model']).agg(
+            mean_task=('task_acc', 'mean'),
+            std_task=('task_acc', 'std'),
+            mean_concept=('concept_acc', 'mean'),
+            std_concept=('concept_acc', 'std')
+        ).reset_index()
+        performance_acc['metric_type'] = 'accuracy'
+        
+        performance_mse = performance.dropna(subset=['task_mae']).groupby(['dataset', 'memory_size', 'model']).agg(
+            mean_task=('task_mae', 'mean'),
+            std_task=('task_mae', 'std'),
+            mean_concept=('concept_mae', 'mean'),
+            std_concept=('concept_mae', 'std')
+        ).reset_index()
+        performance_mse['metric_type'] = 'mae'
+        
+        performance = pd.concat([performance_acc, performance_mse], ignore_index=True)
+    else:
+        # Fallback to original logic
+        task_col = 'task_acc' if 'task_acc' in performance.columns else 'task_mae'
+        concept_col = 'concept_acc' if 'concept_acc' in performance.columns else 'concept_mae'
+        performance = performance.groupby(['dataset', 'memory_size', 'model']).agg(
+            mean_task=(task_col, 'mean'),
+            std_task=(task_col, 'std'),
+            mean_concept=(concept_col, 'mean'),
+            std_concept=(concept_col, 'std')
+        ).reset_index()
+        performance['metric_type'] = 'accuracy' if 'acc' in task_col else 'mae'
 
     
     # instead of the std compute the standard error at 95% confidence
     performance['se_task'] = 1.96 * performance['std_task'] / np.sqrt(num_seeds)
     performance['se_concept'] = 1.96 * performance['std_concept'] / np.sqrt(num_seeds)
 
-    fig, axes = plt.subplots(1, len(performance['dataset'].unique()), figsize=(25, 10), sharey=False)
+    unique_datasets = performance['dataset'].unique()
+    n_datasets = len(unique_datasets)
+    n_cols = min(4, n_datasets)  # Maximum 4 subplots per row
+    n_rows = (n_datasets + n_cols - 1) // n_cols  # Calculate required rows
 
-    for idx, dataset in enumerate(performance['dataset'].unique()):
-        ax = axes[idx] if len(performance['dataset'].unique()) > 1 else axes
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 7*n_rows), sharey=False)
+    
+    # Handle case where we have only one subplot
+    if n_rows == 1 and n_cols == 1:
+        axes = [axes]
+    elif n_rows == 1:
+        axes = [axes]
+    elif n_cols == 1:
+        axes = [[ax] for ax in axes]
+
+    for idx, dataset in enumerate(unique_datasets):
+        row = idx // n_cols
+        col = idx % n_cols
+        
+        if n_rows == 1:
+            ax = axes[col] if n_cols > 1 else axes[0]
+        else:
+            ax = axes[row][col] if n_cols > 1 else axes[row][0]
+            
         data = performance[performance['dataset'] == dataset]
+        metric_type = data['metric_type'].iloc[0]
+        
         for model in data['model'].unique():
             model_data = data[data['model'] == model]
             ax.plot(
@@ -296,12 +346,26 @@ def plot_memory_ablation(performance, model_styles, title_font, label_font, tick
             )
         ax.set_title(get_df_name(dataset), fontdict=title_font)
         ax.set_xlabel('Memory Size', fontdict=label_font)
-        ax.set_ylabel('Task Accuracy', fontdict=label_font)
+        
+        # Set y-label based on metric type
+        ylabel = 'Task Accuracy' if metric_type == 'accuracy' else 'Task MAE'
+        ax.set_ylabel(ylabel, fontdict=label_font)
+        
         ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
         ax.minorticks_off()
         ax.grid(True, zorder=0)
 
-    # Filter the style according to the models' names which are present in the performance df
+    # Hide empty subplots
+    total_subplots = n_rows * n_cols
+    for idx in range(n_datasets, total_subplots):
+        row = idx // n_cols
+        col = idx % n_cols
+        if n_rows == 1:
+            axes[col].set_visible(False) if n_cols > 1 else None
+        else:
+            axes[row][col].set_visible(False) if n_cols > 1 else axes[row][0].set_visible(False)
+
+    # Filter the style according to the models' names which are present in the performance df
     filtered_styles = {name: style for name, style in model_styles.items() if name in performance['model'].values}
 
     # Create custom legend handles

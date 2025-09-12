@@ -5,13 +5,15 @@ defaults:
 hydra:
   mode: MULTIRUN
   sweep:
-      dir: output/cifar10_mem/${now:%Y-%m-%d_%H-%M-%S}
+      dir: output/dsprites_simple_mem/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
       seed: 1 #, 2, 3, 4, 5
-      dataset: cifar10
+      dataset: dsprites_simple
       memory_size: 1, 2, 3, 4, 5, 10, 20, 50 
-      model: l_cmr, cmr, sym_cmr
+      model: l_cmr, cmr, sym_cmr_kan
 
 # Bigger backbone for real world datasets
 img_backbone_name: facebook/dinov2-base
+
+gpus: [1]
