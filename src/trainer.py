@@ -98,7 +98,7 @@ class Trainer:
             self.model.model.scaler = None
 
         if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner':
-            # setup the model (e.g., setup equations if prior knowledge is used)
+            # setup the memory and selector
             self.model.model.setup_memory()
             # If KAN are used, we need to setup the grid for each kan in the memory.
             # This operation is required for any kind of task (classification, regression, ...).

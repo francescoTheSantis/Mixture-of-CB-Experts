@@ -1,0 +1,17 @@
+defaults:
+  - common
+  - _self_
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+      dir: output/sym_cmr_prior/${now:%Y-%m-%d_%H-%M-%S}
+  sweeper:
+    params:
+      seed: 1 #, 2, 3, 4, 5
+      dataset: mnist_arithmetic, dsprites_simple
+      memory_size: 4, 1
+      model: sym_cmr_prior
+
+# Bigger backbone for real world datasets
+img_backbone_name: facebook/dinov2-base

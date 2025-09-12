@@ -255,7 +255,7 @@ class Engine(pl.LightningModule):
             self.y_trues = torch.cat(self.y_trues, dim=0)
             if self.num_classes > 2:
                 # If the number of classes is greater than 1, we need to take the argmax
-                self.y_preds = torch.cat(self.y_preds, dim=0).argmax(-1)
+                self.y_preds = torch.cat(self.y_preds, dim=0)
             elif self.num_classes == 1 and not isinstance(self.model.task_loss_form, nn.MSELoss):
                 # If the number of classes is 1, we just discretize the predictions
                 # to get the predicted labels.
@@ -288,12 +288,11 @@ class Engine(pl.LightningModule):
             y_preds.to_csv(f"{self.csv_log_dir}/y_preds.csv", index=False)
             y_trues.to_csv(f"{self.csv_log_dir}/y_trues.csv", index=False)
     
-        # Plot KAN layers
+        # Plot KAN layers when using the official KAN implementation
         if self.model_name == 'SymbolicMemoryReasoner':
-            if self.model.equation_learning_strategy=='kan':
+            if self.model.equation_learning_strategy=='kan' and self.num_classes==1:
                 for i, kan_layer in enumerate(self.model.kan_layers):
                     kan_layer.plot(folder=os.path.join(os.getcwd(), f'kan{i}_ckpt'))
-
 
     def configure_optimizers(self):
         return [self.optimizer], [self.scheduler]

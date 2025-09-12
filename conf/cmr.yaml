@@ -1,0 +1,17 @@
+defaults:
+  - common
+  - _self_
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+      dir: output/cmr/${now:%Y-%m-%d_%H-%M-%S}
+  sweeper:
+    params:
+      seed: 1 #, 2, 3, 4, 5
+      dataset: cub, cub_incomplete, awa2, awa2_incomplete, mnist_addition
+      memory_size: 1, 2, 3, 4, 5, 10, 20, 50
+      model: cmr
+
+# Bigger backbone for real world datasets
+img_backbone_name: facebook/dinov2-base

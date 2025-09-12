@@ -9,13 +9,13 @@ hydra:
   sweeper:
     params:
       seed: 1
-      dataset: cub_incomplete, awa2, awa2_incomplete, cifar10, cifar100, mnist_addition, dsprites_simple
-      model: sym_cmr_kan
-      memory_size: 2
+      dataset: mnist_arithmetic, mnist_addition
+      model: sym_cmr_kan, l_cmr
+      memory_size: 1, 5
     
-gpus: [0]
+gpus: [3]
 
-max_epochs: 5
+max_epochs: 1
 patience: 50
 
 scale_target: False

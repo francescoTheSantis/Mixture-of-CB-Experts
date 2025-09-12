@@ -203,14 +203,15 @@ class SymbolicMemoryReasoner(BaseModel):
         # Stack the outputs along the class dimension
         eq_outputs = torch.stack(eq_outputs, dim=1).squeeze() # Shape: (bsz, n_equations)
 
-        if self.task == 'regression':
-            if self.memory_size == 1:
-                # Associate the output of the unique KAN to all the classes
-                y_hat = eq_outputs.unsqueeze(-1).unsqueeze(-1).expand(-1, len(self.y_names), -1)
-            else:
-                # Combine the outputs using the selector probabilities
-                y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
-        elif self.task == 'classification':
+        if self.task == 'regression' and self.memory_size == 1:
+            # Associate the output of the unique KAN to all the classes
+            y_hat = eq_outputs.unsqueeze(-1).unsqueeze(-1).expand(-1, len(self.y_names), -1)
+        elif self.task == 'regression' and self.memory_size > 1:
+            y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
+        elif self.task == 'classification' and self.memory_size == 1:
+            eq_outputs = eq_outputs.unsqueeze(1)
+            y_hat = torch.einsum('bmts,bmt->bts', prob_per_classifier, eq_outputs)
+        else:
             y_hat = torch.einsum('bmts,bmt->bts', prob_per_classifier, eq_outputs)
 
         # Get the explanations (the selected equations)
@@ -280,12 +281,16 @@ class SymbolicMemoryReasoner(BaseModel):
         # Stack the outputs along the class dimension
         eq_outputs = torch.stack(eq_outputs, dim=1).squeeze() # Shape: (bsz, n_equations)
 
-        if self.memory_size == 1:
+        if self.task == 'regression' and self.memory_size == 1:
             # Associate the output of the unique KAN to all the classes
             y_hat = eq_outputs.unsqueeze(-1).unsqueeze(-1).expand(-1, len(self.y_names), -1)
-        else:
-            # Combine the outputs using the selector probabilities
+        elif self.task == 'regression' and self.memory_size > 1:
             y_hat = torch.einsum('bmts,bm->bts', prob_per_classifier, eq_outputs)
+        elif self.task == 'classification' and self.memory_size == 1:
+            eq_outputs = eq_outputs.unsqueeze(1)
+            y_hat = torch.einsum('bmts,bmt->bts', prob_per_classifier, eq_outputs)
+        else:
+            y_hat = torch.einsum('bmts,bmt->bts', prob_per_classifier, eq_outputs)
 
         if discard_explanations:
             return y_hat
@@ -400,7 +405,7 @@ class SymbolicMemoryReasoner(BaseModel):
 
     def loss(self, y_hat, y, c_hat=None, c=None):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
-        if self.output_size == 1 and self.regularize:
+        if self.output_size == 1 and self.regularize and self.equation_learning_strategy=='kan':
             loss += self.kan_regularization_term()
         return loss
     
