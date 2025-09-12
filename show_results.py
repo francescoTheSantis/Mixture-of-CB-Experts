@@ -65,14 +65,14 @@ def main():
     ##################################################
 
     paths = [
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/blackbox/2025-09-12_12-32-24",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cbm_linear/2025-09-12_12-32-24",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cem/2025-09-12_12-33-26",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cmr/2025-09-12_12-35-02",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/dcr/2025-09-12_12-35-38",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/licem/2025-09-12_12-38-31",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/sym_cmr_kan/2025-09-12_12-40-40",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/l_cmr/2025-09-12_12-38-31"
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_output/blackbox/2025-09-12_12-32-24",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_output/cbm_linear/2025-09-12_12-32-24",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_output/cem/2025-09-12_12-33-26",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_output/cmr/2025-09-12_12-35-02",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_output/dcr/2025-09-12_12-35-38",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_output/licem/2025-09-12_12-38-31",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_output/sym_cmr_kan/2025-09-12_12-40-40",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_output/l_cmr/2025-09-12_12-38-31"
     ]
 
     try:

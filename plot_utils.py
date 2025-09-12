@@ -143,9 +143,13 @@ def get_intervention_from_path(paths, filtered_exps):
             performance = pd.concat([performance, d], ignore_index=True)
 
     # Keep only the experiments in filtered_exps
-    performance = performance.merge(filtered_exps, on=['dataset', 'model', 'memory_size'], how='inner')
+    filtered_performance = performance.merge(filtered_exps, on=['dataset', 'model', 'memory_size'], how='inner')
 
-    return performance
+    # If the model belong to cmb_linear, licem, dcr, cem, blackbox, add them to performance
+    models_memoryless = performance[performance['model'].isin(['cmb_linear', 'licem', 'dcr', 'cem', 'blackbox'])]
+    filtered_performance = pd.concat([filtered_performance, models_memoryless], ignore_index=True)
+
+    return filtered_performance
 
 
 def plot_intervention_results(df, 
@@ -599,7 +603,6 @@ def filter_pareto_models(df: pd.DataFrame, fixed_memory: dict = None) -> pd.Data
                 return fixed_group.iloc[0].to_frame().T
             else:
                 group = group.iloc[0].to_frame().T
-                group['memory_size'] = mem_size
                 return group
 
         if task_type == "classification":
