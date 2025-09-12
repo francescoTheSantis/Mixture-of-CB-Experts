@@ -15,7 +15,7 @@ params:
   intervene_on_selection: False
   linear_classifier_selection: False
   sampling: True
-  bias: null
+  bias: global
 
 metadata:
   name: l_cmr

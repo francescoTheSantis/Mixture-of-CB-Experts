@@ -83,6 +83,16 @@ def main(cfg: DictConfig) -> None:
         intervention_df = trainer.interventions(loaded_test)
         intervention_df.to_csv(f"{log_dir}/interventions.csv", index=False)
 
+    if cfg.model.metadata.name == 'm_sym_cmr_kan':
+        ###### Eplain the KAN layers by using the auto_symbolic function ######
+        equations = []
+        for layer in model.model.kan_layers:
+            layer.auto_symbolic()
+            equations.append(layer.symbolic_formula()[0][0])
+        with open(f"{log_dir}/kan_equations.txt", "w") as f:
+            for i, eq in enumerate(equations):
+                f.write(f"KAN Layer {i+1}: {eq}\n")
+
     # Close the wandb logger if it is used
     if wandb_logger is not None:
         wandb_logger.experiment.finish()

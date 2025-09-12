@@ -8,10 +8,12 @@ hydra:
       dir: output/sym_cmr_kan/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 1 #, 2, 3, 4, 5
+      seed: 1, 2, 3, 4, 5
       dataset: mnist_arithmetic, dsprites_simple, cub, cub_incomplete, awa2, awa2_incomplete, mnist_addition
       memory_size: 1, 2, 3, 4, 5, 10, 20, 50
       model: sym_cmr_kan
 
 # Bigger backbone for real world datasets
 img_backbone_name: facebook/dinov2-base
+
+gpus: [1]

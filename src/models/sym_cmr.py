@@ -128,7 +128,7 @@ class SymbolicMemoryReasoner(BaseModel):
                     for param in kan_layer.get_params():
                         param.requires_grad = True
                     if self.regularize:
-                        self.lamb = 0.02 # increase for higher sparsity (e.g., 0.1, 0.2, ...)
+                        self.lamb = 0.03 # increase for higher sparsity (e.g., 0.01, 0.02, 0.03, ...)
                         old_save_act, old_symbolic_enabled = kan_layer.disable_symbolic_in_fit(self.lamb)
                         kan_layer.symbolic_enabled = old_symbolic_enabled
                         kan_layer.save_act  = old_save_act
