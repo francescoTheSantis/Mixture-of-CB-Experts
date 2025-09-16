@@ -21,6 +21,9 @@ from src.loaders.datasets.pendulum import CONCEPT_NAMES as concept_names_pendulu
 from src.loaders.datasets.pendulum import TASK_NAMES as task_names_pendulum
 from src.loaders.datasets.dsprites import DSprites
 from src.loaders.datasets.mnist_exponential import MNISTExponential
+from src.loaders.datasets.mawps import MAWPSDataset
+from src.loaders.datasets.mawps import CONCEPT_NAMES as mawps_concept_names
+from src.loaders.datasets.mawps import TASK_NAMES as mawps_task_names
 
 from torch.utils.data import DataLoader, random_split
 from env import DATA_PATH
@@ -243,6 +246,10 @@ class loader(object):
             concept_names = ['digit']
             task_names = ['exponential']
             concept_groups = None
+        elif self.name == "mawps":
+            concept_names = mawps_concept_names
+            task_names = mawps_task_names
+            concept_groups = None
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
         
@@ -413,6 +420,12 @@ class loader(object):
             val_size = int(0.1 * total_size)
             test_size = total_size - train_size - val_size
             train_dataset, val_dataset, test_dataset = random_split(dsprites_dataset, [train_size, val_size, test_size])
+        elif self.name == "mawps":
+            loader = MAWPSDataset(cfg.dataset.loader.dataset_already_created,
+                                  batch_size=self.batch_size,
+                                  shuffle_seed=self.seed,
+                                  pre_trained_transformer=cfg.dataset.metadata.pretrained_transformer)
+            loaded_train, loaded_val, loaded_test = loader.collator()
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
 

@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch import nn
 from transformers import AutoProcessor, AutoModel
+from transformers import T5ForConditionalGeneration, T5Tokenizer
 from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
 from tqdm import tqdm
 import torch.nn.functional as F
@@ -167,7 +168,7 @@ class TextEmbeddingExtractor:
                  task_names=None):
         # Load a pre-trained text model (e.g., Mistral)
         self.cfg = cfg
-        self.model_name = cfg.text_backbone_name
+        
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.test_loader = test_loader
@@ -175,7 +176,11 @@ class TextEmbeddingExtractor:
         self.extract_embeddings = extract_embeddings
         self.task_names = task_names
 
-        self.model = AutoModel.from_pretrained(self.model_name, torch_dtype=torch.bfloat16)
+        if cfg.dataset.metadata.name == "mawps":
+            self.model_name = "invokerliang/MWP-BERT-en"
+        else:
+            self.model_name = cfg.text_backbone_name
+        self.model = AutoModel.from_pretrained(self.model_name, torch_dtype=torch.bfloat16, use_safetensors=True)
 
     #Mean Pooling - Take attention mask into account for correct averaging
     def _mean_pooling(self, model_output, attention_mask):
@@ -196,11 +201,17 @@ class TextEmbeddingExtractor:
         with torch.no_grad():
             for batch in tqdm(loader, desc="Extracting embeddings"):
                 if self.extract_embeddings:
-                    outputs = self.model(
-                        input_ids=batch['x']["input_ids"].to(self.model.device).long(),
-                        token_type_ids=batch['x']["token_type_ids"].to(self.model.device).long(),
-                        attention_mask=batch['x']["attention_mask"].to(self.model.device).long()
-                    )
+                    if self.cfg.dataset.metadata.name == "mawps":
+                        outputs = self.model(
+                            input_ids=batch['x']["input_ids"].to(self.model.device).long(),
+                            attention_mask=batch['x']["attention_mask"].to(self.model.device).long()
+                        )
+                    else:
+                        outputs = self.model(
+                            input_ids=batch['x']["input_ids"].to(self.model.device).long(),
+                            token_type_ids=batch['x']["token_type_ids"].to(self.model.device).long(),
+                            attention_mask=batch['x']["attention_mask"].to(self.model.device).long()
+                        )
                     if 'sentence-transformers' not in self.model_name:
                         emb = outputs.last_hidden_state  # shape: (B, L, D)
                         # Use the [CLS] token representation. This is useful to reduce the overall number of
@@ -219,9 +230,13 @@ class TextEmbeddingExtractor:
                 else:
                     # If the embedding is not produced, then the input of the model will be
                     # the raw text input.
-                    input_ids.append(batch['x']["input_ids"].cpu())
-                    attention_masks.append(batch['x']["attention_mask"].cpu())
-                    token_type_ids.append(batch['x']["token_type_ids"].cpu())
+                    if self.cfg.dataset.metadata.name == "mawps":
+                        input_ids.append(batch['x']["input_ids"].cpu())
+                        attention_masks.append(batch['x']["attention_mask"].cpu())
+                    else:
+                        input_ids.append(batch['x']["input_ids"].cpu())
+                        attention_masks.append(batch['x']["attention_mask"].cpu())
+                        token_type_ids.append(batch['x']["token_type_ids"].cpu())
 
                 # append the remaining fields
                 concepts.append(batch['c'].cpu())
@@ -236,12 +251,18 @@ class TextEmbeddingExtractor:
             else:
                 input_ids = torch.cat(input_ids, dim=0)
                 attention_masks = torch.cat(attention_masks, dim=0)
-                token_type_ids = torch.cat(token_type_ids, dim=0)
-                input = {
-                    "input_ids": input_ids,
-                    "attention_mask": attention_masks,
-                    "token_type_ids": token_type_ids
-                }
+                if self.cfg.dataset.metadata.name == "mawps":
+                    input = {
+                        "input_ids": input_ids,
+                        "attention_mask": attention_masks
+                    }
+                else:
+                    token_type_ids = torch.cat(token_type_ids, dim=0)
+                    input = {
+                        "input_ids": input_ids,
+                        "attention_mask": attention_masks,
+                        "token_type_ids": token_type_ids
+                    }
             concepts = torch.cat(concepts, dim=0)
             labels = torch.cat(labels, dim=0) if labels else None
 
