@@ -8,10 +8,12 @@ hydra:
       dir: output/dcr/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 1, 2, 3, 4, 5
-      dataset: cub, cub_incomplete, awa2, awa2_incomplete, mnist_addition
+      seed: 1, 2, 3 #, 4, 5
+      dataset: cub, cub_incomplete, awa2, awa2_incomplete, cifar10, cifar100
       memory_size: 0
       model: dcr
 
 # Bigger backbone for real world datasets
 img_backbone_name: facebook/dinov2-base
+
+gpus: [0]

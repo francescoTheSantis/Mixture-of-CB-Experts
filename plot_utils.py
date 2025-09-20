@@ -7,6 +7,7 @@ import pandas as pd
 import scienceplots
 import warnings
 import yaml
+from tqdm import tqdm
 
 # I used scienceplots for the style of the plots, but you can use any other style you want.
 plt.style.use(['science', 'ieee', 'no-latex'])
@@ -51,9 +52,13 @@ def get_df_name(df):
     elif df=='cifar100':
         return 'CIFAR100'
     elif df=='dsprites_simple':
-        return 'dSprites'
+        return 'dSprites-Exp.'
+    elif df=='dsprites_complex':
+        return 'dSprites-Memory'
     elif df=='mnist_arithmetic':
         return 'MNIST-Arith.'
+    elif df=='pendulum':
+        return 'Pendulum'
 
 def get_exp_from_path(paths):
     # Collect all the experiments in the given paths
@@ -115,9 +120,23 @@ def get_exp_from_path(paths):
             print(f"Error while processing {exp}: {e}")
             continue
 
+    # Filter the sym_cmr_prior according to the combination of memory size and dataset
+    # if dataset==dsprites_simple, keep only memory_size==1
+    # if dataset==mnist_arithmetic, keep only memory_size==4
+    # if dataset==dsprites_complex, keep only memory_size==3
+    # if dataset==pendulum, keep only memory_size==1
+    condition = (
+        ((performance['model'] == 'm_sym_cmr_prior') & (performance['dataset'] == 'dsprites_simple') & (performance['memory_size'] == 1)) |
+        ((performance['model'] == 'm_sym_cmr_prior') & (performance['dataset'] == 'mnist_arithmetic') & (performance['memory_size'] == 4)) |
+        ((performance['model'] == 'm_sym_cmr_prior') & (performance['dataset'] == 'dsprites_complex') & (performance['memory_size'] == 3)) |
+        ((performance['model'] == 'm_sym_cmr_prior') & (performance['dataset'] == 'pendulum') & (performance['memory_size'] == 1)) |
+        (performance['model'] != 'm_sym_cmr_prior')
+    )
+    performance = performance[condition]
+
     return performance, lmr_paths
 
-def get_intervention_from_path(paths, filtered_exps):
+def get_intervention_from_path(paths, filtered_exps=None):
     performance = pd.DataFrame()
 
     exps_path = []
@@ -142,130 +161,18 @@ def get_intervention_from_path(paths, filtered_exps):
 
             performance = pd.concat([performance, d], ignore_index=True)
 
-    # Keep only the experiments in filtered_exps
-    filtered_performance = performance.merge(filtered_exps, on=['dataset', 'model', 'memory_size'], how='inner')
-
-    # If the model belong to cmb_linear, licem, dcr, cem, blackbox, add them to performance
-    models_memoryless = performance[performance['model'].isin(['cmb_linear', 'licem', 'dcr', 'cem', 'blackbox'])]
-    filtered_performance = pd.concat([filtered_performance, models_memoryless], ignore_index=True)
-
-    return filtered_performance
-
-
-def plot_intervention_results(df, 
-                                metric='accuracy', 
-                                unique_noises=[0.0], 
-                                title_font=None, 
-                                label_font=None, 
-                                tick_font=None, 
-                                legend_font=None,
-                                custom_order=None,
-                                model_styles=None,
-                                relative_accuracy=True):
-    unique_datasets = custom_order
-    n_datasets = len(unique_datasets)
-    n_cols = min(5, n_datasets)  # Maximum 5 subplots per row
-    n_rows = (n_datasets + n_cols - 1) // n_cols  # Calculate required rows
-    
-    regression_datasets = ['mnist_arithmetic', 'dsprites_simple', 'cebab']
-
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 7*n_rows), sharex=True, sharey=False)
-    
-    # Handle case where we have only one subplot
-    if n_rows == 1 and n_cols == 1:
-        axes = [axes]
-    elif n_rows == 1:
-        axes = [axes]
-    elif n_cols == 1:
-        axes = [[ax] for ax in axes]
+    if filtered_exps is None:
+        return performance
     else:
-        axes = axes
-    
-    for idx, dataset in enumerate(unique_datasets):
-        row = idx // n_cols
-        col = idx % n_cols
-        
-        if n_rows == 1:
-            ax = axes[col] if n_cols > 1 else axes[0]
-        else:
-            ax = axes[row][col] if n_cols > 1 else axes[row][0]
-        
-        for noise in unique_noises:
-            data = df[(df['noise'] == noise) & (df['dataset'] == dataset)]
-            if dataset in regression_datasets:
-                metric = 'mae'
-            else:
-                metric = 'accuracy'
-            grouped_data = data.groupby(['p_int', 'model']).agg(
-                mean_metric=(metric, 'mean'),
-                std_metric=(metric, 'std')
-            ).reset_index().fillna(0)
-            
-            if relative_accuracy:
-                # Calculate relative accuracy for each model
-                for model in grouped_data['model'].unique():
-                    model_data = grouped_data[grouped_data['model'] == model]
-                    baseline = model_data[model_data['p_int'] == 0]['mean_metric'].iloc[0] if len(model_data[model_data['p_int'] == 0]) > 0 else 0
-                    grouped_data.loc[grouped_data['model'] == model, 'mean_metric'] -= baseline
-            
-            for model in grouped_data['model'].unique():
-                model_data = grouped_data[grouped_data['model'] == model]
-                style = model_styles.get(model, {'marker': 'o', 'color': 'black', 'size': 10, 'name': model})
-                ax.plot(model_data['p_int'], model_data['mean_metric'], color=style['color'], linestyle='-', alpha=0.5)
-                ax.scatter(model_data['p_int'], model_data['mean_metric'], marker=style['marker'], color=style['color'], s=style['size']**2, label=style['name'], edgecolor='black', alpha=0.5)
-                ax.fill_between(model_data['p_int'], model_data['mean_metric'] - model_data['std_metric'], model_data['mean_metric'] + model_data['std_metric'], color=style['color'], alpha=0.2)
-        
-        ax.set_xlabel('$p_{int}$', fontsize=label_font['size'])
-        ax.set_title(f'{get_df_name(dataset)}', fontsize=label_font['size'])
+        # Keep only the experiments in filtered_exps
+        filtered_performance = performance.merge(filtered_exps, on=['dataset', 'model', 'memory_size'], how='inner')
+        # If the model belong to cmb_linear, licem, dcr, cem, blackbox, add them to performance
+        memoryless_models = performance[performance['model'].isin(['cmb_linear', 'licem', 'dcr', 'cem', 'blackbox'])]
+        filtered_performance = pd.concat([filtered_performance, memoryless_models], ignore_index=True)
+        return filtered_performance
 
-        # Set ylabel only for the leftmost subplot in each row
-        if col == 0:
-            if dataset not in regression_datasets:
-                ylabel = 'Relative Task Acc' if relative_accuracy else 'Task Acc'
-                ax.set_ylabel(ylabel, fontsize=label_font['size'])
-            else:
-                ylabel = 'Relative Task MAE' if relative_accuracy else 'Task MAE'
-                ax.set_ylabel(ylabel, fontsize=label_font['size'])
-        
-        ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
-        ax.minorticks_off()
-        ax.grid(True)
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{x:.2f}'))
-    
-    # Hide empty subplots
-    total_subplots = n_rows * n_cols
-    for idx in range(n_datasets, total_subplots):
-        row = idx // n_cols
-        col = idx % n_cols
-        if n_rows == 1:
-            axes[col].set_visible(False) if n_cols > 1 else None
-        else:
-            axes[row][col].set_visible(False) if n_cols > 1 else axes[row][0].set_visible(False)
-    
-    # Create custom legend handles
-    custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=style['size']+10, label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in model_styles.values()]
+def compute_avg_and_uncertainty(performance, custom_order):
 
-    # Create a single legend below the plots
-    fig.legend(
-        handles=custom_handles,
-        loc='lower center',
-        ncol=(len(custom_handles) + 1) // 2,  # Split legend into two rows
-        fontsize=tick_font['size'],
-        frameon=True,
-        bbox_to_anchor=(0.5, -0.1),
-        columnspacing=1.0,
-        handletextpad=0.5
-    )
-
-    plt.tight_layout()
-    str_store = str(unique_noises[0]).replace('.', '')
-    suffix = 'relative_accuracy_difference' if relative_accuracy else 'absolute_accuracy'
-    os.makedirs(f'figs/intervention/{suffix}', exist_ok=True)
-    plt.savefig(f'figs/intervention/{suffix}/{str_store}.pdf')
-    plt.show()
-
-
-def compute_avg_and_uncertainty(performance):
     # Sort the points in the order of memory_size.
     performance = performance.sort_values(by=['dataset', 'memory_size'])
 
@@ -314,11 +221,186 @@ def compute_avg_and_uncertainty(performance):
     performance['se_task'] = 1.96 * performance['std_task'] / np.sqrt(num_seeds)
     performance['se_concept'] = 1.96 * performance['std_concept'] / np.sqrt(num_seeds)
 
+    # Order the datasets according to custom_order and memory_size
+    performance['dataset'] = pd.Categorical(performance['dataset'], categories=custom_order, ordered=True)
+    performance = performance.sort_values(['dataset', 'memory_size'])
+
     return performance
 
-def plot_memory_ablation(performance, model_styles, title_font, label_font, tick_font):
+def plot_intervention_results(df, 
+                                metric='accuracy', 
+                                unique_noises=[0.0], 
+                                title_font=None, 
+                                label_font=None, 
+                                tick_font=None, 
+                                legend_font=None,
+                                custom_order=None,
+                                model_styles=None,
+                                relative_accuracy=True):
+    unique_datasets = custom_order
+    
+    # NOTE: keep in mind to update this list if you add new regression datasets
+    regression_datasets = ['mnist_arithmetic', 'dsprites_simple', 'dsprites_complex', 'cebab', 'pendulum']
+    
+    # Separate datasets by task type
+    classification_datasets = [d for d in unique_datasets if d not in regression_datasets]
+    regression_datasets = [d for d in unique_datasets if d in regression_datasets]
+    
+    # Organize datasets with classification first, then regression
+    organized_datasets = classification_datasets + regression_datasets
+    
+    n_datasets = len(organized_datasets)
+    n_cols = max(len(classification_datasets), len(regression_datasets))
+    n_rows = 2  # Force 2 rows: classification on first row, regression on second
 
-    performance = compute_avg_and_uncertainty(performance)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 6*n_rows), sharex=False, sharey=False)
+
+    # Handle case where we have only one subplot
+    if n_rows == 1 and n_cols == 1:
+        axes = [axes]
+    elif n_rows == 1:
+        axes = [axes]
+    elif n_cols == 1:
+        axes = [[ax] for ax in axes]
+    
+    for idx, dataset in enumerate(organized_datasets):
+        # Determine row based on task type
+        if dataset in classification_datasets:
+            row = 0
+            col = classification_datasets.index(dataset)
+        else:
+            row = 1
+            col = regression_datasets.index(dataset)
+        
+        if n_rows == 1:
+            ax = axes[col] if n_cols > 1 else axes[0]
+        else:
+            ax = axes[row][col] if n_cols > 1 else axes[row][0] if col == 0 else axes[row][col]
+        
+        for noise in unique_noises:
+            data = df[(df['noise'] == noise) & (df['dataset'] == dataset)]
+            if dataset in regression_datasets:
+                metric = 'mae'
+            else:
+                metric = 'accuracy'
+            grouped_data = data.groupby(['p_int', 'model']).agg(
+                mean_metric=(metric, 'mean'),
+                std_metric=(metric, 'std')
+            ).reset_index().fillna(0)
+            
+            # Calculate number of seeds for standard error
+            num_seeds = data.groupby(['p_int', 'model']).size().reset_index(name='n_seeds')
+            grouped_data = grouped_data.merge(num_seeds, on=['p_int', 'model'])
+            grouped_data['se_metric'] = 1.96 * grouped_data['std_metric'] / np.sqrt(grouped_data['n_seeds'])
+            
+            # Convert accuracy to 1-accuracy (error rate) for classification tasks
+            if dataset not in regression_datasets:
+                grouped_data['mean_metric'] = 1 - grouped_data['mean_metric']
+            
+            if relative_accuracy:
+                # Calculate relative accuracy for each model
+                for model in grouped_data['model'].unique():
+                    model_data = grouped_data[grouped_data['model'] == model]
+                    baseline = model_data[model_data['p_int'] == 0]['mean_metric'].iloc[0] if len(model_data[model_data['p_int'] == 0]) > 0 else 0
+                    grouped_data.loc[grouped_data['model'] == model, 'mean_metric'] -= baseline
+            
+            for model in grouped_data['model'].unique():
+                model_data = grouped_data[grouped_data['model'] == model]
+                style = model_styles.get(model, {'marker': 'o', 'color': 'black', 'size': 10, 'name': model})
+                
+                # Plot the line and markers
+                ax.plot(model_data['p_int'], model_data['mean_metric'],
+                       marker=style['marker'], 
+                       color=style['color'], 
+                       markersize=style['size'], 
+                       label=style['name'],
+                       markeredgecolor='black',
+                       markeredgewidth=0.1,
+                       alpha=0.8,
+                       linestyle='-')
+                
+                # Add shaded area for uncertainty
+                ax.fill_between(model_data['p_int'],
+                               model_data['mean_metric'] - model_data['se_metric'],
+                               model_data['mean_metric'] + model_data['se_metric'],
+                               color=style['color'],
+                               alpha=0.2)
+        
+        # Set x-axis ticks and labels
+        ax.set_xticks([0, 0.25, 0.5, 0.75, 1])
+        ax.set_xticklabels(['0', '0.25', '0.5', '0.75', '1'])
+        
+        # Show xlabel only for the last row
+        if row == 1:
+            ax.set_xlabel('$p_{int}$', fontsize=label_font['size'])
+        
+        ax.set_title(f'{get_df_name(dataset)}', fontsize=label_font['size'])
+
+        # Set ylabel only for the leftmost subplot in each row
+        if col == 0:
+            if dataset not in regression_datasets:
+                ylabel = '$\Delta$ (1 - Accuracy)' if relative_accuracy else '1 - Accuracy'
+                ax.set_ylabel(ylabel, fontsize=label_font['size'])
+            else:
+                ylabel = '$\Delta$ MAE' if relative_accuracy else 'MAE'
+                ax.set_ylabel(ylabel, fontsize=label_font['size'])
+        
+        ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
+        ax.minorticks_off()
+        ax.grid(True, alpha=0.3, zorder=0)
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{x:.2f}'))
+    
+    # Hide empty subplots and check if we can place legend in missing subplot
+    total_datasets = len(classification_datasets) + len(regression_datasets)
+    legend_in_subplot = False
+    
+    # Hide unused subplots in first row
+    for col in range(len(classification_datasets), n_cols):
+        axes[0][col].set_visible(False)
+    
+    # Hide unused subplots in second row and check for legend placement
+    for col in range(len(regression_datasets), n_cols):
+        axes[1][col].set_visible(False)
+        # If this is the last (rightmost) empty subplot and total datasets is odd
+        if col == n_cols - 1 and total_datasets % 2 == 1:
+            legend_in_subplot = True
+            legend_ax = axes[1][col]
+    
+    # Filter the style according to the models' names which are present in the df
+    filtered_styles = {name: style for name, style in model_styles.items() if name in df['model'].values}
+
+    # Create custom legend handles
+    custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=style['size']+10, label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in filtered_styles.values()]
+
+    # Place legend either in empty subplot or below plots
+    if legend_in_subplot:
+        legend_ax.set_visible(True)
+        legend_ax.axis('off')  # Hide axes
+        legend_ax.legend(handles=custom_handles, loc='center', ncol=1, fontsize=tick_font['size'], frameon=True)
+    else:
+        # Create a single legend below the plots
+        fig.legend(
+            handles=custom_handles,
+            loc='lower center',
+            ncol=(len(custom_handles) + 1) // 2,  # Split legend into two rows
+            fontsize=tick_font['size'],
+            frameon=True,
+            bbox_to_anchor=(0.5, -0.1),
+            columnspacing=1.0,
+            handletextpad=0.5
+        )
+
+    plt.tight_layout()
+    str_store = str(unique_noises[0]).replace('.', '')
+    suffix = 'relative_accuracy_difference' if relative_accuracy else 'absolute_accuracy'
+    os.makedirs(f'figs/intervention/{suffix}', exist_ok=True)
+    plt.savefig(f'figs/intervention/{suffix}/{str_store}.pdf')
+    plt.show()
+
+
+def plot_memory_ablation(performance, model_styles, title_font, label_font, tick_font, custom_order):
+
+    performance = compute_avg_and_uncertainty(performance, custom_order)
 
     # Separate datasets by task type
     classification_datasets = performance[performance['task_type'] == 'classification']['dataset'].unique()
@@ -331,7 +413,7 @@ def plot_memory_ablation(performance, model_styles, title_font, label_font, tick
     n_cols = max(len(classification_datasets), len(regression_datasets))  
     n_rows = 2  # Force 2 rows: classification on first row, regression on second
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 7*n_rows), sharey=False)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 6*n_rows), sharey=False)
     
     # Handle case where we have only one subplot
     if n_rows == 1 and n_cols == 1:
@@ -363,27 +445,66 @@ def plot_memory_ablation(performance, model_styles, title_font, label_font, tick
         
         for model in data['model'].unique():
             model_data = data[data['model'] == model]
-            ax.plot(
-                model_data['memory_size'], 
-                model_data['mean_task'], 
-                label=model_styles[model]['name'], 
-                marker=model_styles[model]['marker'], 
-                color=model_styles[model]['color'], 
-                markersize=model_styles[model]['size']
-            )
-            ax.fill_between(
-                model_data['memory_size'], 
-                model_data['mean_task'] - model_data['se_task'], 
-                model_data['mean_task'] + model_data['se_task'], 
-                color=model_styles[model]['color'], 
-                alpha=0.2
-            )
+            
+            # Check if this model has unique memory size (only one data point)
+            has_unique_memory_size = len(model_data) == 1
+            
+            # For accuracy metrics, plot 1-accuracy (error rate)
+            if metric_type == 'accuracy':
+                y_values = 1 - model_data['mean_task']
+                y_errors = model_data['se_task']  # Error bars remain the same
+            else:
+                y_values = model_data['mean_task']
+                y_errors = model_data['se_task']
+            
+            if has_unique_memory_size:
+                # Show uncertainty as vertical error bars for single points
+                ax.errorbar(
+                    model_data['memory_size'], 
+                    y_values,
+                    yerr=y_errors,
+                    label=model_styles[model]['name'], 
+                    marker=model_styles[model]['marker'], 
+                    color=model_styles[model]['color'], 
+                    markersize=model_styles[model]['size'],
+                    markeredgecolor='black',
+                    markeredgewidth=0.1,
+                    capsize=3,
+                    capthick=1.5,
+                    alpha=0.8,
+                    linestyle='none'  # No line for single points
+                )
+            else:
+                # Show uncertainty as shaded area for multiple points
+                ax.plot(
+                    model_data['memory_size'], 
+                    y_values,
+                    label=model_styles[model]['name'], 
+                    marker=model_styles[model]['marker'], 
+                    color=model_styles[model]['color'], 
+                    markersize=model_styles[model]['size'],
+                    markeredgecolor='black',
+                    markeredgewidth=0.1,
+                    alpha=0.8
+                )
+                ax.fill_between(
+                    model_data['memory_size'],
+                    y_values - y_errors,
+                    y_values + y_errors,
+                    color=model_styles[model]['color'],
+                    alpha=0.2
+                )
+        
         ax.set_title(get_df_name(dataset), fontdict=title_font)
-        ax.set_xlabel('Memory Size', fontdict=label_font)
+
+        if row==1:
+            ax.set_xlabel('Memory Size', fontdict=label_font)
+        else:
+            ax.set_xlabel('')
         
         # Set y-label only for the leftmost subplot in each row
         if col == 0:
-            ylabel = 'Task Accuracy' if metric_type == 'accuracy' else 'Task MAE'
+            ylabel = '1 - Accuracy' if metric_type == 'accuracy' else 'MAE'
             ax.set_ylabel(ylabel, fontdict=label_font)
         
         # Set x-axis to log scale
@@ -403,17 +524,21 @@ def plot_memory_ablation(performance, model_styles, title_font, label_font, tick
         ax.minorticks_off()
         ax.grid(True, alpha=0.3, zorder=0)
 
-    # Hide empty subplots
-    total_subplots = n_rows * n_cols
-    used_subplots = len(classification_datasets) + len(regression_datasets)
+    # Hide empty subplots and check if we can place legend in missing subplot
+    total_datasets = len(classification_datasets) + len(regression_datasets)
+    legend_in_subplot = False
     
     # Hide unused subplots in first row
     for col in range(len(classification_datasets), n_cols):
         axes[0][col].set_visible(False)
     
-    # Hide unused subplots in second row
+    # Hide unused subplots in second row and check for legend placement
     for col in range(len(regression_datasets), n_cols):
         axes[1][col].set_visible(False)
+        # If this is the last (rightmost) empty subplot and total datasets is odd
+        if col == n_cols - 1 and total_datasets % 2 == 1:
+            legend_in_subplot = True
+            legend_ax = axes[1][col]
 
     # Filter the style according to the models' names which are present in the performance df
     filtered_styles = {name: style for name, style in model_styles.items() if name in performance['model'].values}
@@ -421,8 +546,14 @@ def plot_memory_ablation(performance, model_styles, title_font, label_font, tick
     # Create custom legend handles
     custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=(style['size'])+10, label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in filtered_styles.values()]
 
-    # Create a single legend below the plots
-    fig.legend(handles=custom_handles, loc='lower center', ncol=(len(custom_handles) + 1) // 2, fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.15), columnspacing=1.0, handletextpad=0.5)
+    # Place legend either in empty subplot or below plots
+    if legend_in_subplot:
+        legend_ax.set_visible(True)
+        legend_ax.axis('off')  # Hide axes
+        legend_ax.legend(handles=custom_handles, loc='center', ncol=1, fontsize=tick_font['size'], frameon=True)
+    else:
+        # Create a single legend below the plots
+        fig.legend(handles=custom_handles, loc='lower center', ncol=(len(custom_handles) + 1) // 2, fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.15), columnspacing=1.0, handletextpad=0.5)
 
     plt.tight_layout()
     plt.savefig('figs/memory_ablation.pdf')
@@ -538,7 +669,6 @@ def plot_concept_size_ablation(
         mean_concept=('concept', 'mean'),
         std_concept=('concept', 'std')
     ).reset_index()
-
     
     # instead of the std compute the standard error at 95% confidence
     performance['se_task'] = 1.96 * performance['std_task'] / np.sqrt(num_seeds)
@@ -576,18 +706,22 @@ def plot_concept_size_ablation(
     plt.tight_layout()
     plt.savefig(f'figs/concept_size_ablation.pdf', bbox_inches='tight')
 
-def filter_pareto_models(df: pd.DataFrame, fixed_memory: dict = None) -> pd.DataFrame:
+
+def filter_pareto_models(df: pd.DataFrame, fixed_memory: dict = None, custom_order: list = None, delta_threshold: float = 0.1) -> pd.DataFrame:
     """
     Filters a dataframe of model results to keep only the best memory_size per model/dataset/seed
-    using Pareto optimality:
+    using Pareto optimality with delta threshold:
         - For classification: maximize accuracy, minimize memory_size
         - For regression: minimize MAE, minimize memory_size
 
     If `fixed_memory` is provided (dict mapping dataset -> memory_size), then for those datasets
     the given memory_size is enforced.
+    
+    If delta_threshold is provided, selects the smallest memory_size where the performance
+    difference with the next memory_size is below the threshold.
     """
 
-    df = compute_avg_and_uncertainty(df)
+    df = compute_avg_and_uncertainty(df, custom_order)
 
     fixed_memory = fixed_memory or {}
 
@@ -605,19 +739,48 @@ def filter_pareto_models(df: pd.DataFrame, fixed_memory: dict = None) -> pd.Data
                 group = group.iloc[0].to_frame().T
                 return group
 
+        # Sort by memory_size to compare consecutive values
+        group = group.sort_values("memory_size")
+        
         if task_type == "classification":
             # Higher accuracy is better, lower memory_size is better
-            group = group.sort_values(["mean_task", "memory_size"], ascending=[False, True])
             best_acc = group["mean_task"].max()
-            best = group[group["mean_task"] == best_acc]
-            return best.loc[best["memory_size"].idxmin()].to_frame().T
+            best_candidates = group[group["mean_task"] == best_acc]
+            
+            if len(best_candidates) == 1:
+                return best_candidates.iloc[0].to_frame().T
+            
+            # Check delta threshold among best candidates
+            best_candidates = best_candidates.sort_values("memory_size")
+            for i in range(len(best_candidates) - 1):
+                current = best_candidates.iloc[i]
+                next_val = best_candidates.iloc[i + 1]
+                delta = next_val["mean_task"] - current["mean_task"]
+                if delta <= delta_threshold:
+                    return current.to_frame().T
+            
+            # If no delta below threshold, return smallest memory_size
+            return best_candidates.loc[best_candidates["memory_size"].idxmin()].to_frame().T
 
         elif task_type == "regression":
             # Lower MAE is better, lower memory_size is better
-            group = group.sort_values(["mean_task", "memory_size"], ascending=[True, True])
             best_mae = group["mean_task"].min()
-            best = group[group["mean_task"] == best_mae]
-            return best.loc[best["memory_size"].idxmin()].to_frame().T
+            best_candidates = group[group["mean_task"] == best_mae]
+            
+            if len(best_candidates) == 1:
+                return best_candidates.iloc[0].to_frame().T
+            
+            # Check delta threshold among best candidates
+            best_candidates = best_candidates.sort_values("memory_size")
+            for i in range(len(best_candidates) - 1):
+                current = best_candidates.iloc[i]
+                next_val = best_candidates.iloc[i + 1]
+                delta = current["mean_task"] - next_val["mean_task"]
+                if delta <= delta_threshold:
+                    return current.to_frame().T
+            
+            # If no delta below threshold, return smallest memory_size
+            return best_candidates.loc[best_candidates["memory_size"].idxmin()].to_frame().T
         else:
             return group
 
@@ -632,3 +795,337 @@ def filter_pareto_models(df: pd.DataFrame, fixed_memory: dict = None) -> pd.Data
 
     return filtered.reset_index(drop=True)
 
+
+
+def plot_intervention_memory_results(df, 
+                                    p_int=0.80,  # Fixed p_int value
+                                    metric='accuracy', 
+                                    unique_noises=[0.0], 
+                                    title_font=None, 
+                                    label_font=None, 
+                                    tick_font=None, 
+                                    legend_font=None,
+                                    custom_order=None,
+                                    model_styles=None,
+                                    relative_accuracy=False,
+                                    n_mechanisms=None):
+    unique_datasets = custom_order
+    
+
+    # From df eliminate blackbox and for the models in: ['licem', 'dcr', 'cem']
+    # set the memory to 500
+    # df = df[~df['model'].isin(['blackbox'])]
+    df.loc[df['model'].isin(['licem', 'dcr', 'cem']), 'memory_size'] = 500
+
+    # NOTE: keep in mind to update this list if you add new regression datasets
+    regression_datasets = ['mnist_arithmetic', 'dsprites_simple', 'dsprites_complex', 'cebab', 'pendulum']
+    
+    # Separate datasets by task type
+    classification_datasets = [d for d in unique_datasets if d not in regression_datasets]
+    regression_datasets = [d for d in unique_datasets if d in regression_datasets]
+    
+    # Organize datasets with classification first, then regression
+    organized_datasets = classification_datasets + regression_datasets
+    
+    n_datasets = len(organized_datasets)
+    n_cols = max(len(classification_datasets), len(regression_datasets))
+    n_rows = 2  # Force 2 rows: classification on first row, regression on second
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 6*n_rows), sharex=False, sharey=False)
+
+    # Handle case where we have only one subplot
+    if n_rows == 1 and n_cols == 1:
+        axes = [axes]
+    elif n_rows == 1:
+        axes = [axes]
+    elif n_cols == 1:
+        axes = [[ax] for ax in axes]
+    
+    for idx, dataset in enumerate(organized_datasets):
+        # Determine row based on task type
+        if dataset in classification_datasets:
+            row = 0
+            col = classification_datasets.index(dataset)
+        else:
+            row = 1
+            col = regression_datasets.index(dataset)
+        
+        if n_rows == 1:
+            ax = axes[col] if n_cols > 1 else axes[0]
+        else:
+            ax = axes[row][col] if n_cols > 1 else axes[row][0] if col == 0 else axes[row][col]
+        
+        for noise in unique_noises:
+            # Filter data for the specific p_int, noise, and dataset
+            data = df[(df['noise'] == noise) & (df['dataset'] == dataset) & (df['p_int'] == p_int)]
+            if dataset in regression_datasets:
+                metric = 'mae'
+            else:
+                metric = 'accuracy'
+            grouped_data = data.groupby(['memory_size', 'model']).agg(
+                mean_metric=(metric, 'mean'),
+                std_metric=(metric, 'std')
+            ).reset_index().fillna(0)
+            
+            # Calculate number of seeds for standard error
+            num_seeds = data.groupby(['memory_size', 'model']).size().reset_index(name='n_seeds')
+            grouped_data = grouped_data.merge(num_seeds, on=['memory_size', 'model'])
+            grouped_data['se_metric'] = 1.96 * grouped_data['std_metric'] / np.sqrt(grouped_data['n_seeds'])
+            
+            # Convert accuracy to 1-accuracy (error rate) for classification tasks
+            if dataset not in regression_datasets:
+                grouped_data['mean_metric'] = 1 - grouped_data['mean_metric']
+            
+            if relative_accuracy:
+                # Calculate relative accuracy for each model (baseline should be p_int=0)
+                baseline_data = df[(df['noise'] == noise) & (df['dataset'] == dataset) & (df['p_int'] == 0)]
+                baseline_grouped = baseline_data.groupby(['memory_size', 'model']).agg(
+                    baseline_metric=(metric, 'mean')
+                ).reset_index()
+                
+                if dataset not in regression_datasets:
+                    baseline_grouped['baseline_metric'] = 1 - baseline_grouped['baseline_metric']
+                
+                grouped_data = grouped_data.merge(baseline_grouped, on=['memory_size', 'model'], how='left')
+                grouped_data['mean_metric'] = grouped_data['mean_metric'] - grouped_data['baseline_metric'].fillna(0)
+            
+            for model in grouped_data['model'].unique():
+                model_data = grouped_data[grouped_data['model'] == model]
+                style = model_styles.get(model, {'marker': 'o', 'color': 'black', 'size': 10, 'name': model})
+                
+                # Check if this model has unique memory size (only one data point)
+                has_unique_memory_size = len(model_data) == 1
+                
+                if has_unique_memory_size:
+                    # Show uncertainty as vertical error bars for single points
+                    ax.errorbar(
+                        model_data['memory_size'], 
+                        model_data['mean_metric'],
+                        yerr=model_data['se_metric'],
+                        label=style['name'],
+                        marker=style['marker'], 
+                        color=style['color'], 
+                        markersize=style['size'],
+                        markeredgecolor='black',
+                        markeredgewidth=0.1,
+                        capsize=3,
+                        capthick=1.5,
+                        alpha=0.8,
+                        linestyle='none'  # No line for single points
+                    )
+                else:
+                    # Plot the line and markers
+                    ax.plot(model_data['memory_size'], model_data['mean_metric'],
+                           marker=style['marker'], 
+                           color=style['color'], 
+                           markersize=style['size'], 
+                           label=style['name'],
+                           markeredgecolor='black',
+                           markeredgewidth=0.1,
+                           alpha=0.8,
+                           linestyle='-')
+                    
+                    # Add shaded area for uncertainty
+                    ax.fill_between(model_data['memory_size'],
+                                   model_data['mean_metric'] - model_data['se_metric'],
+                                   model_data['mean_metric'] + model_data['se_metric'],
+                                   color=style['color'],
+                                   alpha=0.2)
+        
+        # Get distinct memory sizes for this dataset
+        distinct_memory_sizes = sorted(grouped_data['memory_size'].unique()) if not grouped_data.empty else []
+        
+        if distinct_memory_sizes:
+            # Set x-axis to log scale first
+            ax.set_xscale('log')
+            # Set ticks to actual values
+            ax.set_xticks(distinct_memory_sizes)
+            # Force display of actual values instead of scientific notation
+            ax.get_xaxis().set_major_formatter(plt.ScalarFormatter())
+            ax.get_xaxis().set_minor_formatter(plt.NullFormatter())
+            # Create custom labels
+            x_labels = []
+            for size in distinct_memory_sizes:
+                if size == 500:
+                    x_labels.append('$\infty$')
+                else:
+                    label = str(int(size))
+                    # Make label bold if this dataset is in n_mechanisms and size matches
+                    if n_mechanisms and dataset in n_mechanisms and size == n_mechanisms[dataset]:
+                        label = f'$\mathbf{{{label}}}$'
+                    x_labels.append(label)
+            ax.set_xticklabels(x_labels)
+        
+        # Show xlabel only for the last row
+        if row == 1:
+            ax.set_xlabel('Memory Size', fontsize=label_font['size'])
+        
+        ax.set_title(f'{get_df_name(dataset)}', fontsize=label_font['size'])
+
+        # Set ylabel only for the leftmost subplot in each row
+        if col == 0:
+            if dataset not in regression_datasets:
+                ylabel = '$\Delta$ (1 - Accuracy)' if relative_accuracy else '1 - Accuracy'
+                ax.set_ylabel(ylabel, fontsize=label_font['size'])
+            else:
+                ylabel = '$\Delta$ MAE' if relative_accuracy else 'MAE'
+                ax.set_ylabel(ylabel, fontsize=label_font['size'])
+        
+        ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
+        ax.minorticks_off()
+        ax.grid(True, alpha=0.3, zorder=0)
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{x:.2f}'))
+    
+    # Hide empty subplots and check if we can place legend in missing subplot
+    total_datasets = len(classification_datasets) + len(regression_datasets)
+    legend_in_subplot = False
+    
+    # Hide unused subplots in first row
+    for col in range(len(classification_datasets), n_cols):
+        axes[0][col].set_visible(False)
+    
+    # Hide unused subplots in second row and check for legend placement
+    for col in range(len(regression_datasets), n_cols):
+        axes[1][col].set_visible(False)
+        # If this is the last (rightmost) empty subplot and total datasets is odd
+        if col == n_cols - 1 and total_datasets % 2 == 1:
+            legend_in_subplot = True
+            legend_ax = axes[1][col]
+    
+    # Filter the style according to the models' names which are present in the df
+    filtered_styles = {name: style for name, style in model_styles.items() if name in df['model'].values}
+
+    # Create custom legend handles
+    custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=style['size']+10, label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in filtered_styles.values()]
+
+    # Place legend either in empty subplot or below plots
+    if legend_in_subplot:
+        legend_ax.set_visible(True)
+        legend_ax.axis('off')  # Hide axes
+        legend_ax.legend(handles=custom_handles, loc='center', ncol=1, fontsize=tick_font['size'], frameon=True)
+    else:
+        # Create a single legend below the plots
+        fig.legend(
+            handles=custom_handles,
+            loc='lower center',
+            ncol=(len(custom_handles) + 1) // 2,  # Split legend into two rows
+            fontsize=tick_font['size'],
+            frameon=True,
+            bbox_to_anchor=(0.5, -0.1),
+            columnspacing=1.0,
+            handletextpad=0.5
+        )
+
+    plt.tight_layout()
+    str_store = str(p_int).replace('.', '')
+    suffix = 'relative_accuracy_difference' if relative_accuracy else 'absolute_accuracy'
+    os.makedirs(f'figs/intervention_memory/{suffix}', exist_ok=True)
+    plt.savefig(f'figs/intervention_memory/{suffix}/interventions_pint_{str_store}.pdf')
+    plt.show()
+
+
+def plot_licem_weights_distribution(train_w, test_w, result_figs, c_names, y_names, title_font=None, label_font=None, tick_font=None, legend_font=None):
+    """
+    Plot the LICEM weights distribution for train and test sets.
+    Find the concept-task pair with maximum distribution difference.
+    
+    Args:
+        train_w: Training weights tensor [batch x n_concepts x n_tasks]
+        test_w: Test weights tensor [batch x n_concepts x n_tasks] 
+        result_figs: Directory to save figures
+        c_names: List of concept names
+        y_names: List of task/label names
+        title_font: Font settings for title
+        label_font: Font settings for axis labels
+        tick_font: Font settings for tick labels
+        legend_font: Font settings for legend
+    """
+    import scipy.stats as stats
+    
+    n_concepts = train_w.shape[1]
+    n_tasks = train_w.shape[2]
+    
+    max_distance = 0
+    best_concept_idx = 0
+    best_task_idx = 0
+
+    # list all the eps in test_w
+    epss = list(test_w.keys())
+
+
+    # Compute KL divergence for each concept-task pair
+    for noise in tqdm(epss):
+        kls = 0
+        for i in tqdm(range(n_concepts)):
+            for j in range(n_tasks):
+                train_weights = train_w[:, i, j].flatten().numpy()
+                test_weights = test_w[noise][:, i, j].flatten().numpy()
+
+            # Compute histograms for KL divergence calculation
+            bins = np.linspace(min(train_weights.min(), test_weights.min()), 
+                             max(train_weights.max(), test_weights.max()), 50)
+            train_hist, _ = np.histogram(train_weights, bins=bins, density=True)
+            test_hist, _ = np.histogram(test_weights, bins=bins, density=True)
+            
+            # Add small epsilon to avoid log(0)
+            eps = 1e-10
+            train_hist += eps
+            test_hist += eps
+            
+            # Normalize
+            train_hist /= train_hist.sum()
+            test_hist /= test_hist.sum()
+            
+            # Compute KL divergence
+            kl_div = stats.entropy(train_hist, test_hist)
+            kls += kl_div
+
+        if kls > max_distance:
+            max_distance = kls
+            best_concept_idx = i
+            best_task_idx = j
+    
+    # Print the selected concept and task names
+    print(f"Plotting weights distribution for:")
+    print(f"Concept: {c_names[best_concept_idx]}")
+    print(f"Task: {y_names[best_task_idx]}")
+    print(f"KL Divergence: {max_distance:.4f}")
+    
+    # Create a color map for different eps values
+    colors = plt.cm.viridis(np.linspace(0, 1, len(epss)))
+    
+    # Plot train distribution (same for all eps)
+    train_weights_best = train_w[:, best_concept_idx, best_task_idx].flatten().numpy()
+    
+    # Plot test distributions for each eps - create separate plots
+    for idx, eps in enumerate(epss):
+        plt.figure(figsize=(10, 6))
+        
+        # Plot train distribution
+        plt.hist(train_weights_best, bins=50, alpha=0.7, label='Train', density=True, 
+                color='red', linewidth=2)
+        
+        # Plot test distribution for this specific eps
+        test_weights_best = test_w[eps][:, best_concept_idx, best_task_idx].flatten().numpy()
+        plt.hist(test_weights_best, bins=50, alpha=0.7, label=f'Test eps={eps}', 
+                density=True, color=colors[idx], histtype='step', linewidth=2)
+        
+        # Set font properties
+        xlabel_text = f'{c_names[best_concept_idx]} - {y_names[best_task_idx]} (eps={eps})'
+        plt.xlabel(xlabel_text, fontdict=label_font)
+        plt.ylabel('Density', fontdict=label_font)
+        
+        # Apply font settings
+        if tick_font:
+            plt.tick_params(axis='both', which='major', labelsize=tick_font.get('size', 12))
+        if legend_font:
+            plt.legend(fontsize=legend_font.get('size', 12))
+        else:
+            plt.legend()
+            
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        # Save the plot for this specific eps
+        plt.savefig(f"{result_figs}/licem_weights_distribution_eps_{eps}.pdf", bbox_inches='tight')
+        plt.close()

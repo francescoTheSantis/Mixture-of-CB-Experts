@@ -4,12 +4,13 @@ defaults:
 
 loader: 
   name: pendulum
-  dataset_already_created: False
+  dataset_already_created: True
+  batch_size: 512
 
 # Dataset parameters
 metadata:
   task: regression
-  lr: 0.001
+  lr: 0.0005
   name: pendulum
   data_type: image
   concept_type: float # Continuous concepts

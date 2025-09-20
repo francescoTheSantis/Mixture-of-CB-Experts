@@ -67,7 +67,7 @@ class BlackBox(BaseModel):
             'c_hat': None
         }
 
-    def loss(self, y_hat, y, *args):
+    def loss(self, y_hat, y, *args, **kwargs):
         if self.task == 'classification' and self.output_size > 1:
             y = y.flatten().long()
         elif self.task == 'generation':

@@ -164,7 +164,7 @@ class ConceptMemoryReasoner(BaseModel):
             'c_hat': c_hat
         }
 
-    def loss(self, y_hat, y, c_hat=None, c=None):
+    def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         if torch.isnan(loss):
             raise ValueError("Loss is NaN. Check your model and data.")

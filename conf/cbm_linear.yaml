@@ -9,9 +9,11 @@ hydra:
   sweeper:
     params:
       seed: 1, 2, 3 #, 4, 5
-      dataset: mnist_arithmetic, dsprites_simple, cub, cub_incomplete, awa2, awa2_incomplete, mnist_addition
+      dataset: mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum, cub, cub_incomplete, awa2, awa2_incomplete, cifar10, cifar100
       memory_size: 1
       model: cbm_linear
 
 # Bigger backbone for real world datasets
 img_backbone_name: facebook/dinov2-base
+
+gpus: [0]

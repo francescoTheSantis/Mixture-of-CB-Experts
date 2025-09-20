@@ -124,10 +124,11 @@ class LinearConceptEmbeddingModel(BaseModel):
         y_hat = CF.linear_equation_eval(c_weights, input_concepts, y_bias)
         return {
             'y_hat': y_hat[:, :, 0],
-            'c_hat': c_hat
+            'c_hat': c_hat,
+            'weights': c_weights,
         }
 
-    def loss(self, y_hat, y, c_hat=None, c=None):
+    def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         # adding l1 regularization to the weights
         w_loss = self.weight_reg * self.__predicted_weights.norm(p=2)

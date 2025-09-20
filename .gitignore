@@ -8,7 +8,7 @@ figures/
 m_licems.yaml
 output/
 test/
-saved_output/
+saved_outputs/
 wandb_entity.txt
 debugging.yaml
 sweep_extract_emb.yaml

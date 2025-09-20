@@ -398,8 +398,15 @@ class loader(object):
             val_size = len(train_dataset) - train_size
             train_dataset, val_dataset = random_split(train_dataset, [train_size, val_size])
         elif self.name == "pendulum":
-            loader = PendulumDataset(already_created=self.dataset_already_created)
-            loaded_train, loaded_val, loaded_test = loader.collator()
+            loader = PendulumDataset(
+                already_created=self.dataset_already_created,
+                batch_size=self.batch_size
+            )
+            loaded_train, loaded_val, loaded_test = loader.collator(
+                num_workers=self.num_workers,
+                persistent_workers=True if self.num_workers > 0 else False,
+                pin_memory=True,
+                )
         elif self.name in ["dsprites_simple", "dsprites_complex"]:
             assert self.formulas is not None, "Formulas must be provided for dsprites dataset"
             dsprites_dataset = DSprites(concepts=self.selected_concepts,
@@ -416,7 +423,7 @@ class loader(object):
         else:
             raise ValueError(f"Dataset {self.name} not recognized.")
 
-        if get_type_from_name(self.name) != 'text':
+        if get_type_from_name(self.name) != 'text' and self.name != "pendulum":
             loaded_train = DataLoader(train_dataset, 
                                     batch_size=self.batch_size, 
                                     shuffle=True,

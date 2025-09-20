@@ -49,7 +49,7 @@ class Trainer:
             devices=self.cfg.gpus,  
             accelerator="auto",
             enable_progress_bar=True,
-            gradient_clip_val=1.0
+            gradient_clip_val=0.5
         )
 
         # Optimizer

@@ -6,7 +6,8 @@ from src.utilities import set_seed, set_loggers
 import torch
 import os
 from env import CACHE
-from src.utilities import update_config_from_data, is_valid_experiment, generate_data_path
+from src.utilities import update_config_from_data, is_valid_experiment, \
+    generate_data_path, save_licem_linear_coefficients
 
 @hydra.main(config_path="conf", config_name="test")
 def main(cfg: DictConfig) -> None:
@@ -92,6 +93,18 @@ def main(cfg: DictConfig) -> None:
         with open(f"{log_dir}/kan_equations.txt", "w") as f:
             for i, eq in enumerate(equations):
                 f.write(f"KAN Layer {i+1}: {eq}\n")
+
+    if cfg.model.metadata.name == 'licem':
+        ###### Save the learned linear coefficients ######
+        save_licem_linear_coefficients(model, loaded_train, log_dir, split='train')
+        save_licem_linear_coefficients(model, loaded_test, log_dir, split='test')
+        # save the c_names and y_names
+        with open(f"{log_dir}/c_names.txt", "w") as f:
+            for c in c_names:
+                f.write(f"{c}\n")
+        with open(f"{log_dir}/y_names.txt", "w") as f:
+            for y in y_names:
+                f.write(f"{y}\n")
 
     # Close the wandb logger if it is used
     if wandb_logger is not None:

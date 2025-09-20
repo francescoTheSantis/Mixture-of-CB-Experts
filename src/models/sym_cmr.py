@@ -50,6 +50,7 @@ class SymbolicMemoryReasoner(BaseModel):
                  embedding_memory=False,
                  concept_penalty=1.0,
                  regularize=True,
+                 regularize_memory=False,
                  **kwargs
                  ):
 
@@ -85,6 +86,7 @@ class SymbolicMemoryReasoner(BaseModel):
         self.show_explanations = False
         self.equations_for_explanations_ready = False
         self.regularize = regularize
+        self.regularize_memory = regularize_memory
 
         self.mc_approx = mc_approx
         self.memory_size = memory_size
@@ -122,8 +124,8 @@ class SymbolicMemoryReasoner(BaseModel):
                 self.kan_layers = nn.ModuleList()
                 for i in range(self.memory_size):
                     kan_params['ckpt_path'] = os.path.join(os.getcwd(), f'kan{i}_ckpt')
-                    # generate a random seed in order to have different initializations
-                    kan_params['seed'] = np.random.randint(0, 10000)
+                    # generate a different seed for each KAN layer
+                    # kan_params['seed'] = int(os.environ.get('PYTHONHASHSEED', '0')) + i
                     kan_layer = KAN(**kan_params)
                     for param in kan_layer.get_params():
                         param.requires_grad = True
@@ -379,36 +381,65 @@ class SymbolicMemoryReasoner(BaseModel):
             # Compute the temperature for the Gumbel-Softmax distribution
             current_tau = self.compute_tau(self.global_step)
             # Dimension: (bsz, memory_size, n_classes, n_samples)
-            prob_per_classifier = F.gumbel_softmax(classifier_selector_logits, 
+            sampled_memory_idxs = F.gumbel_softmax(classifier_selector_logits, 
                                                    tau=current_tau, 
                                                    hard=True, 
                                                    dim=1)
         else:
-            prob_per_classifier = torch.ones((bsz, 1, len(self.y_names), 1), device=latent.device)
+            sampled_memory_idxs = torch.ones((bsz, 1, len(self.y_names), 1), device=latent.device)
             selection_dist = torch.tensor([0.0], device=latent.device)
 
         ## Equation execution block ##
-        y_hat, explanations = self._execute_equations(prob_per_classifier, input_concepts)
+        y_hat, explanations = self._execute_equations(sampled_memory_idxs, input_concepts)
 
         return {
             'y_hat': y_hat,
             'c_hat': c_hat,
             'explanations': explanations,
-            'selection_dist': selection_dist
+            'selection_dist': selection_dist,
+            'sampled_memory_idxs': sampled_memory_idxs
         }
 
     def kan_regularization_term(self):
         reg_term = 0.0
         for kan_layer in self.kan_layers:
             reg_term += kan_layer.get_reg(reg_metric="edge_forward_spline_n", lamb_l1=1, lamb_entropy=2, lamb_coef=0, lamb_coefdiff=0)
+        # divide by the number of kan layers (memory_size)
+        reg_term = reg_term / self.memory_size
         return reg_term * self.lamb
 
-    def loss(self, y_hat, y, c_hat=None, c=None):
+    def loss(self, y_hat, y, c_hat=None, c=None, sampled_memory_idxs=None, *args, **kwargs):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
+
+        # KAN regularization: it promotes sparsity in the KAN layers
         if self.output_size == 1 and self.regularize and self.equation_learning_strategy=='kan':
             loss += self.kan_regularization_term()
+
+        # Memory regularization: it promotes the use of fewer memory slots
+        if self.memory_size > 1 and self.regularize_memory and sampled_memory_idxs is not None:
+            # samples shape: (bsz, memory_size, n_classes, n_samples)
+            sum_over_batch = sampled_memory_idxs.sum(dim=0) # Shape: (memory_size, n_classes, n_samples)
+            dist = F.softmax(sum_over_batch, dim=0) # Shape: (memory_size, n_classes, n_samples)
+            entropy = -(dist * torch.log(dist + 1e-8)).sum(dim=0) # Shape: (n_classes, n_samples)
+            mean_entropy = entropy.mean() # Average over classes and samples
+            loss += self.compute_increasing_coeff(self.global_step) * mean_entropy
         return loss
     
+    def compute_increasing_coeff(self, global_step, coeff_init=0.0, coeff_max=1, growth_rate=0.01):
+        if self.decay_rate == 'linear':
+            # Linear increase over time
+            coeff = min(coeff_max, coeff_init + growth_rate * global_step)
+        elif self.decay_rate == 'exp':
+            # Exponential increase over time
+            coeff = min(coeff_max, coeff_init + (coeff_max - coeff_init) * (1 - np.exp(-growth_rate * global_step)))
+        elif self.decay_rate == 'cosine':
+            # Cosine increase over time
+            coeff = coeff_init + (coeff_max - coeff_init) * (1 - np.cos(np.pi * global_step / 10000)) / 2
+            coeff = min(coeff, coeff_max)
+        else:
+            raise ValueError(f"Unknown decay rate: {self.decay_rate}")
+        return coeff
+
 
 
     # def _fit_symbolic_reg_model(self, top_fraction=0.5):

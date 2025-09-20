@@ -9,24 +9,20 @@ hydra:
   sweeper:
     params:
       seed: 1
-      dataset: dsprites_complex
-      model: sym_cmr_kan
-      memory_size: 3
+      dataset: cub #dsprites_simple, dsprites_complex, pendulum, mnist_arithmetic
+      model: licem
+      memory_size: 1
     
 gpus: [0]
 
-max_epochs: 1
+max_epochs: 20
 patience: 50
-
-scale_target: False
-disjoint_training: True
 
 use_stored_dataset: True
 extract_embeddings: True
 
-selector_model: mlp
+disjoint_training: true
+int_prob: 0.25
 
-int_prob: 0
-task_penalty: 1
 
 note: test_prior

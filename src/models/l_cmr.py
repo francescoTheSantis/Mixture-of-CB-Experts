@@ -248,7 +248,7 @@ class LinearMemoryReasoner(BaseModel):
         else:
             return torch.einsum('bmct,bmts->btcs', memory, selection)
         
-    def loss(self, y_hat, y, c_hat=None, c=None):
+    def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
 
         # Collect all the parameters in the memory

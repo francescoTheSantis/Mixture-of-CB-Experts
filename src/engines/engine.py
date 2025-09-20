@@ -128,8 +128,11 @@ class Engine(pl.LightningModule):
             y_loss = self.scaler.transform(batch['y'])
         else:
             y_loss = batch['y']
-        loss = self.model.loss(y_hat_loss, y_loss, c_hat_loss, batch['c'])
-        
+
+        # Useful to regularize the memory of the models.
+        sampled_memory_idxs = model_output.get('sampled_memory_idxs', None)
+        loss = self.model.loss(y_hat_loss, y_loss, c_hat_loss, batch['c'], sampled_memory_idxs=sampled_memory_idxs)
+
         # return everything
         return loss, model_output
 

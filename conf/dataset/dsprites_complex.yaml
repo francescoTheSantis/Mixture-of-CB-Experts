@@ -5,26 +5,26 @@ defaults:
 loader: 
   name: dsprites_complex
   selected_concepts: ['value_x_position', 'value_y_position']
-  n_samples: 50000
   # Concepts available: value_shape, value_scale, value_orientation, value_x_position, value_y_position
-  batch_size: 512
+  n_samples: 100000
+  batch_size: 1024
 
   # Formulas for the dataset
   formulas: 
     circle: "exp(sin(pi * 2 * value_x_position) + cos (pi * 2 * value_y_position))"
-    square: "(value_x_position - 0.5) ** 2 + (value_y_position - 0.5) ** 2"
-    heart: "exp(value_x_position^2 + value_y_position^2)"
+    square: "-exp(value_x_position^2 + (value_y_position) ^ 2)"
+    heart: "tanh(value_x_position^2 + value_y_position^2)"
 
 # Dataset parameters
 metadata:
   task: regression
-  lr: 0.001
+  lr: 0.0005
   name: dsprites_complex
   data_type: image
   concept_type: ['float', 'float'] 
 
 # for this dataset, the equations connecting the concepts to the task are known
 equations: 
-  - "exp(sin(pi * 2 * c0) + cos (pi * 2 * c1))" # c0 is value_x_position, c1 is value_y_position
-  - "(c0 - 0.5) ** 2 + (c1 - 0.5) ** 2"
-  - "exp(c0^2 + c1^2)"
+  - "exp(sin(pi * 2 * c0) + cos(pi * 2 * c1))" # c0 is value_x_position, c1 is value_y_position
+  - "-exp(c0^2 + c1^2)"
+  - "tanh(c0^2 + c1^2)"

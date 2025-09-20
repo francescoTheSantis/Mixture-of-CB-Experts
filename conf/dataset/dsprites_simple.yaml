@@ -6,8 +6,8 @@ loader:
   name: dsprites_simple
   selected_concepts: ['value_x_position', 'value_y_position']
   # Concepts available: value_shape, value_scale, value_orientation, value_x_position, value_y_position
-  n_samples: 50000
-  batch_size: 512
+  n_samples: 100000
+  batch_size: 1024
 
   # Formulas for the dataset
   formulas: 
@@ -18,7 +18,7 @@ loader:
 # Dataset parameters
 metadata:
   task: regression
-  lr: 0.001
+  lr: 0.0005
   name: dsprites_simple
   data_type: image
   concept_type: ['float', 'float'] 

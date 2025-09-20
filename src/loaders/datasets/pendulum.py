@@ -26,20 +26,24 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import DataLoader
 from env import DATA_PATH
+from tqdm import tqdm
 
 # set the directory
 PENDULUM_DIR = f'{DATA_PATH}/pendulum'
 
 # pendulum's attributes
 IMG_COLUMN = 'img_dir'
-CONCEPT_NAMES = ['theta', 'phi','suspension_x','suspension_y','pendulum_length',
-                 'pendulum_x', 'pendulum_y','ball_x','ball_y','light_x', 'light_y',
-                 'shade_plane','shade_length']
-TASK_NAMES = ['shade_mid']
 
+# CONCEPT_NAMES = ['theta', 'phi','suspension_x','suspension_y','pendulum_length',
+#                  'pendulum_x', 'pendulum_y','ball_x','ball_y','light_x', 'light_y',
+#                  'shade_plane','shade_length']
 
-def projection(phi, x_0, y_0, base = -0.5): # calculate x intersection between y - y_0 = tan(phi) (x- x_0) and y = base 
-    b = y_0-x_0*math.tan(phi) 
+CONCEPT_NAMES = ['theta', 'phi']
+
+TASK_NAMES = ['pendulum_x']
+
+def projection(phi, x_0, y_0, base = -0.5): # calculate x intersection between y - y_0 = tan(phi) (x- x_0) and y = base
+    b = y_0-x_0*math.tan(phi)
     shade = (base - b)/math.tan(phi)
     return shade
 
@@ -49,8 +53,8 @@ def create_dataframe(CONCEPT_NAMES):
     train_df = pd.DataFrame(columns=[IMG_COLUMN]+CONCEPT_NAMES+TASK_NAMES)
     val_df = pd.DataFrame(columns=[IMG_COLUMN]+CONCEPT_NAMES+TASK_NAMES)
     test_df = pd.DataFrame(columns=[IMG_COLUMN]+CONCEPT_NAMES+TASK_NAMES)
-    for theta in np.linspace(-44,44,100):# angle formed by the pendulum
-        for phi in np.linspace(60,140,100):# angle formed by the light
+    for theta in tqdm(np.linspace(-200,200,100)):# angle formed by the pendulum
+        for phi in np.linspace(60,140,1000):# angle formed by the light
             if phi == 100:
                 continue
             plt.rcParams['figure.figsize'] = (1.0, 1.0)
@@ -91,8 +95,8 @@ def create_dataframe(CONCEPT_NAMES):
             # normalize values
             values_dict = {
             'img_dir': "",
-            'theta': theta, #(theta - scale[0][0]) / (scale[0][1] - 0),
-                'phi': phi, #(phi - scale[1][0]) / (scale[1][1] - 0)
+            'theta': theta_rad, #(theta - scale[0][0]) / (scale[0][1] - 0),
+                'phi': phi_rad, #(phi - scale[1][0]) / (scale[1][1] - 0)
                 'suspension_x': 10,
                 'suspension_y': 10.5,
                 'pendulum_length': 8,
@@ -171,7 +175,11 @@ class PendulumDataset:
         self.test_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(self.root, 'test/test_df.pkl')))
         self.test_dataset.set_format(type='python')
 
-    def collator(self):
+    def collator(self,
+                 num_workers: int = 0,
+                 persistent_workers: bool = False,
+                 pin_memory: bool = True,):
+        
         data_collator = CustomDataCollator()
         loaded_train = DataLoader(
             self.train_dataset, 
