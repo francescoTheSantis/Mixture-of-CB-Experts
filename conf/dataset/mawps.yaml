@@ -1,0 +1,16 @@
+defaults:
+  - common
+  - _self_
+
+loader: 
+  name: mawps
+  dataset_already_created: True
+
+# Dataset parameters
+metadata:
+  task: regression
+  lr: 0.001
+  name: mawps
+  data_type: text
+  concept_type: continuous
+  pretrained_transformer: invokerliang/MWP-BERT-en
