@@ -12,7 +12,7 @@ params:
   mc_approx: 10
   weight_reg: 1e-5
   equation_learning_strategy: "kan" 
-  regularize_memory: False
+  regularize_memory: True
 
 metadata:
-  name: m_sym_cmr_kan
+  name: m_sym_cmr_kan_reg

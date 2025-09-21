@@ -13,9 +13,6 @@ hydra:
       dataset: mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum
       model: sym_cmr_prior
 
-# Bigger backbone for real world datasets
-img_backbone_name: facebook/dinov2-base
-
 ## Shared Concept-based model parameters
 task_penalty: 1.0
 concept_penalty: 1.0

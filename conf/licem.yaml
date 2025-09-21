@@ -13,9 +13,6 @@ hydra:
       memory_size: 0
       model: licem
 
-# Bigger backbone for real world datasets
-img_backbone_name: facebook/dinov2-base
-
 disjoint_training: False
 int_prob: 0.25
 
@@ -23,4 +20,4 @@ int_prob: 0.25
 task_penalty: 0.1
 concept_penalty: 1.0
 
-gpus: [1]
+gpus: [0]

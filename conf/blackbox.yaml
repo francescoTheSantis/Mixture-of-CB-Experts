@@ -13,7 +13,4 @@ hydra:
       memory_size: 0
       model: blackbox
 
-# Bigger backbone for real world datasets
-img_backbone_name: facebook/dinov2-base
-
 gpus: [0]

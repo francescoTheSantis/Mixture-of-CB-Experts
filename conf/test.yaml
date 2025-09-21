@@ -8,17 +8,17 @@ hydra:
       dir: test/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 1
-      dataset: cub #dsprites_simple, dsprites_complex, pendulum, mnist_arithmetic
+      seed: 1, 2, 3
+      dataset: mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum, cub, cub_incomplete, awa2, awa2_incomplete, cifar10, cifar100
       model: licem
       memory_size: 1
     
 gpus: [0]
 
-max_epochs: 20
+max_epochs: 1
 patience: 50
 
-use_stored_dataset: True
+use_stored_dataset: False
 extract_embeddings: True
 
 disjoint_training: true

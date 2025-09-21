@@ -13,9 +13,6 @@ hydra:
       dataset: mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum, cub, cub_incomplete, awa2, awa2_incomplete, cifar10, cifar100
       model: l_cmr
 
-# Bigger backbone for real world datasets
-img_backbone_name: facebook/dinov2-base
-
 ## Shared Concept-based model parameters
 task_penalty: 1.0
 concept_penalty: 1.0
@@ -24,5 +21,4 @@ hard_concepts: False
 # It controls whether the concept and task predictors are trained jointly or in parallel.
 disjoint_training: True
 
-
-gpus: [1]
+gpus: [0]
