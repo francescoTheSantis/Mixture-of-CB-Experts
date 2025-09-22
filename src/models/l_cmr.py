@@ -25,7 +25,7 @@ class LinearMemoryReasoner(BaseModel):
                  hard_concepts=False,
                  weight_reg=0,
                  encoder=None,
-                 mc_approx=10,
+                 mc_approx=1,
                  embedding_memory=True,
                  selector_model='linear',
                  linear_classifier_selection=False,

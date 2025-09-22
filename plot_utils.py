@@ -59,6 +59,8 @@ def get_df_name(df):
         return 'MNIST-Arith.'
     elif df=='pendulum':
         return 'Pendulum'
+    elif df=='mawps':
+        return 'MAWPS'
 
 def get_exp_from_path(paths):
     # Collect all the experiments in the given paths
@@ -240,7 +242,7 @@ def plot_intervention_results(df,
     unique_datasets = custom_order
     
     # NOTE: keep in mind to update this list if you add new regression datasets
-    regression_datasets = ['mnist_arithmetic', 'dsprites_simple', 'dsprites_complex', 'cebab', 'pendulum']
+    regression_datasets = ['mnist_arithmetic', 'dsprites_simple', 'dsprites_complex', 'cebab', 'pendulum', 'mawps']
     
     # Separate datasets by task type
     classification_datasets = [d for d in unique_datasets if d not in regression_datasets]
@@ -818,7 +820,7 @@ def plot_intervention_memory_results(df,
     df.loc[df['model'].isin(['licem', 'dcr', 'cem']), 'memory_size'] = 500
 
     # NOTE: keep in mind to update this list if you add new regression datasets
-    regression_datasets = ['mnist_arithmetic', 'dsprites_simple', 'dsprites_complex', 'cebab', 'pendulum']
+    regression_datasets = ['mnist_arithmetic', 'dsprites_simple', 'dsprites_complex', 'cebab', 'pendulum', 'mawps']
     
     # Separate datasets by task type
     classification_datasets = [d for d in unique_datasets if d not in regression_datasets]

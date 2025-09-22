@@ -5,13 +5,13 @@ defaults:
 hydra:
   mode: MULTIRUN
   sweep:
-      dir: output/sym_cmr_prior/${now:%Y-%m-%d_%H-%M-%S}
+      dir: output/l_cmr_toy/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 1, 2, 3 #, 4, 5
-      memory_size: 4, 1, 3
-      dataset: mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum
-      model: sym_cmr_prior
+      seed: 1, 2, 3, 4, 5
+      memory_size: 1, 2, 3, 4, 5, 10, 20, 50
+      dataset: cifar10
+      model: l_cmr
 
 ## Shared Concept-based model parameters
 task_penalty: 1.0
@@ -21,4 +21,4 @@ hard_concepts: False
 # It controls whether the concept and task predictors are trained jointly or in parallel.
 disjoint_training: True
 
-gpus: [1]
+img_backbone_name: google/vit-base-patch32-224-in21k

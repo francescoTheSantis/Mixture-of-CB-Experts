@@ -1,0 +1,16 @@
+defaults:
+  - common
+  - _self_
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+      dir: output/blackbox_toy/${now:%Y-%m-%d_%H-%M-%S}
+  sweeper:
+    params:
+      seed: 1, 2, 3, 4, 5
+      dataset: cifar10
+      memory_size: 0
+      model: blackbox
+
+img_backbone_name: google/vit-base-patch32-224-in21k

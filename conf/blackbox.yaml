@@ -8,9 +8,8 @@ hydra:
       dir: output/blackbox/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      seed: 1, 2, 3 #, 4, 5
-      dataset: mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum, cub, cub_incomplete, awa2, awa2_incomplete, cifar10, cifar100
+      seed: 1, 2, 3, 4, 5
+      #dataset: cub, cub_incomplete, awa2, awa2_incomplete, mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum
+      dataset: mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum
       memory_size: 0
       model: blackbox
-
-gpus: [0]

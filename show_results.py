@@ -26,12 +26,13 @@ custom_order = [#'xor', \
                 'cub_incomplete',
                 #'cebab',
                 #'celeba',
-                #'cifar10',
-                'cifar100',
+                'cifar10',
+                #'cifar100',
                 'dsprites_simple',
                 'dsprites_complex',
                 'mnist_arithmetic',
-                'pendulum'
+                'pendulum',
+                #'mawps',
                 ]
 
 # Define a dictionary to associate marker, name, and color to each model.
@@ -111,33 +112,23 @@ def main():
     ###### Visualize ablation over the memory. #######
     ##################################################
 
-    # paths = [
-    #     "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_outputs/blackbox/2025-09-13_20-06-02",
-    #     "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_outputs/cem/2025-09-13_20-06-02",
-    #     "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_outputs/cmr/2025-09-13_20-06-02",
-    #     "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_outputs/dcr/2025-09-13_20-06-06",
-    #     "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_outputs/l_cmr/2025-09-13_20-07-01",
-    #     "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_outputs/licem/2025-09-13_20-07-18",
-    #     "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_outputs/sym_cmr_prior/2025-09-13_20-09-06",
-    #     # KANs
-    #     "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_outputs/sym_cmr_kan/2025-09-14_23-29-28",
-    #     "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_outputs/sym_cmr_kan/2025-09-14_23-29-29",
-    #     "/home/fdesantis/projects/Linear-Memory-Reasoner/saved_outputs/sym_cmr_kan/2025-09-14_23-29-30",
-    # ]
-
     paths = [
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/blackbox/2025-09-21_00-30-32",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cem/2025-09-21_00-30-32",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/l_cmr/2025-09-21_00-32-28",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/sym_cmr_kan/2025-09-21_00-30-32"
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/l_cmr/2025-09-21_14-38-19",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/licem/2025-09-21_14-35-35",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cem/2025-09-21_18-35-59",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cem_toy/2025-09-21_20-51-11",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/dcr/2025-09-21_23-54-35",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/dcr_toy/2025-09-21_23-54-00",
     ]
 
     try:
         performance, _ = get_exp_from_path(paths)
 
         # Count number of seeds
-        num_seeds = performance['seed'].unique().max()
-        print(f"Number of unique seeds: {num_seeds}")
+        seeds_count = performance.groupby(['dataset', 'model', 'memory_size'])['seed'].nunique().reset_index()
+        # Save in csv file
+        seeds_count.to_csv(os.path.join(result_figs, 'seeds_count_memory_ablation.csv'), index=False)
+
 
         # Filter the performance dataframe to keep only the models in model_styles 
         # and datasets in custom_order.

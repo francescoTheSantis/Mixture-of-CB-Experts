@@ -38,7 +38,7 @@ class SymbolicMemoryReasoner(BaseModel):
                  hard_concepts=False,
                  weight_reg=0,
                  encoder=None,
-                 mc_approx=10,
+                 mc_approx=1,
                  selector_model='linear',
                  concept_loss_form=nn.BCELoss(),
                  backbone_latent_size=None,

@@ -10,7 +10,7 @@ hydra:
     params:
       seed: 1, 2, 3, 4, 5
       #dataset: mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum, cub, cub_incomplete, awa2, awa2_incomplete, cifar10, cifar100
-      dataset: mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum
+      dataset: cub, cub_incomplete, awa2, awa2_incomplete
       model: blackbox
       memory_size: 1
     
