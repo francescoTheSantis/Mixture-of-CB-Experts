@@ -48,13 +48,14 @@ cmap = plt.cm.RdYlGn
 colors = list(reversed([cmap(i) for i in np.linspace(0, 1, 5)]))
 
 model_styles = {
-    'blackbox': {'marker': 'o', 'name': 'BlackBox', 'color': colors[4], 'size': marker_size},
-    'cem': {'marker': 'P', 'name': 'CEM', 'color': colors[3], 'size': marker_size},
-    'm_sym_cmr_kan': {'marker': 'X', 'name': 'mCBM-sym', 'color': colors[2], 'size': marker_size},
-    'l_cmr': {'marker': 's', 'name': 'mCBM-lin', 'color': colors[1], 'size': marker_size},
-    'licem': {'marker': 'D', 'name': 'LICEM', 'color': colors[1], 'size': marker_size},
-    'cmr': {'marker': 'v', 'name': 'mCBM-bool', 'color': colors[0], 'size': marker_size},
-    'dcr': {'marker': 'h', 'name': 'DCR', 'color': colors[0], 'size': marker_size},
+    'blackbox': {'marker': 'o', 'name': 'BlackBox', 'color': "black", 'size': marker_size},
+    'cbm_linear': {'marker': '^', 'name': 'CBM', 'color': 'tab:orange', 'size': marker_size},
+    'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:red', 'size': marker_size},
+    'm_sym_cmr_kan': {'marker': 'X', 'name': 'mCBM-sym', 'color': 'tab:green', 'size': marker_size},
+    'l_cmr': {'marker': 's', 'name': 'mCBM-lin', 'color': 'tab:blue', 'size': marker_size},
+    'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:brown', 'size': marker_size},
+    'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
+    'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:purple', 'size': marker_size},
 }
 
 
@@ -69,14 +70,17 @@ def main():
     result_figs = "figs"
     os.makedirs(result_figs, exist_ok=True)
 
+    table_path = "tabs"
+    os.makedirs(table_path, exist_ok=True)
+
     ########################################################################
     ###### Visualize training/test distribution over licem's weights #######
     ########################################################################
 
     try:
 
-        weights_path = "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-09-20_21-13-39/0/logs/experiment_metrics/version_0"
-
+        # LICEM weights path
+        weights_path = "/home/fdesantis/projects/Linear-Memory-Reasoner/output/licem/2025-09-21_14-35-35/3/logs/experiment_metrics/version_0"
         # Store the training weights
         train_w = torch.load(weights_path+'/learned_linear_coefficients_train.pt').squeeze(1)
         #iterate over all the test weights and store them in a list
@@ -92,9 +96,15 @@ def main():
         with open(weights_path+'/y_names.txt', 'r') as f:
             y_names = [line.strip() for line in f.readlines()]
 
+        # M-CBM-lin weights path
+        weights_path = "/home/fdesantis/projects/Linear-Memory-Reasoner/output/l_cmr/2025-09-21_14-38-19/8/logs/experiment_metrics/version_0"
+        # Store the training weights
+        test_w_lcmr = torch.load(weights_path+'/pred_CBMs.pt').squeeze(1)
+
         plot_licem_weights_distribution(
             train_w, 
             test_weights, 
+            test_w_lcmr,
             result_figs, 
             c_names, 
             y_names,
@@ -114,11 +124,24 @@ def main():
 
     paths = [
         "/home/fdesantis/projects/Linear-Memory-Reasoner/output/l_cmr/2025-09-21_14-38-19",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/licem/2025-09-21_14-35-35",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/licem/2025-09-22_17-34-45",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/licem_toy/2025-09-23_20-55-07",
         "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cem/2025-09-21_18-35-59",
         "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cem_toy/2025-09-21_20-51-11",
         "/home/fdesantis/projects/Linear-Memory-Reasoner/output/dcr/2025-09-21_23-54-35",
         "/home/fdesantis/projects/Linear-Memory-Reasoner/output/dcr_toy/2025-09-21_23-54-00",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/sym_cmr_kan/2025-09-21_14-39-57",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/sym_cmr_kan/2025-09-22_11-55-37",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/l_cmr/2025-09-22_11-55-41",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/l_cmr_toy/2025-09-23_11-24-59",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/blackbox/2025-09-22_11-55-42",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/blackbox/2025-09-23_19-25-55",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cmr/2025-09-22_21-58-09",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cmr_toy/2025-09-22_21-58-36",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/sym_cmr_kan/2025-09-23_14-29-31",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/sym_cmr_kan/2025-09-23_14-29-48",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/sym_cmr_kan/2025-09-23_14-54-04",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/sym_cmr_kan_toy/2025-09-24_11-13-32",
     ]
 
     try:
@@ -134,8 +157,18 @@ def main():
         # and datasets in custom_order.
         performance = performance[performance['model'].isin(model_styles.keys()) & \
                                 performance['dataset'].isin(custom_order)]
-    
+
         plot_memory_ablation(performance, model_styles, title_font, label_font, tick_font, custom_order)
+
+        # Plot the models in the pareto front
+        plot_pareto_front(performance, 
+                        model_styles, 
+                        title_font, 
+                        label_font, 
+                        tick_font, 
+                        custom_order,
+        )
+        
     except Exception as e:
         print(f"Error occurred while plotting memory ablation results: {e}")
 
@@ -179,6 +212,18 @@ def main():
                                         model_styles=model_styles,
                                         n_mechanisms=fixed_memory
                                     )
+        
+        plot_intervention_memory_pareto_results(performance, 
+                                    p_int=1,  
+                                    metric='accuracy', 
+                                    title_font=title_font, 
+                                    label_font=label_font, 
+                                    tick_font=tick_font, 
+                                    legend_font=legend_font,
+                                    custom_order=custom_order,
+                                    model_styles=model_styles,
+                                    n_mechanisms=fixed_memory
+        )
 
         performance = get_intervention_from_path(paths, filtered_exps=filtered_exps)
 
