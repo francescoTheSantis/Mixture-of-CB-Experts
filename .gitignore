@@ -15,6 +15,7 @@ sweep_extract_emb.yaml
 my_sweep.yaml
 my_sweep_2.yaml
 my_sweep_3.yaml
+tabs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
