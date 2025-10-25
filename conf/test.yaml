@@ -10,20 +10,19 @@ hydra:
     params:
       seed: 1, 2, 3, 4, 5
       #dataset: mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum, cub, cub_incomplete, awa2, awa2_incomplete, cifar10, cifar100
-      dataset: mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum
-      model: blackbox
+      dataset: awa2
+      model: cmr
       memory_size: 1
     
 gpus: [1]
 
-max_epochs: 1
+max_epochs: 3
 patience: 50
 
 use_stored_dataset: True
 extract_embeddings: True
 
-disjoint_training: true
-int_prob: 0.25
+disjoint_training: False
 
 wandb:
   entity: null
