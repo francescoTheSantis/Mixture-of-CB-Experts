@@ -25,7 +25,8 @@ class Engine(pl.LightningModule):
                 data_type: Optional[str] = None,
                 dataset_name: Optional[str] = None,
                 data_path: Optional[str] = None,
-                scale_target: bool = True
+                scale_target: bool = True,
+                fine_tuning: bool = False
                 ):
         super(Engine, self).__init__()
         self.model = model
@@ -42,6 +43,7 @@ class Engine(pl.LightningModule):
         self.data_path = data_path
         self.scale_target = scale_target
         self.model.scale_target = scale_target
+        self.fine_tuning = fine_tuning
 
         # Set the metrics
         self._set_metrics()
@@ -62,24 +64,27 @@ class Engine(pl.LightningModule):
         return metric
 
     def _set_metrics(self):
+        # Add prefix for fine-tuning metrics
+        prefix_modifier = "finetune/" if self.fine_tuning else ""
+        
         if self.model.task == 'classification':
-            self.train_y_metrics = MetricCollection(metrics={'acc': self._check_metric(ClassAccuracy())}, prefix="train/y/")
-            self.val_y_metrics = MetricCollection(metrics={'acc': self._check_metric(ClassAccuracy())}, prefix="val/y/")
+            self.train_y_metrics = MetricCollection(metrics={'acc': self._check_metric(ClassAccuracy())}, prefix=f"{prefix_modifier}train/y/")
+            self.val_y_metrics = MetricCollection(metrics={'acc': self._check_metric(ClassAccuracy())}, prefix=f"{prefix_modifier}val/y/")
             self.test_y_metrics = MetricCollection(metrics={'acc': self._check_metric(ClassAccuracy())}, prefix="test/y/")
-            self.train_c_metrics = MetricCollection(metrics={'acc': self._check_metric(ClassAccuracy())}, prefix="train/c/")
-            self.val_c_metrics = MetricCollection(metrics={'acc': self._check_metric(ClassAccuracy())}, prefix="val/c/")
+            self.train_c_metrics = MetricCollection(metrics={'acc': self._check_metric(ClassAccuracy())}, prefix=f"{prefix_modifier}train/c/")
+            self.val_c_metrics = MetricCollection(metrics={'acc': self._check_metric(ClassAccuracy())}, prefix=f"{prefix_modifier}val/c/")
             self.test_c_metrics = MetricCollection(metrics={'acc': self._check_metric(ClassAccuracy())}, prefix="test/c/")
         elif self.model.task == 'regression':
             self.train_y_metrics = MetricCollection(metrics={'mse': self._check_metric(MSE()),
-                                                             'mae': self._check_metric(MAE())}, prefix="train/y/")
+                                                             'mae': self._check_metric(MAE())}, prefix=f"{prefix_modifier}train/y/")
             self.val_y_metrics = MetricCollection(metrics={'mse': self._check_metric(MSE()),
-                                                           'mae': self._check_metric(MAE())}, prefix="val/y/")
+                                                           'mae': self._check_metric(MAE())}, prefix=f"{prefix_modifier}val/y/")
             self.test_y_metrics = MetricCollection(metrics={'mse': self._check_metric(MSE()),
                                                             'mae': self._check_metric(MAE())}, prefix="test/y/")
             self.train_c_metrics = MetricCollection(metrics={'mse': self._check_metric(MSE()),
-                                                             'mae': self._check_metric(MAE())}, prefix="train/c/")
+                                                             'mae': self._check_metric(MAE())}, prefix=f"{prefix_modifier}train/c/")
             self.val_c_metrics = MetricCollection(metrics={'mse': self._check_metric(MSE()),
-                                                           'mae': self._check_metric(MAE())}, prefix="val/c/")
+                                                           'mae': self._check_metric(MAE())}, prefix=f"{prefix_modifier}val/c/")
             self.test_c_metrics = MetricCollection(metrics={'mse': self._check_metric(MSE()),
                                                             'mae': self._check_metric(MAE())}, prefix="test/c/")
         else:
@@ -139,7 +144,10 @@ class Engine(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         self.model.global_step = self.current_epoch
         loss, model_output = self.shared_step(batch)
-        self.log("train_loss", loss.item())
+        
+        # Add prefix for fine-tuning
+        loss_name = "finetune/train_loss" if self.fine_tuning else "train_loss"
+        self.log(loss_name, loss.item())
 
         y_hat_metrics, c_hat_metrics = self.model.filter_output_for_metrics(**model_output)
         # compute task metrics
@@ -155,7 +163,8 @@ class Engine(pl.LightningModule):
             selection_dist = torch.softmax(selection_dist, dim=-1)
             selection_entropy = -torch.sum(selection_dist * torch.log(selection_dist + 1e-10), dim=1)
             selection_entropy = selection_entropy.mean()
-            self.log('train_selection_entropy', selection_entropy)
+            entropy_name = "finetune/train_selection_entropy" if self.fine_tuning else "train_selection_entropy"
+            self.log(entropy_name, selection_entropy)
         return loss
 
     def on_train_epoch_end(self):
@@ -169,7 +178,10 @@ class Engine(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         loss, model_output = self.shared_step(batch)
-        self.log("val_loss", loss.item())
+        
+        # Add prefix for fine-tuning
+        loss_name = "finetune/val_loss" if self.fine_tuning else "val_loss"
+        self.log(loss_name, loss.item())
 
         y_hat_metrics, c_hat_metrics = self.model.filter_output_for_metrics(**model_output)
         # compute task metrics
@@ -185,7 +197,8 @@ class Engine(pl.LightningModule):
             selection_dist = torch.softmax(selection_dist, dim=-1)
             selection_entropy = -torch.sum(selection_dist * torch.log(selection_dist + 1e-10), dim=1)
             selection_entropy = selection_entropy.mean()
-            self.log('val_selection_entropy', selection_entropy)
+            entropy_name = "finetune/val_selection_entropy" if self.fine_tuning else "val_selection_entropy"
+            self.log(entropy_name, selection_entropy)
         return loss 
     
     # def on_test_start(self):

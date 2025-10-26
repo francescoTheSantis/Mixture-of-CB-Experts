@@ -311,6 +311,15 @@ class BaseModel(nn.Module):
 
         return y_hat, c_hat
 
+    def store_equation_form(self, log_dir):
+        """
+        Store the equation form of the model.
+        This method must be overridden by subclasses that have an equation form.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement store_equation_form() method"
+        )
+
     # def get_intervened_concepts_predictions(self, labels, groups=None):
     #     '''
     #     Function to generate a mask for the intervention process.

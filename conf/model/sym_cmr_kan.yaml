@@ -16,3 +16,4 @@ params:
 
 metadata:
   name: m_sym_cmr_kan
+  fine_tune: True

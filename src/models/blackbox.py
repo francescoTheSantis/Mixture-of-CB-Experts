@@ -81,3 +81,11 @@ class BlackBox(BaseModel):
         # cross entropy
         loss = self.task_loss_form(y_hat.squeeze(), y)
         return loss
+    
+    def store_equation_form(self, log_dir):
+        """
+        Extract the equation form of the predictor (MLP).
+        """
+
+        
+        

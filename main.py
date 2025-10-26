@@ -9,7 +9,7 @@ from env import CACHE
 from src.utilities import update_config_from_data, is_valid_experiment, \
     generate_data_path, save_licem_linear_coefficients
 
-@hydra.main(config_path="conf", config_name="test")
+@hydra.main(config_path="conf", config_name="debugging")
 def main(cfg: DictConfig) -> None:
 
     # Initialize the wandb logger
@@ -75,27 +75,31 @@ def main(cfg: DictConfig) -> None:
     # Train the model
     trainer.train(loaded_train, loaded_val)
 
-    ###### Test ######
+    ###### Fine-tuning for symbolic cmr (kan implementation) model ######
+    if cfg.model.metadata.name == 'm_sym_cmr_kan' and cfg.model.metadata.fine_tune == True:
+        # Perform fine-tuning
+        trainer.fine_tune(
+            loaded_train, 
+            loaded_val,
+            log_dir=log_dir # where equations are stored
+        )
+
+    ###### Testing ######
     # Test the model on the test-set
     trainer.test(loaded_test)
 
+    ###### Store equation form for all models ######
+    # Kan layers have been already, so skip them
+    if cfg.model.metadata.name != 'm_sym_cmr_kan':
+        model.model.store_equation_form(log_dir)
+
     if model.model.has_concepts:
-        ###### Perform Intervetions ######
+        ###### Perform Interventions ######
         intervention_df = trainer.interventions(loaded_test)
         intervention_df.to_csv(f"{log_dir}/interventions.csv", index=False)
 
-    if cfg.model.metadata.name == 'm_sym_cmr_kan':
-        ###### Eplain the KAN layers by using the auto_symbolic function ######
-        equations = []
-        for layer in model.model.kan_layers:
-            layer.auto_symbolic()
-            equations.append(layer.symbolic_formula()[0][0])
-        with open(f"{log_dir}/kan_equations.txt", "w") as f:
-            for i, eq in enumerate(equations):
-                f.write(f"KAN Layer {i+1}: {eq}\n")
-
     if cfg.model.metadata.name == 'licem':
-        ###### Save the learned linear coefficients ######
+        ###### Save the learned linear coefficients (Useful for showing explanations) ######
         save_licem_linear_coefficients(model, loaded_train, log_dir, split='train')
         save_licem_linear_coefficients(model, loaded_test, log_dir, split='test')
         # save the c_names and y_names

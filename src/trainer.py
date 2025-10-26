@@ -117,6 +117,108 @@ class Trainer:
             ckpt_path = self.trainer.checkpoint_callback.best_model_path
         self.trainer.test(self.model, test_dataloader, ckpt_path=ckpt_path)
 
+    def fine_tune(self, 
+                  train_dataloader, 
+                  val_dataloader, 
+                  log_dir='./'):
+
+        print("\n" + "="*50)
+        print("Get symbolic equation from KAN layers before fine-tuning")
+
+        equations = []
+        for layer in self.model.model.kan_layers:
+            layer.auto_symbolic()
+            equations.append(layer.symbolic_formula()[0][0])
+        with open(f"{log_dir}/kan_equations_pre_fine_tuning.txt", "w") as f:
+            for i, eq in enumerate(equations):
+                f.write(f"KAN Layer {i+1}: {eq}\n")
+
+        print("="*50)
+        print("Starting Fine-tuning Phase")
+        print("="*50)
+        
+        # Load the best checkpoint from initial training
+        ckpt_path = self.trainer.checkpoint_callback.best_model_path
+        
+        if ckpt_path and ckpt_path != '':
+            print(f"Loading checkpoint from: {ckpt_path}")
+            checkpoint = torch.load(ckpt_path)
+            self.model.load_state_dict(checkpoint['state_dict'])
+        
+        # Set fine-tuning mode to change metric names
+        self.model.fine_tuning = True
+        self.model._set_metrics()
+        
+        fine_tune_lr = self.cfg.dataset.metadata.lr
+        
+        print(f"Fine-tuning learning rate: {fine_tune_lr}")
+        
+        # Update optimizer learning rate
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = fine_tune_lr
+        
+        # Create new scheduler
+        LR_on_plateau = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, 
+            mode='min', 
+            factor=self.cfg.gamma, 
+            patience=self.cfg.lr_patience, 
+            verbose=True
+        )
+        self.scheduler = {
+            'scheduler': LR_on_plateau,
+            'monitor': 'finetune/val_loss',  # Monitor fine-tuning val loss
+            'interval': 'epoch',
+            'frequency': 1
+        }
+        
+        # Update optimizer and scheduler in model
+        self.model.optimizer = self.optimizer
+        self.model.scheduler = self.scheduler
+        
+        # Rebuild trainer with new configuration for fine-tuning
+        early_stopping = EarlyStopping(
+            monitor='finetune/val_loss',  # Monitor fine-tuning val loss
+            patience=self.cfg.patience, 
+            verbose=True,
+            mode='min'
+        )
+
+        checkpoint_callback = ModelCheckpoint(
+            monitor='finetune/val_loss',  # Monitor fine-tuning val loss
+            filename='best_model_finetuned', 
+            save_top_k=1, 
+            mode='min', 
+            verbose=True
+        )
+
+        lr_monitor = LearningRateMonitor(logging_interval='step')
+
+        loggers = [self.wandb_logger, self.csv_logger] if self.wandb_logger is not None else self.csv_logger
+
+        self.trainer = pl.Trainer(
+            max_epochs=self.cfg.max_epochs,
+            callbacks=[early_stopping, checkpoint_callback, lr_monitor],
+            logger=loggers,
+            devices=self.cfg.gpus,  
+            accelerator="auto",
+            enable_progress_bar=True,
+            gradient_clip_val=0.5
+        )
+        
+        # Fine-tune
+        self.trainer.fit(self.model, train_dataloader, val_dataloader)
+        
+        print("Fine-tuning completed!")
+        print(f"Best fine-tuned model saved at: {self.trainer.checkpoint_callback.best_model_path}")
+        
+        equations = []
+        for layer in self.model.model.kan_layers:
+            equations.append(layer.symbolic_formula()[0][0])
+        with open(f"{log_dir}/kan_equations_post_fine_tuning.txt", "w") as f:
+            for i, eq in enumerate(equations):
+                f.write(f"KAN Layer {i+1}: {eq}\n")        
+
     def interventions(self, test_dataloader, verbose=True):
         """
         Perform interventions on the test set and return the dataframe containing the results.
