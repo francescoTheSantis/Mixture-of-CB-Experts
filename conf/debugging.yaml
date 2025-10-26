@@ -1,0 +1,30 @@
+defaults:
+  - common
+  - _self_
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+      dir: test/${now:%Y-%m-%d_%H-%M-%S}
+  sweeper:
+    params:
+      seed: 1
+      dataset: mnist_arithmetic #, dsprites_simple, dsprites_complex, pendulum, cub, cub_incomplete, awa2, awa2_incomplete, cifar10, cifar100
+      model: sym_cmr_kan
+      memory_size: 4
+    
+gpus: [0]
+
+max_epochs: 20
+patience: 10
+
+use_stored_dataset: True
+extract_embeddings: True
+
+disjoint_training: True
+
+# wandb:
+#   entity: null
+#   project: null
+
+note: test
