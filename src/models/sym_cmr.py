@@ -5,20 +5,13 @@ import torch_concepts.nn as pyc_nn
 from src.models.base import BaseModel
 from src.models.encoders.mlp import MLPEncoder
 import torch.nn.functional as F
-from torch_concepts.nn import concept_embedding_mixture
 import re
 import sympy
 import sympytorch
-#import pysr
 import numpy as np
 import os
 from kan import KAN
-# Efficient implementation of KAN:
-from src.models.efficient_kan.kan import KAN as EfficientKAN
-
-# This is intended to be the list of symbols that the user can understand
-# when looking at the equations produced by the model.
-USER_DEFINED_SYMBOLS = ['x','x^2','exp','sin','cos'] 
+from kan.utils import SYMBOLIC_LIB 
 
 class SymbolicMemoryReasoner(BaseModel):
     def __init__(self, 
@@ -36,7 +29,6 @@ class SymbolicMemoryReasoner(BaseModel):
                  c_groups=None,
                  memory_size=7,
                  hard_concepts=False,
-                 weight_reg=0,
                  encoder=None,
                  mc_approx=1,
                  selector_model='linear',
@@ -50,7 +42,8 @@ class SymbolicMemoryReasoner(BaseModel):
                  embedding_memory=False,
                  concept_penalty=1.0,
                  regularize=True,
-                 regularize_memory=False,
+                 widths=None,
+                 device='cpu',
                  **kwargs
                  ):
 
@@ -77,7 +70,6 @@ class SymbolicMemoryReasoner(BaseModel):
         self.embedding_size = embedding_size
         self.has_concepts = True
         self.y_names = list(y_names)
-        self.weight_reg = weight_reg
         self.output_size = output_size
         self.backbone_latent_size = backbone_latent_size
         self.activation = activation
@@ -86,7 +78,9 @@ class SymbolicMemoryReasoner(BaseModel):
         self.show_explanations = False
         self.equations_for_explanations_ready = False
         self.regularize = regularize
-        self.regularize_memory = regularize_memory
+        self.symbolic_predictors = False
+        self.widths = widths
+        self.device = device
 
         self.mc_approx = mc_approx
         self.memory_size = memory_size
@@ -106,42 +100,40 @@ class SymbolicMemoryReasoner(BaseModel):
             raise ValueError(f"Unknown equation learning strategy: {self.equation_learning_strategy}")
         
         if self.equation_learning_strategy == 'kan':
-            ##### NOTE #####
-            # The original KAN implementation is really slow when dealing with high dimensional inputs and outputs.
-            # for this reason we the original implmentation for regression tasks with a single output, and we use an efficient
-            # implementation for all the other cases.
-            # The advantage in using the original KAN implementation is that it allows to extract the symbolic formula learned by the model.
 
-            width = [len(self.c_names), len(self.c_names)+1, self.output_size]
+            if widths is None:
+                width = [len(self.c_names), len(self.c_names)+1, self.output_size]
 
-            if self.output_size == 1:
-                kan_params = {
-                        'width': width, 
-                        'grid': 5,
-                        'k': 3,
-                }
-                # Instantiate as many KAN Layers as the memory size
-                self.kan_layers = nn.ModuleList()
-                for i in range(self.memory_size):
-                    kan_params['ckpt_path'] = os.path.join(os.getcwd(), f'kan{i}_ckpt')
-                    # generate a different seed for each KAN layer
-                    # kan_params['seed'] = int(os.environ.get('PYTHONHASHSEED', '0')) + i
-                    kan_layer = KAN(**kan_params)
-                    for param in kan_layer.get_params():
-                        param.requires_grad = True
-                    if self.regularize:
-                        self.lamb = 0.03 # increase for higher sparsity (e.g., 0.01, 0.02, 0.03, ...)
-                        old_save_act, old_symbolic_enabled = kan_layer.disable_symbolic_in_fit(self.lamb)
-                        kan_layer.symbolic_enabled = old_symbolic_enabled
-                        kan_layer.save_act  = old_save_act
-                    self.kan_layers.append(kan_layer)
-            else:
-                self.kan_layers = nn.ModuleList()
-                for i in range(self.memory_size):
-                    kan_layers = EfficientKAN(width)
-                    for param in kan_layers.parameters():
-                        param.requires_grad = True
-                    self.kan_layers.append(kan_layers)
+            #if self.output_size == 1:
+            kan_params = {
+                    'width': width, 
+                    'grid': 5,
+                    'k': 3,
+                    'device': self.device
+            }
+
+            # Instantiate as many KAN Layers as the memory size
+            self.kan_layers = nn.ModuleList()
+            for i in range(self.memory_size):
+                kan_params['ckpt_path'] = os.path.join(os.getcwd(), f'kan{i}_ckpt')
+                # generate a different seed for each KAN layer
+                # kan_params['seed'] = int(os.environ.get('PYTHONHASHSEED', '0')) + i
+                kan_layer = KAN(**kan_params)
+                for param in kan_layer.get_params():
+                    param.requires_grad = True
+                if self.regularize:
+                    self.lamb = 0.001 # increase for higher sparsity
+                    # old_save_act, old_symbolic_enabled = kan_layer.disable_symbolic_in_fit(self.lamb)
+                    # kan_layer.symbolic_enabled = old_symbolic_enabled
+                    # kan_layer.save_act  = old_save_act
+                self.kan_layers.append(kan_layer)
+            # else:
+            #     self.kan_layers = nn.ModuleList()
+            #     for i in range(self.memory_size):
+            #         kan_layers = EfficientKAN(width)
+            #         for param in kan_layers.parameters():
+            #             param.requires_grad = True
+            #         self.kan_layers.append(kan_layers)
         
     ###### Setup methods ######
     def setup_memory(self):
@@ -171,33 +163,59 @@ class SymbolicMemoryReasoner(BaseModel):
         grid_inputs = grid_inputs if grid_inputs.ndim > 1 else grid_inputs.unsqueeze(1)
         # Update the grid of all KAN layers based on the provided inputs
         for kan_layer in self.kan_layers:
-            kan_layer.to(grid_inputs.device)
+            #kan_layer.to(grid_inputs.device)
             # if the values are in the range [-1, 1], we do not apply the grid update
-            if torch.min(grid_inputs) < -1 or torch.max(grid_inputs) > 1:
-                kan_layer.update_grid_from_samples(grid_inputs)
+            #if torch.min(grid_inputs) < -1 or torch.max(grid_inputs) > 1:
+            kan_layer.update_grid_from_samples(grid_inputs)
 
-    # def prune_kan_layers(self):
-    #     kan_layers = nn.ModuleList()
-    #     # Prune each KAN layer by removing unnecessary edges and nodes
-    #     for kan_layer in self.kan_layers:
-    #         pruned_layer = kan_layer.prune()
-    #         kan_layers.append(pruned_layer)
-    #     self.kan_layers = kan_layers
+    def prune(self):
+        for i, _ in enumerate(self.kan_layers):
+            self.kan_layers[i].to(self.device)
+            # Prune the kan layer before getting the symbolic formula
+            self.kan_layers[i] = self.kan_layers[i].prune()
+            
+    def get_learned_equations(self, log_dir):
+        self.symbolic_predictors = True
 
-    def get_learned_equations(self):
         equations = []
-        if self.equation_learning_strategy !='kan' or self.output_size!=1:
-            raise ValueError("This method is only implemented for KAN with single output.")
-        for i, kan_layer in enumerate(self.kan_layers):
-            kan_layer.auto_symbolic()
+        for i, kan_layer in enumerate(self.kan_layers):            
+
+            # Get the symbolic formula
+            kan_layer.auto_symbolic(lib=SYMBOLIC_LIB)
+
+            # Freeze all parameters of the kan
+            for param in kan_layer.parameters():
+                param.requires_grad = False
+
+            # Enable only affine parameters
+            for l in range(kan_layer.depth):
+                exec(f'kan_layer.node_bias{[l]}.requires_grad = True')
+                exec(f'kan_layer.node_scale{[l]}.requires_grad = True')
+                exec(f'kan_layer.subnode_bias{[l]}.requires_grad = True')
+                exec(f'kan_layer.subnode_scale{[l]}.requires_grad = True')
+
+            # Freeze the selector parameters
+            for i in self.classifier_selector.parameters():
+                i.requires_grad = False
+
+            # Store the equation in the corresponding list
             equations.append(kan_layer.symbolic_formula()[0][0])
-        return equations
+            # Plot the kan layer using the authors' plotting function
+            try:
+                kan_layer.plot(os.getcwd())
+            except:
+                print("Could not plot the KAN layer. Modify the function 'plot' in MultKAN.py to fix it")
+
+        # Store the equations in a text file
+        with open(f"{log_dir}/kan_equations_pre_fine_tuning.txt", "w") as f:
+            for i, eq in enumerate(equations):
+                f.write(f"KAN Layer {i+1}: {eq}\n")
 
     def _execute_kan(self, prob_per_classifier, input_concepts):
         # Execute all the KAN layers
         eq_outputs = []
         for i, kan_layer in enumerate(self.kan_layers):
-            if self.output_size==1 and self.regularize:
+            if self.regularize:
                 eq_output = kan_layer(input_concepts, singularity_avoiding=True, y_th=1000)
             else:
                 eq_output = kan_layer(input_concepts)
@@ -329,12 +347,6 @@ class SymbolicMemoryReasoner(BaseModel):
             equations = self.known_equations
         elif self.equation_learning_strategy=='kan':
             equations = []
-            #for i, kan_layer in enumerate(self.kan_layers):
-                # Plot the kan layer
-                #kan_layer.auto_symbolic(lib=USER_DEFINED_SYMBOLS)
-                #kan_layer.auto_symbolic()
-                #equations.append(kan_layer.symbolic_formula()[0][0])
-
         # convert to string
         self.string_equations = [str(eq) for eq in equations]
 
@@ -402,77 +414,19 @@ class SymbolicMemoryReasoner(BaseModel):
 
     def kan_regularization_term(self):
         reg_term = 0.0
-        for kan_layer in self.kan_layers:
-            reg_term += kan_layer.get_reg(reg_metric="edge_forward_spline_n", lamb_l1=1, lamb_entropy=2, lamb_coef=0, lamb_coefdiff=0)
-        # divide by the number of kan layers (memory_size)
-        reg_term = reg_term / self.memory_size
-        return reg_term * self.lamb
+        if self.regularize and self.equation_learning_strategy=='kan' and not self.symbolic_predictors:
+            for kan_layer in self.kan_layers:
+                reg_term += kan_layer.get_reg(reg_metric="edge_forward_spline_n", lamb_l1=1, lamb_entropy=2, lamb_coef=0, lamb_coefdiff=0)
+            # divide by the number of kan layers (memory_size)
+            reg_term = reg_term / self.memory_size
+            return reg_term * self.lamb
+        else:
+            return reg_term
 
     def loss(self, y_hat, y, c_hat=None, c=None, sampled_memory_idxs=None, *args, **kwargs):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
 
         # KAN regularization: it promotes sparsity in the KAN layers
-        if self.output_size == 1 and self.regularize and self.equation_learning_strategy=='kan':
-            loss += self.kan_regularization_term()
+        loss += self.kan_regularization_term()
 
-        # Memory regularization: it promotes the use of fewer memory slots
-        if self.memory_size > 1 and self.regularize_memory and sampled_memory_idxs is not None:
-            # samples shape: (bsz, memory_size, n_classes, n_samples)
-            sum_over_batch = sampled_memory_idxs.sum(dim=0) # Shape: (memory_size, n_classes, n_samples)
-            dist = F.softmax(sum_over_batch, dim=0) # Shape: (memory_size, n_classes, n_samples)
-            entropy = -(dist * torch.log(dist + 1e-8)).sum(dim=0) # Shape: (n_classes, n_samples)
-            mean_entropy = entropy.mean() # Average over classes and samples
-            loss += self.compute_increasing_coeff(self.global_step) * mean_entropy
         return loss
-    
-    def compute_increasing_coeff(self, global_step, coeff_init=0.0, coeff_max=1, growth_rate=0.01):
-        if self.decay_rate == 'linear':
-            # Linear increase over time
-            coeff = min(coeff_max, coeff_init + growth_rate * global_step)
-        elif self.decay_rate == 'exp':
-            # Exponential increase over time
-            coeff = min(coeff_max, coeff_init + (coeff_max - coeff_init) * (1 - np.exp(-growth_rate * global_step)))
-        elif self.decay_rate == 'cosine':
-            # Cosine increase over time
-            coeff = coeff_init + (coeff_max - coeff_init) * (1 - np.cos(np.pi * global_step / 10000)) / 2
-            coeff = min(coeff, coeff_max)
-        else:
-            raise ValueError(f"Unknown decay rate: {self.decay_rate}")
-        return coeff
-
-
-
-    # def _fit_symbolic_reg_model(self, top_fraction=0.5):
-    #     equations = []
-    #     residuals = np.zeros_like(self.y_trues)
-
-    #     X_current, y_current = self.c_trues, self.y_trues
-
-    #     for i in range(self.memory_size):
-    #         # Train symbolic regression on current subset
-    #         model = PySRRegressor(
-    #             niterations=40,
-    #             populations=30,
-    #             binary_operators=["+", "-", "*", "/"],
-    #             unary_operators=["square", "exp", "log"],
-    #             model_selection="best",
-    #             verbosity=1,
-    #         )
-    #         model.fit(X_current, y_current)
-
-    #         # Save equation
-    #         eq = model.get_best()["equation"]
-    #         str_eq = str(eq)
-    #         equations.append(str_eq)
-
-    #         # Compute residuals on full dataset
-    #         y_pred_full = model.predict(self.c_trues)
-    #         residuals = self.y_trues - y_pred_full
-
-    #         # Select hardest samples for next round
-    #         errors = np.abs(residuals)
-    #         cutoff = np.quantile(errors, 1 - top_fraction)
-    #         mask = errors >= cutoff
-    #         X_current, y_current = self.c_trues[mask], self.y_trues[mask]
-
-    #     return equations

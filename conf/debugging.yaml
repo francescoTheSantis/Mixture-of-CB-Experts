@@ -9,14 +9,14 @@ hydra:
   sweeper:
     params:
       seed: 1
-      dataset: mnist_arithmetic #, dsprites_simple, dsprites_complex, pendulum, cub, cub_incomplete, awa2, awa2_incomplete, cifar10, cifar100
+      dataset: dsprites_simple #, dsprites_simple, dsprites_complex, pendulum, cub, cub_incomplete, awa2, awa2_incomplete, cifar10, cifar100
       model: sym_cmr_kan
-      memory_size: 4
+      memory_size: 1
     
 gpus: [0]
 
-max_epochs: 20
-patience: 10
+max_epochs: 10
+patience: 20
 
 use_stored_dataset: True
 extract_embeddings: True

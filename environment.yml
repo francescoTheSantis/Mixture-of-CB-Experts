@@ -29,4 +29,3 @@ dependencies:
     - git+https://github.com/pyc-team/pytorch_concepts.git@models
     - sympytorch
     - pysr
-    - pykan

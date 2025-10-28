@@ -30,12 +30,18 @@ class Trainer:
             mode='min'
         )
 
+        # Store checkpoint directory to ensure it's consistent across all phases
+        self.checkpoint_dir = self.csv_logger.log_dir
+        
         checkpoint_callback = ModelCheckpoint(
+            dirpath=self.checkpoint_dir,
             monitor='val_loss', 
             filename='best_model', 
             save_top_k=1, 
             mode='min', 
-            verbose=True
+            verbose=True,
+            save_last=False,
+            enable_version_counter=False  # Prevent version suffixes
         )
 
         lr_monitor = LearningRateMonitor(logging_interval='step')
@@ -114,39 +120,39 @@ class Trainer:
     def test(self, test_dataloader, ckpt_path=None):
         # Load the best model and test
         if ckpt_path is None:
-            ckpt_path = self.trainer.checkpoint_callback.best_model_path
+            ckpt_path = f"{self.checkpoint_dir}/best_model.ckpt"
         self.trainer.test(self.model, test_dataloader, ckpt_path=ckpt_path)
 
-    def fine_tune(self, 
-                  train_dataloader, 
-                  val_dataloader, 
-                  log_dir='./'):
-
+    def fine_tune_with_pruning(self, 
+                               train_dataloader, 
+                               val_dataloader):
+        """
+        Fine-tune the model after pruning KAN layers.
+        This is the first phase of fine-tuning for KAN-based models.
+        """
+        
+        # Load the best checkpoint from initial training (best_model.ckpt)
+        ckpt_path = f"{self.checkpoint_dir}/best_model.ckpt"
+        
+        print(f"Loading checkpoint from: {ckpt_path}")
+        checkpoint = torch.load(ckpt_path)
+        self.model.load_state_dict(checkpoint['state_dict'])
+        
         print("\n" + "="*50)
-        print("Get symbolic equation from KAN layers before fine-tuning")
-
-        equations = []
-        for layer in self.model.model.kan_layers:
-            layer.auto_symbolic()
-            equations.append(layer.symbolic_formula()[0][0])
-        with open(f"{log_dir}/kan_equations_pre_fine_tuning.txt", "w") as f:
-            for i, eq in enumerate(equations):
-                f.write(f"KAN Layer {i+1}: {eq}\n")
-
-        print("="*50)
-        print("Starting Fine-tuning Phase")
+        print("Pruning KAN layers")
         print("="*50)
         
-        # Load the best checkpoint from initial training
-        ckpt_path = self.trainer.checkpoint_callback.best_model_path
+        # Prune the KAN layers
+        self.model.model.prune()
         
-        if ckpt_path and ckpt_path != '':
-            print(f"Loading checkpoint from: {ckpt_path}")
-            checkpoint = torch.load(ckpt_path)
-            self.model.load_state_dict(checkpoint['state_dict'])
-        
+        print("Pruning completed!")
+        print("="*50)
+        print("Starting Fine-tuning Phase (After Pruning)")
+        print("="*50)
+    
         # Set fine-tuning mode to change metric names
         self.model.fine_tuning = True
+        self.model.fine_tuning_stage = 'pruning'
         self.model._set_metrics()
         
         fine_tune_lr = self.cfg.dataset.metadata.lr
@@ -167,7 +173,107 @@ class Trainer:
         )
         self.scheduler = {
             'scheduler': LR_on_plateau,
-            'monitor': 'finetune/val_loss',  # Monitor fine-tuning val loss
+            'monitor': 'finetune_pruning/val_loss',  # Monitor fine-tuning val loss after pruning
+            'interval': 'epoch',
+            'frequency': 1
+        }
+        
+        # Update optimizer and scheduler in model
+        self.model.optimizer = self.optimizer
+        self.model.scheduler = self.scheduler
+        
+        # Rebuild trainer with new configuration for fine-tuning after pruning
+        early_stopping = EarlyStopping(
+            monitor='finetune_pruning/val_loss',  # Monitor fine-tuning val loss after pruning
+            patience=self.cfg.patience, 
+            verbose=True,
+            mode='min'
+        )
+
+        checkpoint_callback = ModelCheckpoint(
+            dirpath=self.checkpoint_dir,
+            monitor='finetune_pruning/val_loss',  # Monitor fine-tuning val loss after pruning
+            filename='best_model', 
+            save_top_k=1, 
+            mode='min', 
+            verbose=True,
+            save_last=False,
+            enable_version_counter=False  # Prevent version suffixes
+        )
+
+        lr_monitor = LearningRateMonitor(logging_interval='step')
+
+        loggers = [self.wandb_logger, self.csv_logger] if self.wandb_logger is not None else self.csv_logger
+
+        self.trainer = pl.Trainer(
+            max_epochs=self.cfg.max_epochs,
+            callbacks=[early_stopping, checkpoint_callback, lr_monitor],
+            logger=loggers,
+            devices=self.cfg.gpus,  
+            accelerator="auto",
+            enable_progress_bar=True,
+            gradient_clip_val=0.5
+        )
+        
+        # Fine-tune after pruning
+        self.trainer.fit(self.model, train_dataloader, val_dataloader)
+        
+        print("Fine-tuning after pruning completed!")
+        print(f"Best model updated at: {self.checkpoint_dir}/best_model.ckpt")
+        
+        return f"{self.checkpoint_dir}/best_model.ckpt"
+
+    def fine_tune(self, 
+                  train_dataloader, 
+                  val_dataloader, 
+                  log_dir='./',
+                  ckpt_path=None):
+        """
+        Fine-tune the model with symbolic expressions replacing KAN layers.
+        This is the second phase of fine-tuning for KAN-based models.
+        """
+
+        # Load the best checkpoint from pruning phase (best_model.ckpt)
+        ckpt_path = f"{self.checkpoint_dir}/best_model.ckpt"
+        
+        if ckpt_path and ckpt_path != '':
+            print(f"Loading checkpoint from: {ckpt_path}")
+            checkpoint = torch.load(ckpt_path)
+            self.model.load_state_dict(checkpoint['state_dict'])
+        
+        print("\n" + "="*50)
+        print("Get symbolic equation from KAN layers before fine-tuning")
+
+        self.model.model.get_learned_equations(log_dir)
+
+        print("="*50)
+        print("Starting Fine-tuning Phase (Symbolic)")
+        print("="*50)
+    
+        # Set fine-tuning mode to change metric names
+        self.model.fine_tuning = True
+        self.model.fine_tuning_stage = 'symbolic'
+        self.model._set_metrics()
+        
+        fine_tune_lr = self.cfg.dataset.metadata.lr
+        
+        print(f"Fine-tuning learning rate: {fine_tune_lr}")
+        
+        # Update optimizer learning rate
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = fine_tune_lr
+        
+        # Create new scheduler
+        LR_on_plateau = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, 
+            mode='min', 
+            factor=self.cfg.gamma, 
+            patience=self.cfg.lr_patience, 
+            verbose=True
+        )
+        self.scheduler = {
+            'scheduler': LR_on_plateau,
+            'monitor': 'finetune_symbolic/val_loss',  # Monitor fine-tuning val loss
             'interval': 'epoch',
             'frequency': 1
         }
@@ -178,18 +284,21 @@ class Trainer:
         
         # Rebuild trainer with new configuration for fine-tuning
         early_stopping = EarlyStopping(
-            monitor='finetune/val_loss',  # Monitor fine-tuning val loss
+            monitor='finetune_symbolic/val_loss',  # Monitor fine-tuning val loss
             patience=self.cfg.patience, 
             verbose=True,
             mode='min'
         )
 
         checkpoint_callback = ModelCheckpoint(
-            monitor='finetune/val_loss',  # Monitor fine-tuning val loss
-            filename='best_model_finetuned', 
+            dirpath=self.checkpoint_dir,
+            monitor='finetune_symbolic/val_loss',  # Monitor fine-tuning val loss
+            filename='best_model', 
             save_top_k=1, 
             mode='min', 
-            verbose=True
+            verbose=True,
+            save_last=False,
+            enable_version_counter=False  # Prevent version suffixes
         )
 
         lr_monitor = LearningRateMonitor(logging_interval='step')
@@ -210,7 +319,7 @@ class Trainer:
         self.trainer.fit(self.model, train_dataloader, val_dataloader)
         
         print("Fine-tuning completed!")
-        print(f"Best fine-tuned model saved at: {self.trainer.checkpoint_callback.best_model_path}")
+        print(f"Best model updated at: {self.checkpoint_dir}/best_model.ckpt")
         
         equations = []
         for layer in self.model.model.kan_layers:

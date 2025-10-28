@@ -9,7 +9,7 @@ hydra:
   sweeper:
     params:
       seed: 1, 2, 3, 4, 5
-      memory_size: 1, 2, 3, 4, 5, 10, 20, 50
+      memory_size: 1, 2, 3, 4, 5, 10, 20
       #dataset: cub, cub_incomplete, awa2, awa2_incomplete, mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum
       dataset: mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum
       model: sym_cmr_kan

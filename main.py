@@ -77,11 +77,23 @@ def main(cfg: DictConfig) -> None:
 
     ###### Fine-tuning for symbolic cmr (kan implementation) model ######
     if cfg.model.metadata.name == 'm_sym_cmr_kan' and cfg.model.metadata.fine_tune == True:
-        # Perform fine-tuning
+        # Phase 1: Fine-tuning after pruning
+        print("\n" + "="*70)
+        print("PHASE 1: Fine-tuning after pruning KAN layers")
+        print("="*70)
+        trainer.fine_tune_with_pruning(
+            loaded_train, 
+            loaded_val
+        )
+        
+        # Phase 2: Fine-tuning with symbolic expressions
+        print("\n" + "="*70)
+        print("PHASE 2: Fine-tuning with symbolic expressions")
+        print("="*70)
         trainer.fine_tune(
             loaded_train, 
             loaded_val,
-            log_dir=log_dir # where equations are stored
+            log_dir=log_dir,  # where equations are stored
         )
 
     ###### Testing ######
@@ -89,7 +101,7 @@ def main(cfg: DictConfig) -> None:
     trainer.test(loaded_test)
 
     ###### Store equation form for all models ######
-    # Kan layers have been already, so skip them
+    # Kan layers' equations have already been processed, so skip this for m_sym_cmr_kan
     if cfg.model.metadata.name != 'm_sym_cmr_kan':
         model.model.store_equation_form(log_dir)
 

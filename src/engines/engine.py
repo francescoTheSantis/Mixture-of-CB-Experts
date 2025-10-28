@@ -34,8 +34,8 @@ class Engine(pl.LightningModule):
         self.data_type = data_type
         self.c_names = c_names
         self.y_name = y_name
-        self.num_classes = len(y_name) #if len(y_name)>1 else 2
-        self.class_names = y_name # if len(y_name)>1 else ['0','1']
+        self.num_classes = len(y_name) 
+        self.class_names = y_name
         self.model_name = self.model.__class__.__name__
 
         self.csv_log_dir = csv_log_dir
@@ -44,6 +44,7 @@ class Engine(pl.LightningModule):
         self.scale_target = scale_target
         self.model.scale_target = scale_target
         self.fine_tuning = fine_tuning
+        self.fine_tuning_stage = None  # Will be set to 'pruning' during fine-tuning after pruning
 
         # Set the metrics
         self._set_metrics()
@@ -65,7 +66,14 @@ class Engine(pl.LightningModule):
 
     def _set_metrics(self):
         # Add prefix for fine-tuning metrics
-        prefix_modifier = "finetune/" if self.fine_tuning else ""
+        if self.fine_tuning and self.fine_tuning_stage == 'pruning':
+            prefix_modifier = "finetune_pruning/"
+        elif self.fine_tuning and self.fine_tuning_stage == 'symbolic':
+            prefix_modifier = "finetune_symbolic/"
+        elif self.fine_tuning:
+            prefix_modifier = "finetune/"
+        else:
+            prefix_modifier = ""
         
         if self.model.task == 'classification':
             self.train_y_metrics = MetricCollection(metrics={'acc': self._check_metric(ClassAccuracy())}, prefix=f"{prefix_modifier}train/y/")
@@ -146,7 +154,14 @@ class Engine(pl.LightningModule):
         loss, model_output = self.shared_step(batch)
         
         # Add prefix for fine-tuning
-        loss_name = "finetune/train_loss" if self.fine_tuning else "train_loss"
+        if self.fine_tuning and self.fine_tuning_stage == 'pruning':
+            loss_name = "finetune_pruning/train_loss"
+        elif self.fine_tuning and self.fine_tuning_stage == 'symbolic':
+            loss_name = "finetune_symbolic/train_loss"
+        elif self.fine_tuning:
+            loss_name = "finetune/train_loss"
+        else:
+            loss_name = "train_loss"
         self.log(loss_name, loss.item())
 
         y_hat_metrics, c_hat_metrics = self.model.filter_output_for_metrics(**model_output)
@@ -163,16 +178,23 @@ class Engine(pl.LightningModule):
             selection_dist = torch.softmax(selection_dist, dim=-1)
             selection_entropy = -torch.sum(selection_dist * torch.log(selection_dist + 1e-10), dim=1)
             selection_entropy = selection_entropy.mean()
-            entropy_name = "finetune/train_selection_entropy" if self.fine_tuning else "train_selection_entropy"
+            if self.fine_tuning and self.fine_tuning_stage == 'pruning':
+                entropy_name = "finetune_pruning/train_selection_entropy"
+            elif self.fine_tuning and self.fine_tuning_stage == 'symbolic':
+                entropy_name = "finetune_symbolic/train_selection_entropy"
+            elif self.fine_tuning:
+                entropy_name = "finetune/train_selection_entropy"
+            else:
+                entropy_name = "train_selection_entropy"
             self.log(entropy_name, selection_entropy)
         return loss
 
     def on_train_epoch_end(self):
-        # If the model is the symbolic memory reasoner and
-        # KANs are used to learn the equations, we need to
+        # If the model is the symbolic memory reasoner and KANs are used to learn the equations, we need to
         # update the KAN grid every 10 epochs.
-        if self.model_name == 'SymbolicMemoryReasoner':
-            if self.model.equation_learning_strategy=='kan' and self.num_classes==1:
+        if self.model_name == 'SymbolicMemoryReasoner' and \
+            self.model.equation_learning_strategy=='kan' and \
+                not self.model.symbolic_predictors:
                 if self.current_epoch % 10 == 0 and self.current_epoch<=50:
                     self.model.setup_kan_grid(self.grid_inputs)
 
@@ -180,7 +202,14 @@ class Engine(pl.LightningModule):
         loss, model_output = self.shared_step(batch)
         
         # Add prefix for fine-tuning
-        loss_name = "finetune/val_loss" if self.fine_tuning else "val_loss"
+        if self.fine_tuning and self.fine_tuning_stage == 'pruning':
+            loss_name = "finetune_pruning/val_loss"
+        elif self.fine_tuning and self.fine_tuning_stage == 'symbolic':
+            loss_name = "finetune_symbolic/val_loss"
+        elif self.fine_tuning:
+            loss_name = "finetune/val_loss"
+        else:
+            loss_name = "val_loss"
         self.log(loss_name, loss.item())
 
         y_hat_metrics, c_hat_metrics = self.model.filter_output_for_metrics(**model_output)
@@ -197,7 +226,14 @@ class Engine(pl.LightningModule):
             selection_dist = torch.softmax(selection_dist, dim=-1)
             selection_entropy = -torch.sum(selection_dist * torch.log(selection_dist + 1e-10), dim=1)
             selection_entropy = selection_entropy.mean()
-            entropy_name = "finetune/val_selection_entropy" if self.fine_tuning else "val_selection_entropy"
+            if self.fine_tuning and self.fine_tuning_stage == 'pruning':
+                entropy_name = "finetune_pruning/val_selection_entropy"
+            elif self.fine_tuning and self.fine_tuning_stage == 'symbolic':
+                entropy_name = "finetune_symbolic/val_selection_entropy"
+            elif self.fine_tuning:
+                entropy_name = "finetune/val_selection_entropy"
+            else:
+                entropy_name = "val_selection_entropy"
             self.log(entropy_name, selection_entropy)
         return loss 
     
@@ -304,11 +340,11 @@ class Engine(pl.LightningModule):
             y_preds.to_csv(f"{self.csv_log_dir}/y_preds.csv", index=False)
             y_trues.to_csv(f"{self.csv_log_dir}/y_trues.csv", index=False)
     
-        # Plot KAN layers when using the official KAN implementation
-        if self.model_name == 'SymbolicMemoryReasoner':
-            if self.model.equation_learning_strategy=='kan' and self.num_classes==1:
-                for i, kan_layer in enumerate(self.model.kan_layers):
-                    kan_layer.plot(folder=os.path.join(os.getcwd(), f'kan{i}_ckpt'))
+        # # Plot KAN layers when using the official KAN implementation
+        # if self.model_name == 'SymbolicMemoryReasoner':
+        #     if self.model.equation_learning_strategy=='kan' and self.num_classes==1:
+        #         for i, kan_layer in enumerate(self.model.kan_layers):
+        #             kan_layer.plot(folder=os.path.join(os.getcwd(), f'kan{i}_ckpt'))
 
     def configure_optimizers(self):
         return [self.optimizer], [self.scheduler]

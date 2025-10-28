@@ -9,7 +9,7 @@ hydra:
   sweeper:
     params:
       seed: 1, 2, 3, 4, 5
-      memory_size: 1, 2, 3, 4, 5, 10, 20, 50
+      memory_size: 1, 2, 3, 4, 5, 10, 20
       dataset: cifar10
       model: cmr
 

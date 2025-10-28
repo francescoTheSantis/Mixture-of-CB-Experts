@@ -9,7 +9,7 @@ hydra:
   sweeper:
     params:
       seed: 1, 2, 3, 4, 5
-      memory_size: 1, 2, 3, 4, 5, 10, 20, 50
+      memory_size: 1, 2, 3, 4, 5, 10, 20
       #dataset: cub, cub_incomplete, awa2, awa2_incomplete, mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum
       dataset: mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum
       model: l_cmr
@@ -20,4 +20,4 @@ concept_penalty: 1.0
 int_prob: 0.0
 hard_concepts: False
 # It controls whether the concept and task predictors are trained jointly or in parallel.
-disjoint_training: True
+disjoint_training: False
