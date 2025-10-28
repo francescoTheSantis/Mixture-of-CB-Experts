@@ -259,9 +259,11 @@ class Trainer:
         
         print(f"Fine-tuning learning rate: {fine_tune_lr}")
         
-        # Update optimizer learning rate
-        for param_group in self.optimizer.param_groups:
-            param_group['lr'] = fine_tune_lr
+        # Recreate optimizer with only trainable parameters
+        # This is crucial after freezing/unfreezing parameters in get_learned_equations
+        trainable_params = [p for p in self.model.parameters() if p.requires_grad]
+        print(f"Number of trainable parameters: {sum(p.numel() for p in trainable_params)}")
+        self.optimizer = AdamW(trainable_params, lr=fine_tune_lr)
         
         # Create new scheduler
         LR_on_plateau = torch.optim.lr_scheduler.ReduceLROnPlateau(
