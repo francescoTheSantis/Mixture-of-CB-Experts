@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch_concepts.nn as pyc_nn
 from torch_concepts.nn import concept_embedding_mixture
 from src.models.encoders.mlp import MLPEncoder
+from src.utils.expression_utils import store_eq
 
 from src.models.base import BaseModel
 
@@ -97,4 +98,16 @@ class ConceptEmbeddingModel(BaseModel):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         return loss
 
+    def get_symbolic_equivalent(self, log_dir=None):
+        """
+        Returns the equation associated to the predictor of the model
+        """
+
+        # Get as many equations as the output size
+        equations = self.y_predictor.to_symbolic()
+
+        # Each equation in the list will have the same complexity, therefore we return only the first one.
+        if len(equations)>1:
+            store_eq(equations[0], log_dir)
+        store_eq(equations, log_dir)
 

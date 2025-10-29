@@ -12,6 +12,7 @@ import numpy as np
 import os
 from kan import KAN, nsimplify, ex_round
 from kan.utils import SYMBOLIC_LIB 
+from src.utils.expression_utils import kan_expression, store_eq
 
 class SymbolicMemoryReasoner(BaseModel):
     def __init__(self, 
@@ -79,7 +80,13 @@ class SymbolicMemoryReasoner(BaseModel):
         self.equations_for_explanations_ready = False
         self.regularize = regularize
         self.symbolic_predictors = False
-        self.widths = widths
+
+        if widths is not None:
+            self.widths = widths
+        else:
+            # Approach suggested by the authors of KAN
+            self.widths = [len(self.c_names), len(self.c_names)+1, self.output_size]
+        
         self.device = device
 
         self.mc_approx = mc_approx
@@ -101,12 +108,8 @@ class SymbolicMemoryReasoner(BaseModel):
         
         if self.equation_learning_strategy == 'kan':
 
-            if widths is None:
-                width = [len(self.c_names), len(self.c_names)+1, self.output_size]
-
-            #if self.output_size == 1:
             kan_params = {
-                    'width': width, 
+                    'width': self.width, 
                     'grid': 5,
                     'k': 3,
                     'device': self.device
@@ -440,3 +443,12 @@ class SymbolicMemoryReasoner(BaseModel):
         loss += self.kan_regularization_term()
 
         return loss
+    
+    def get_symbolic_equivalent(self, log_dir=None):
+        """
+        Returns the equation associated to the KAN predictor of the model
+        """
+        
+        # Generate the abstract (operators are not defined) symbolic equivalent of the kan used by the model.
+        equation = kan_expression(self.widths)
+        store_eq(equation, log_dir)

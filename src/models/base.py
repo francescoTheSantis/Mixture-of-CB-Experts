@@ -311,13 +311,12 @@ class BaseModel(nn.Module):
 
         return y_hat, c_hat
 
-    def store_equation_form(self, log_dir):
+    def get_symbolic_equivalent(self, log_dir=None):
         """
-        Store the equation form of the model.
-        This method must be overridden by subclasses that have an equation form.
+        Returns the equation associated to the predictor of the model.
         """
         raise NotImplementedError(
-            f"{self.__class__.__name__} must implement store_equation_form() method"
+            f"{self.__class__.__name__} must implement get_symbolic_equivalent() method"
         )
 
     # def get_intervened_concepts_predictions(self, labels, groups=None):

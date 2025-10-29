@@ -4,6 +4,7 @@ import torch_concepts.nn as pyc_nn
 from src.models.base import BaseModel
 from torch_concepts.nn import functional as CF
 from torch_concepts.nn import concept_embedding_mixture
+from src.utils.expression_utils import linear_classifier_expression, store_eq
 
 class LinearConceptEmbeddingModel(BaseModel):
     def __init__(self, 
@@ -139,4 +140,11 @@ class LinearConceptEmbeddingModel(BaseModel):
             loss += b_loss
         return loss
 
-
+    def get_symbolic_equivalent(self, log_dir=None):
+        """
+        Returns the equation associated to the predictor of the model
+        """
+        
+        # Return the most complex linear equation that can obtained after training (all concepts are relevant) 
+        equation = linear_classifier_expression(len(self.c_names), include_bias=self.use_bias)
+        store_eq(equation, log_dir)

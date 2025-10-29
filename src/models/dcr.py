@@ -6,6 +6,7 @@ from torch_concepts.nn import functional as CF
 from src.models.base import BaseModel
 from torch.nn import functional as F
 from torch_concepts.nn import concept_embedding_mixture
+from src.utils.expression_utils import boolean_and_expression, store_eq
 
 class DeepConceptReasoner(BaseModel):
     def __init__(self, 
@@ -116,3 +117,13 @@ class DeepConceptReasoner(BaseModel):
     def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         return loss
+    
+    def get_symbolic_equivalent(self, log_dir=None):
+        """
+        Returns the equation associated to the predictor of the model
+        """
+        
+        # Return the most complex linear equation that can obtained after training 
+        # (all concepts are relevant and negated) 
+        equation = boolean_and_expression(len(self.c_names))
+        store_eq(equation, log_dir)

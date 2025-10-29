@@ -3,6 +3,7 @@ import torch.nn as nn
 from src.models.base import BaseModel
 from src.models.encoders.base import BaseEncoder
 from src.models.encoders.mlp import MLPEncoder
+from src.utils.expression_utils import store_eq
 
 class BlackBox(BaseModel):
     def __init__(self,
@@ -82,10 +83,21 @@ class BlackBox(BaseModel):
         loss = self.task_loss_form(y_hat.squeeze(), y)
         return loss
     
-    def store_equation_form(self, log_dir):
+    def get_symbolic_equivalent(self, log_dir=None):
         """
-        Extract the equation form of the predictor (MLP).
+        Returns the equation associated to the predictor of the model
         """
+
+        # Get as many equations as the output size
+        equations = self.predictor.to_symbolic()
+
+        # Each equation in the list will have the same complexity, therefore we return only the first one.
+        if len(equations)>1:
+            store_eq(equations[0], log_dir)
+        store_eq(equations, log_dir)
+
+
+        
 
         
         

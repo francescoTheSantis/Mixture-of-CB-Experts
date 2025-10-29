@@ -100,18 +100,16 @@ def main(cfg: DictConfig) -> None:
     # Test the model on the test-set
     trainer.test(loaded_test)
 
-    ###### Store equation form for all models ######
-    # Kan layers' equations have already been processed, so skip this for m_sym_cmr_kan
-    if cfg.model.metadata.name != 'm_sym_cmr_kan':
-        model.model.store_equation_form(log_dir)
+    ###### Store symbolic expression associated to the predictor ######
+    model.model.get_symbolic_equivalent(log_dir)
 
+    ###### Perform Interventions ######
     if model.model.has_concepts:
-        ###### Perform Interventions ######
         intervention_df = trainer.interventions(loaded_test)
         intervention_df.to_csv(f"{log_dir}/interventions.csv", index=False)
 
+    ###### Save the learned linear coefficients (Useful for showing explanations) ######
     if cfg.model.metadata.name == 'licem':
-        ###### Save the learned linear coefficients (Useful for showing explanations) ######
         save_licem_linear_coefficients(model, loaded_train, log_dir, split='train')
         save_licem_linear_coefficients(model, loaded_test, log_dir, split='test')
         # save the c_names and y_names

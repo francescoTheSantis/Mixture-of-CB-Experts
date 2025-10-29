@@ -4,6 +4,7 @@ import torch_concepts.nn as pyc_nn
 from torch_concepts.nn import functional as CF
 from torch_concepts.semantic import CMRSemantic
 from torch_concepts.nn import concept_embedding_mixture
+from src.utils.expression_utils import boolean_and_expression, store_eq
 
 from src.models.base import BaseModel
 from torch.nn import functional as F
@@ -238,3 +239,12 @@ class ConceptMemoryReasoner(BaseModel):
 
         return y_per_rule.permute(0, 2, 1)
 
+    def get_symbolic_equivalent(self, log_dir=None):
+        """
+        Returns the equation associated to the predictor of the model
+        """
+        
+        # Return the most complex linear equation that can obtained after training 
+        # (all concepts are relevant and negated) 
+        equation = boolean_and_expression(len(self.c_names))
+        store_eq(equation, log_dir)

@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from torch_concepts.nn import concept_embedding_mixture
 from src.models.encoders.mlp import MLPEncoder
 import numpy as np
+from src.utils.expression_utils import linear_classifier_expression, store_eq
 
 class LinearMemoryReasoner(BaseModel):
     def __init__(self, 
@@ -270,3 +271,13 @@ class LinearMemoryReasoner(BaseModel):
             loss += self.weight_reg * self.bias_params.pow(2).sum()
 
         return loss
+
+    def get_symbolic_equivalent(self, log_dir=None):
+        """
+        Returns the equation associated to the predictor of the model
+        """
+        
+        # Return the most complex linear equation that can obtained after training (all concepts are relevant) 
+        bias = True if self.bias != None else False
+        equation = linear_classifier_expression(len(self.c_names), include_bias=bias)
+        store_eq(equation, log_dir)

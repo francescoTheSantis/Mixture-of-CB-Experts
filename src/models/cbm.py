@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
-from src.models.encoders.mlp import MLPEncoder
+from src.models.encoders.mlp import MLPEncoder, LinearEncoder
 from src.models.base import BaseModel
+from src.utils.expression_utils import store_eq
 
 class ConceptBottleneckModel(BaseModel):
     def __init__(self, 
@@ -13,7 +14,6 @@ class ConceptBottleneckModel(BaseModel):
                  task_penalty,
                  task_interpretable=True,
                  hard_concepts=False,
-                 bias=True,
                  activation='ReLU',
                  int_prob=0.1,
                  int_idxs=None,
@@ -58,7 +58,12 @@ class ConceptBottleneckModel(BaseModel):
         )
 
         if self.task_interpretable:
-            self.y_predictor = (nn.Linear(len(c_names), output_size, bias=bias))
+            self.y_predictor = LinearEncoder(
+                len(c_names),
+                output_size,
+                None,
+                activation=activation
+            )
         else:
             self.y_predictor = MLPEncoder(
                 len(c_names),
@@ -86,3 +91,16 @@ class ConceptBottleneckModel(BaseModel):
     def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         return loss
+
+    def get_symbolic_equivalent(self, log_dir=None):
+        """
+        Returns the equation associated to the predictor of the model
+        """
+
+        # Get as many equations as the output size
+        equations = self.y_predictor.to_symbolic()
+
+        # Each equation in the list will have the same complexity, therefore we return only the first one.
+        if len(equations)>1:
+            store_eq(equations[0], log_dir)
+        store_eq(equations, log_dir)
