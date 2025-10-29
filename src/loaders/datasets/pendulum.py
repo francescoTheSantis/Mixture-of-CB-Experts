@@ -146,7 +146,23 @@ class PendulumDataset:
                     batch_size: int = 32
                  ):
 
-        if not already_created:
+        # Auto-detect if dataset needs to be created
+        needs_creation = not already_created
+        
+        # Check if data actually exists even if already_created is True
+        if already_created:
+            if not os.path.exists(PENDULUM_DIR) or \
+               not os.path.exists(f'{PENDULUM_DIR}/train/train_df.pkl') or \
+               not os.path.exists(f'{PENDULUM_DIR}/val/val_df.pkl') or \
+               not os.path.exists(f'{PENDULUM_DIR}/test/test_df.pkl'):
+                print(f"\n{'='*60}")
+                print("Pendulum dataset not found!")
+                print("Generating dataset automatically...")
+                print("This may take several minutes.")
+                print(f"{'='*60}\n")
+                needs_creation = True
+
+        if needs_creation:
             print('Generating dataset...')
             if os.path.exists(PENDULUM_DIR):
                 shutil.rmtree(PENDULUM_DIR)
@@ -155,14 +171,12 @@ class PendulumDataset:
             os.makedirs(f'{PENDULUM_DIR}/val/')
             os.makedirs(f'{PENDULUM_DIR}/test/')
             create_dataframe(CONCEPT_NAMES)
+            print(f"\n{'='*60}")
+            print("Pendulum dataset created successfully!")
+            print(f"Location: {PENDULUM_DIR}")
+            print(f"{'='*60}\n")
         else:
-            # check if there is some data in the directory
-            if not os.path.exists(PENDULUM_DIR) or not os.path.exists(f'{PENDULUM_DIR}/train/train_df.pkl')\
-               or not os.path.exists(f'{PENDULUM_DIR}/val/val_df.pkl')\
-               or not os.path.exists(f'{PENDULUM_DIR}/test/test_df.pkl'):
-                raise ValueError(f"Dataset not found in {PENDULUM_DIR}. Please set already_created to False to create the dataset.")
-            else:   
-                print('Using already created dataset at', PENDULUM_DIR)
+            print('Using already created dataset at', PENDULUM_DIR)
 
         self.name = 'Pendulum'
         self.root = PENDULUM_DIR

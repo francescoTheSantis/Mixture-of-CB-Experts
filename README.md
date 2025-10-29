@@ -15,6 +15,12 @@ A framework for training and evaluating concept-based reasoning models with line
     - `DATA_PATH` - Path to load datasets
     - `PROJECT_NAME` (optional) - Project identifier for logging
 
+3. **Datasets**:
+    Most datasets are automatically downloaded and processed when needed. For CIFAR10/CIFAR100, you need to manually download prerequisite text files (one-time setup):
+    - Download `cifar10_filtered.txt` and `cifar10_classes.txt` from [Label-free-CBM](https://github.com/Trustworthy-ML-Lab/Label-free-CBM/tree/main)
+    - Place them in `{DATA_PATH}/cifar10/` directory
+    - Same for CIFAR100: download and place in `{DATA_PATH}/cifar100/`
+
 ## Running Experiments
 
 To replicate all experiments from the paper:

@@ -273,8 +273,7 @@ class TextEmbeddingExtractor:
         """Helper function to create a DataLoader from embeddings and labels."""
         if use_custom_format:
             # TODO: implement a custom dataset format
-            dataset = TextEmbeddingDataset(embeddings, attention_masks, labels, input_ids)
-            return DataLoader(dataset, batch_size=batch_size)
+            pass
         else:
             if self.extract_embeddings:
                 dataset = [{'x': _x.float(), 'c': _c, 'y': _y} for _x, _c, _y in zip(x, c, y)]

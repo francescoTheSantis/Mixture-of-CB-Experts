@@ -7,7 +7,8 @@ The files required to compute the concept labels have been downloaded form the L
 
 Instructions to correctly create the CIFAR10 and CIFAR100 datasets:
     1. create a folder for each dataset.
-    2. download the concept lists from the second link shown above and save them in the appropriate dataset folder.
+    2. download the text files (cifar10_classes.txt, cifar10_filtered.txt) 
+       from the second link shown above and save them in the appropriate dataset folder.
     3. use the provided scripts to compute the concept labels for each dataset.
 """
 
