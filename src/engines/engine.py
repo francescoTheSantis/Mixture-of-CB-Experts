@@ -189,14 +189,14 @@ class Engine(pl.LightningModule):
             self.log(entropy_name, selection_entropy)
         return loss
 
-    def on_train_epoch_end(self):
-        # If the model is the symbolic memory reasoner and KANs are used to learn the equations, we need to
-        # update the KAN grid every 10 epochs.
-        if self.model_name == 'SymbolicMemoryReasoner' and \
-            self.model.equation_learning_strategy=='kan' and \
-                not self.model.symbolic_predictors:
-                if self.current_epoch % 10 == 0 and self.current_epoch<=50:
-                    self.model.setup_kan_grid(self.grid_inputs)
+    # def on_train_epoch_end(self):
+    #     # If the model is the symbolic memory reasoner and KANs are used to learn the equations, we need to
+    #     # update the KAN grid every 10 epochs.
+    #     if self.model_name == 'SymbolicMemoryReasoner' and \
+    #         self.model.equation_learning_strategy=='kan' and \
+    #             not self.model.symbolic_predictors:
+    #             if self.current_epoch % 10 == 0 and self.current_epoch<=50:
+    #                 self.model.setup_kan_grid(self.grid_inputs)
 
     def validation_step(self, batch, batch_idx):
         loss, model_output = self.shared_step(batch)

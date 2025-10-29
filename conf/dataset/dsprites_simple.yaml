@@ -11,9 +11,9 @@ loader:
 
   # Formulas for the dataset
   formulas: 
-    circle: "exp(sin(pi * 2 * value_x_position) + cos (pi * 2 * value_y_position))"
-    square: "exp(sin(pi * 2 * value_x_position) + cos (pi * 2 * value_y_position))"
-    heart: "exp(sin(pi * 2 * value_x_position) + cos (pi * 2 * value_y_position))"
+    circle: "10 * exp(sin(pi * 2 * value_x_position) + cos (pi * 2 * value_y_position))"
+    square: "10 * exp(sin(pi * 2 * value_x_position) + cos (pi * 2 * value_y_position))"
+    heart: "10 * exp(sin(pi * 2 * value_x_position) + cos (pi * 2 * value_y_position))"
 
 # Dataset parameters
 metadata:
@@ -25,4 +25,4 @@ metadata:
 
 # for this dataset, the equations connecting the concepts to the task are known
 equations: 
-  - "exp(sin(pi * 2 * c0) + cos (pi * 2 * c1))" # c0 is value_x_position, c1 is value_y_position
+  - "10 * exp(sin(pi * 2 * c0) + cos (pi * 2 * c1))" # c0 is value_x_position, c1 is value_y_position

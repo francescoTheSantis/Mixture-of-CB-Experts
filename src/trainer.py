@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 from src.metrics import f1_acc_metrics
 from tqdm import tqdm
-#from models.l_cmr import LinearMemoryReasoner
 from src.utils.scalers import StandardScaler
+from kan import nsimplify, ex_round
 
 class Trainer:
     """
@@ -109,9 +109,11 @@ class Trainer:
             # If KAN are used, we need to setup the grid for each kan in the memory.
             # This operation is required for any kind of task (classification, regression, ...).
             if self.model.model.equation_learning_strategy=='kan':
-                self.model.model.setup_kan_grid(c_trues.to(self.cfg.gpus[0]))
+                self.kan_inputs = c_trues.to(self.cfg.gpus[0])
+                self.model.model.setup_kan_grid(self.kan_inputs)
                 # Save c_true sin model as it will used to update the grid during training
-                self.model.grid_inputs = c_trues.to(self.cfg.gpus[0])
+                #self.model.grid_inputs = c_trues.to(self.cfg.gpus[0])
+            
                 
         self.trainer.fit(self.model, 
                          train_dataloader, 
@@ -144,7 +146,9 @@ class Trainer:
         
         # Prune the KAN layers
         self.model.model.prune()
-        
+        # Update the grid after pruning
+        self.model.model.setup_kan_grid(self.kan_inputs)
+
         print("Pruning completed!")
         print("="*50)
         print("Starting Fine-tuning Phase (After Pruning)")
@@ -246,6 +250,9 @@ class Trainer:
 
         self.model.model.get_learned_equations(log_dir)
 
+        # Update the grid after symbolic conversion
+        self.model.model.setup_kan_grid(self.kan_inputs)
+
         print("="*50)
         print("Starting Fine-tuning Phase (Symbolic)")
         print("="*50)
@@ -325,7 +332,7 @@ class Trainer:
         
         equations = []
         for layer in self.model.model.kan_layers:
-            equations.append(layer.symbolic_formula()[0][0])
+            equations.append(nsimplify(ex_round(layer.symbolic_formula()[0][0], 3)))
         with open(f"{log_dir}/kan_equations_post_fine_tuning.txt", "w") as f:
             for i, eq in enumerate(equations):
                 f.write(f"KAN Layer {i+1}: {eq}\n")        

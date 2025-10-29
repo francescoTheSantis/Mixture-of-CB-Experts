@@ -10,7 +10,7 @@ import sympy
 import sympytorch
 import numpy as np
 import os
-from kan import KAN
+from kan import KAN, nsimplify, ex_round
 from kan.utils import SYMBOLIC_LIB 
 
 class SymbolicMemoryReasoner(BaseModel):
@@ -173,7 +173,17 @@ class SymbolicMemoryReasoner(BaseModel):
             self.kan_layers[i].to(self.device)
             # Prune the kan layer before getting the symbolic formula
             self.kan_layers[i] = self.kan_layers[i].prune()
-            
+
+        # Up to this point, we need to train just the KAN layers.
+        # Therefore, we freeze all the other parameters.
+        for param in self.parameters():
+            param.requires_grad = False
+
+        for i, _ in enumerate(self.kan_layers):
+            # Unfreeze all parameters of the kan
+            for param in self.kan_layers[i].parameters():
+                param.requires_grad = True
+
     def get_learned_equations(self, log_dir):
         self.symbolic_predictors = True
 
@@ -199,7 +209,7 @@ class SymbolicMemoryReasoner(BaseModel):
                 i.requires_grad = False
 
             # Store the equation in the corresponding list
-            equations.append(kan_layer.symbolic_formula()[0][0])
+            equations.append(nsimplify(ex_round(kan_layer.symbolic_formula()[0][0], 2)))
             # Plot the kan layer using the authors' plotting function
             try:
                 kan_layer.plot(os.getcwd())
