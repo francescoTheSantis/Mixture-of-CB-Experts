@@ -449,6 +449,10 @@ class SymbolicMemoryReasoner(BaseModel):
         Returns the equation associated to the KAN predictor of the model
         """
         
+        # Remove the last element in widhts and substitute with 1
+        # This is because we want to get the symbolic expression for a single output (as we did for the other models).
+        single_output_widths = self.widths[:-1] + [1]
+
         # Generate the abstract (operators are not defined) symbolic equivalent of the kan used by the model.
-        equation = kan_expression(self.widths)
+        equation = kan_expression(single_output_widths)
         store_eq(equation, log_dir)
