@@ -83,10 +83,12 @@ class SymbolicMemoryReasoner(BaseModel):
 
         if widths is not None:
             self.widths = widths
-        else:
+        elif self.output_size == 1:
             # Approach suggested by the authors of KAN
             self.widths = [len(self.c_names), len(self.c_names)+1, self.output_size]
-        
+        elif self.output_size > 1:
+            self.widths = [len(self.c_names), 10, self.output_size]
+
         self.device = device
 
         self.mc_approx = mc_approx
@@ -109,7 +111,7 @@ class SymbolicMemoryReasoner(BaseModel):
         if self.equation_learning_strategy == 'kan':
 
             kan_params = {
-                    'width': self.width, 
+                    'width': self.widths, 
                     'grid': 5,
                     'k': 3,
                     'device': self.device
@@ -168,8 +170,8 @@ class SymbolicMemoryReasoner(BaseModel):
         for kan_layer in self.kan_layers:
             #kan_layer.to(grid_inputs.device)
             # if the values are in the range [-1, 1], we do not apply the grid update
-            #if torch.min(grid_inputs) < -1 or torch.max(grid_inputs) > 1:
-            kan_layer.update_grid_from_samples(grid_inputs)
+            if torch.min(grid_inputs) < -1 or torch.max(grid_inputs) > 1:
+                kan_layer.update_grid_from_samples(grid_inputs)
 
     def prune(self):
         for i, _ in enumerate(self.kan_layers):
