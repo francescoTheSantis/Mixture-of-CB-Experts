@@ -1020,7 +1020,7 @@ class MultKAN(nn.Module):
             print('y range: [' + '%.2f' % y_min, ',', '%.2f' % y_max, ']')
         return x_min, x_max, y_min, y_max
 
-    def plot(self, folder="./figures", beta=3, metric='backward', scale=0.5, tick=False, sample=False, in_vars=None, out_vars=None, title=None, varscale=1.0):
+    def plot(self, folder="./figures", idx=0, beta=3, metric='backward', scale=0.5, tick=False, sample=False, in_vars=None, out_vars=None, title=None, varscale=1.0):
         '''
         plot KAN
         
@@ -1308,7 +1308,7 @@ class MultKAN(nn.Module):
         if title != None:
             plt.gcf().get_axes()[0].text(0.5, (y0+z0) * (len(self.width) - 1) + 0.3, title, fontsize=40 * scale, horizontalalignment='center', verticalalignment='center')
 
-        plt.savefig(f'{folder}/KAN_skeleton.pdf', bbox_inches="tight")
+        plt.savefig(f'{folder}/KAN_skeleton_{str(idx)}.pdf', bbox_inches="tight")
             
     def reg(self, reg_metric, lamb_l1, lamb_entropy, lamb_coef, lamb_coefdiff):
         '''

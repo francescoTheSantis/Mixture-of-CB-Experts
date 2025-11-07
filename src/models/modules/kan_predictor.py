@@ -53,19 +53,22 @@ class KANPredictor(nn.Module):
             if torch.min(grid_inputs) < -1 or torch.max(grid_inputs) > 1:
                 kan_layer.update_grid_from_samples(grid_inputs)
 
-    def allow_symbolic(self, kan):
-        kan.symbolic_enabled=True
-        kan.save_act=True
-        kan.auto_save=True
+    def allow_symbolic(self):
+        for i, kan in enumerate(self.kans):
+            kan.to(self.device)
+            kan.symbolic_enabled=True
+            kan.save_act=True
+            kan.auto_save=True
+            self.kans[i] = kan
         return kan
 
-    def prune(self):
-        for i, _ in enumerate(self.kans):
-            self.kans[i].to(self.device)
-            self.kans[i] = self.kans[i].prune()
-            # when speed_up_training is True, we need to re-allow symbolic execution
-            if self.speed_up_training:
-                self.kans[i] = self.allow_symbolic(self.kans[i])
+    # def prune(self):
+    #     for i, _ in enumerate(self.kans):
+    #         self.kans[i].to(self.device)
+    #         # self.kans[i] = self.kans[i].prune()
+    #         # when speed_up_training is True, we need to re-allow symbolic execution
+    #         if self.speed_up_training:
+    #             self.kans[i] = self.allow_symbolic(self.kans[i])
 
     def _sync_kan_tensors_to_device(self, kan_layer):
         """
@@ -107,7 +110,7 @@ class KANPredictor(nn.Module):
 
             # Plot the kan layer using the authors' plotting function
             self._sync_kan_tensors_to_device(kan_layer)
-            kan_layer.plot(os.getcwd())
+            kan_layer.plot(os.getcwd(), idx=i+1) # so that the count starts from 1
 
             # Move to device
             kan_layer.to(self.device)

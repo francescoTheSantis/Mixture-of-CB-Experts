@@ -76,8 +76,14 @@ class KANSymbolicCBM(BaseModel):
         if widths is not None:
             self.widths = widths
         else:
-            # Approach suggested by the authors of KAN
-            self.widths = [len(self.c_names), len(self.c_names)+1, self.output_size]
+            if self.output_size == 1:
+                # Approach suggested by the authors of KAN
+                self.widths = [len(self.c_names), len(self.c_names)+1, self.output_size]
+            else:
+                # For multi-output tasks, we use a smaller architecture since the number of parameters 
+                # grows quickly with the number of outputs and this slows down the auto-symbolic search.
+                # NOTE: this is a design choice made according to the hardware and different architectures can be used.
+                self.widths = [len(self.c_names), self.output_size]
 
         grid_size = 5
         k = 3
@@ -113,8 +119,8 @@ class KANSymbolicCBM(BaseModel):
     def setup_kan_grid(self, grid_inputs):
         self.kan_layers.setup_kan_grid(grid_inputs)
 
-    def prune(self):
-        self.kan_layers.prune()
+    def allow_symbolic(self):
+        self.kan_layers.allow_symbolic()
     
     def get_learned_equations(self, log_dir):
         self.kan_layers.get_learned_equations(log_dir)

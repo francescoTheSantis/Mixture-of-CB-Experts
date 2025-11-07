@@ -119,12 +119,13 @@ class Trainer:
             ckpt_path = f"{self.checkpoint_dir}/best_model.ckpt"
         self.trainer.test(self.model, test_dataloader, ckpt_path=ckpt_path)
 
-    def fine_tune_with_pruning(self, 
+    def allow_symbolic(self, 
                                train_dataloader, 
                                val_dataloader):
         """
-        Fine-tune the model after pruning KAN layers.
-        This is the first phase of fine-tuning for KAN-based models.
+        Allow symbolic execution for the model.
+        Train the model for a few epochs to store the activation functions in order to allow
+        symbolic substitution of the splines.
         """
         
         # Load the best checkpoint from initial training (best_model.ckpt)
@@ -135,22 +136,19 @@ class Trainer:
         self.model.load_state_dict(checkpoint['state_dict'])
         
         print("\n" + "="*50)
-        print("Pruning KAN layers")
+        print("Allowing Symbolic substitution for KAN layers")
         print("="*50)
         
-        # Prune the KAN layers
-        self.model.model.prune()
-        # Update the grid after pruning
-        self.model.model.setup_kan_grid(self.kan_inputs)
+        # NOTE: if you want, you can prune the KAN layers before allowing symbolic execution
 
-        print("Pruning completed!")
-        print("="*50)
-        print("Starting Fine-tuning Phase (After Pruning)")
-        print("="*50)
+        # Allow Symbolic substitution for the KAN layers
+        self.model.model.allow_symbolic()
+        # Update the grid
+        self.model.model.setup_kan_grid(self.kan_inputs)
     
         # Set fine-tuning mode to change metric names
         self.model.fine_tuning = True
-        self.model.fine_tuning_stage = 'pruning'
+        self.model.fine_tuning_stage = 'allow_symbolic'
         self.model._set_metrics()
         
         fine_tune_lr = self.cfg.dataset.metadata.lr
@@ -171,7 +169,7 @@ class Trainer:
         )
         self.scheduler = {
             'scheduler': LR_on_plateau,
-            'monitor': 'finetune_pruning/val_loss',  # Monitor fine-tuning val loss after pruning
+            'monitor': 'allow_symbolic/val_loss',  # Monitor fine-tuning val loss 
             'interval': 'epoch',
             'frequency': 1
         }
@@ -180,9 +178,9 @@ class Trainer:
         self.model.optimizer = self.optimizer
         self.model.scheduler = self.scheduler
         
-        # Rebuild trainer with new configuration for fine-tuning after pruning
+        # Rebuild trainer with new configuration for fine-tuning
         early_stopping = EarlyStopping(
-            monitor='finetune_pruning/val_loss',  # Monitor fine-tuning val loss after pruning
+            monitor='allow_symbolic/val_loss',  # Monitor fine-tuning val loss 
             patience=self.cfg.patience, 
             verbose=True,
             mode='min'
@@ -190,7 +188,7 @@ class Trainer:
 
         checkpoint_callback = ModelCheckpoint(
             dirpath=self.checkpoint_dir,
-            monitor='finetune_pruning/val_loss',  # Monitor fine-tuning val loss after pruning
+            monitor='allow_symbolic/val_loss',  # Monitor fine-tuning val loss 
             filename='best_model', 
             save_top_k=1, 
             mode='min', 
@@ -204,7 +202,7 @@ class Trainer:
         loggers = [self.wandb_logger, self.csv_logger] if self.wandb_logger is not None else self.csv_logger
 
         self.trainer = pl.Trainer(
-            max_epochs=self.cfg.max_epochs,
+            max_epochs=1, #self.cfg.max_epochs,
             callbacks=[early_stopping, checkpoint_callback, lr_monitor],
             logger=loggers,
             devices=self.cfg.gpus,  
@@ -216,7 +214,7 @@ class Trainer:
         # Fine-tune after pruning
         self.trainer.fit(self.model, train_dataloader, val_dataloader)
         
-        print("Fine-tuning after pruning completed!")
+        print("Symbolic substitution allowed and fine-tuning completed!")
         print(f"Best model updated at: {self.checkpoint_dir}/best_model.ckpt")
         
         return f"{self.checkpoint_dir}/best_model.ckpt"
@@ -276,7 +274,7 @@ class Trainer:
         )
         self.scheduler = {
             'scheduler': LR_on_plateau,
-            'monitor': 'finetune_symbolic/val_loss',  # Monitor fine-tuning val loss
+            'monitor': 'symbolic/val_loss',  # Monitor fine-tuning val loss
             'interval': 'epoch',
             'frequency': 1
         }
@@ -287,7 +285,7 @@ class Trainer:
         
         # Rebuild trainer with new configuration for fine-tuning
         early_stopping = EarlyStopping(
-            monitor='finetune_symbolic/val_loss',  # Monitor fine-tuning val loss
+            monitor='symbolic/val_loss',  # Monitor fine-tuning val loss
             patience=self.cfg.patience, 
             verbose=True,
             mode='min'
@@ -295,7 +293,7 @@ class Trainer:
 
         checkpoint_callback = ModelCheckpoint(
             dirpath=self.checkpoint_dir,
-            monitor='finetune_symbolic/val_loss',  # Monitor fine-tuning val loss
+            monitor='symbolic/val_loss',  # Monitor fine-tuning val loss
             filename='best_model', 
             save_top_k=1, 
             mode='min', 

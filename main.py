@@ -78,11 +78,11 @@ def main(cfg: DictConfig) -> None:
 
     ###### Fine-tuning for symbolic cmr (kan implementation) model ######
     if cfg.model.metadata.name == 'kan_symbolic_cbm':
-        # Phase 1: Fine-tuning after pruning
+        # Phase 1: Allow symbolic execution
         print("\n" + "="*70)
-        print("PHASE 1: Fine-tuning after pruning KAN layers")
+        print("PHASE 1: Allow symbolic execution")
         print("="*70)
-        trainer.fine_tune_with_pruning(
+        trainer.allow_symbolic(
             loaded_train, 
             loaded_val
         )
