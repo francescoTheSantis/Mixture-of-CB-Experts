@@ -101,7 +101,8 @@ class ConceptBottleneckModel(BaseModel):
         # Get as many equations as the output size
         equations = self.y_predictor.to_symbolic()
 
+        # If the output is greater than 1, equations will be a list.
         # Each equation in the list will have the same complexity, therefore we return only the first one.
-        if len(equations)>1:
+        if self.output_size > 1:
             store_eq(equations[0], log_dir)
         store_eq(equations, log_dir)

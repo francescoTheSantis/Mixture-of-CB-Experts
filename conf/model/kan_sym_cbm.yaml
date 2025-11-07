@@ -10,8 +10,7 @@ params:
   memory_size: ${memory_size}
   embedding_size: ${embedding_size}
   mc_approx: 1
-  equation_learning_strategy: "kan" 
-  speed_up_training: True
+  speed_up_training: False
 
 metadata:
   name: kan_symbolic_cbm

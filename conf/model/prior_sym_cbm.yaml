@@ -10,7 +10,6 @@ params:
   memory_size: ${memory_size}
   embedding_size: ${embedding_size}
   mc_approx: 1
-  equation_learning_strategy: "prior_knowledge" 
 
 metadata:
   name: prior_symbolic_cbm

@@ -41,7 +41,7 @@ custom_order = [#'xor', \
 marker_size = 18
 
 # Define complexity order
-models = list(reversed(['blackbox', 'cem', 'm_sym_cmr_kan', 'licem', 'l_cmr', 'dcr', 'cmr']))
+models = list(reversed(['blackbox', 'cem', 'kan_sym_cbm', 'licem', 'l_cmr', 'dcr', 'cmr']))
 
 # Generate colors from a colormap
 cmap = plt.cm.RdYlGn 
@@ -51,7 +51,7 @@ model_styles = {
     'blackbox': {'marker': 'o', 'name': 'BlackBox', 'color': "black", 'size': marker_size},
     'cbm_linear': {'marker': '^', 'name': 'CBM', 'color': 'tab:orange', 'size': marker_size},
     'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:red', 'size': marker_size},
-    'm_sym_cmr_kan': {'marker': 'X', 'name': 'mCBM-sym', 'color': 'tab:green', 'size': marker_size},
+    'kan_sym_cbm': {'marker': 'X', 'name': 'Kan-Sym-CBM', 'color': 'tab:green', 'size': marker_size},
     'l_cmr': {'marker': 's', 'name': 'mCBM-lin', 'color': 'tab:blue', 'size': marker_size},
     'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:brown', 'size': marker_size},
     'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
@@ -80,7 +80,7 @@ def main():
     try:
 
         # LICEM weights path
-        weights_path = "/home/fdesantis/projects/Linear-Memory-Reasoner/output/licem/2025-09-21_14-35-35/3/logs/experiment_metrics/version_0"
+        weights_path = ""
         # Store the training weights
         train_w = torch.load(weights_path+'/learned_linear_coefficients_train.pt').squeeze(1)
         #iterate over all the test weights and store them in a list
@@ -97,7 +97,7 @@ def main():
             y_names = [line.strip() for line in f.readlines()]
 
         # M-CBM-lin weights path
-        weights_path = "/home/fdesantis/projects/Linear-Memory-Reasoner/output/l_cmr/2025-09-21_14-38-19/8/logs/experiment_metrics/version_0"
+        weights_path = ""
         # Store the training weights
         test_w_lcmr = torch.load(weights_path+'/pred_CBMs.pt').squeeze(1)
 
@@ -123,7 +123,7 @@ def main():
     ##################################################
 
     paths = [
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-11-03_21-41-50",
+        "",
     ]
 
     try:
