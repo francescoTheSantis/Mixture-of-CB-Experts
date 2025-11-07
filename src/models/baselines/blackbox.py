@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from src.models.base import BaseModel
+from src.models.baselines.base import BaseModel
 from src.models.encoders.base import BaseEncoder
 from src.models.encoders.mlp import MLPEncoder
 from src.utils.expression_utils import store_eq

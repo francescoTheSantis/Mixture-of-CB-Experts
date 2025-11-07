@@ -3,7 +3,7 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.licem.LinearConceptEmbeddingModel"
+  _target_: "src.models.baselines.licem.LinearConceptEmbeddingModel"
   task_penalty: ${task_penalty}
   concept_penalty: ${concept_penalty}
   int_prob: ${int_prob}

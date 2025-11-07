@@ -1,6 +1,6 @@
 
 params:
-  _target_: "src.models.blackbox.BlackBox"
+  _target_: "src.models.baselines.blackbox.BlackBox"
   activation: ${activation}
   latent_size: ${dataset.latent_size}
   num_layers: 1

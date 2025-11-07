@@ -27,7 +27,8 @@ def main(cfg: DictConfig) -> None:
     # Add data_path to the loader and engine configs
     with open_dict(cfg):
         cfg.dataset.loader.update(
-            data_path = data_path
+            data_path = data_path,
+            use_stored_dataset = cfg.use_stored_dataset
         )
         cfg.engine.update(
             data_path = data_path
@@ -76,7 +77,7 @@ def main(cfg: DictConfig) -> None:
     trainer.train(loaded_train, loaded_val)
 
     ###### Fine-tuning for symbolic cmr (kan implementation) model ######
-    if cfg.model.metadata.name == 'm_sym_cmr_kan' and cfg.model.metadata.fine_tune == True:
+    if cfg.model.metadata.name == 'kan_symbolic_cbm':
         # Phase 1: Fine-tuning after pruning
         print("\n" + "="*70)
         print("PHASE 1: Fine-tuning after pruning KAN layers")

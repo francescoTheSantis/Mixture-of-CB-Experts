@@ -2,7 +2,7 @@ from matplotlib.pylab import sample
 import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
-from src.models.base import BaseModel
+from models.baselines.base import BaseModel
 from src.models.encoders.mlp import MLPEncoder
 import torch.nn.functional as F
 import re
@@ -42,9 +42,10 @@ class SymbolicMemoryReasoner(BaseModel):
                  decay_rate='cosine',
                  embedding_memory=False,
                  concept_penalty=1.0,
-                 regularize=True,
+                 regularize=False,
                  widths=None,
                  device='cpu',
+                 speed_up_training=False,
                  **kwargs
                  ):
 
@@ -80,16 +81,23 @@ class SymbolicMemoryReasoner(BaseModel):
         self.equations_for_explanations_ready = False
         self.regularize = regularize
         self.symbolic_predictors = False
+        self.device = device
+        self.speed_up_training = speed_up_training
 
         if widths is not None:
             self.widths = widths
         elif self.output_size == 1:
             # Approach suggested by the authors of KAN
-            self.widths = [len(self.c_names), len(self.c_names)+1, self.output_size]
+            self.widths = [len(self.c_names), len(self.c_names)+1, len(self.c_names)+1, self.output_size]
+            grid_size = 3
+            k = 3
         elif self.output_size > 1:
-            self.widths = [len(self.c_names), 10, self.output_size]
-
-        self.device = device
+            # The classification datasets we are using for testing have a large number of concepts and classes.
+            # This significantly increases the size of the KAN layers, making the training very slow.
+            # For this reason we reduce the grid as well as the number of hidden layers.
+            self.widths = [len(self.c_names), self.output_size]
+            grid_size = 3
+            k = 2
 
         self.mc_approx = mc_approx
         self.memory_size = memory_size
@@ -112,8 +120,8 @@ class SymbolicMemoryReasoner(BaseModel):
 
             kan_params = {
                     'width': self.widths, 
-                    'grid': 5,
-                    'k': 3,
+                    'grid': grid_size,
+                    'k': k,
                     'device': self.device
             }
 
@@ -121,24 +129,16 @@ class SymbolicMemoryReasoner(BaseModel):
             self.kan_layers = nn.ModuleList()
             for i in range(self.memory_size):
                 kan_params['ckpt_path'] = os.path.join(os.getcwd(), f'kan{i}_ckpt')
-                # generate a different seed for each KAN layer
-                # kan_params['seed'] = int(os.environ.get('PYTHONHASHSEED', '0')) + i
                 kan_layer = KAN(**kan_params)
+                if self.speed_up_training:
+                    kan_layer = kan_layer.speed()  # Sets: symbolic_enabled=False, save_act=False, auto_save=False
                 for param in kan_layer.get_params():
                     param.requires_grad = True
                 if self.regularize:
-                    self.lamb = 0.001 # increase for higher sparsity
-                    # old_save_act, old_symbolic_enabled = kan_layer.disable_symbolic_in_fit(self.lamb)
-                    # kan_layer.symbolic_enabled = old_symbolic_enabled
-                    # kan_layer.save_act  = old_save_act
+                    self.lamb = 0.001  # Regularization strength 
+                # Ensure all tensors used in plot() are on the same device
+                self._sync_kan_tensors_to_device(kan_layer)
                 self.kan_layers.append(kan_layer)
-            # else:
-            #     self.kan_layers = nn.ModuleList()
-            #     for i in range(self.memory_size):
-            #         kan_layers = EfficientKAN(width)
-            #         for param in kan_layers.parameters():
-            #             param.requires_grad = True
-            #         self.kan_layers.append(kan_layers)
         
     ###### Setup methods ######
     def setup_memory(self):
@@ -166,28 +166,39 @@ class SymbolicMemoryReasoner(BaseModel):
     ###### KAN related methods ######
     def setup_kan_grid(self, grid_inputs):  
         grid_inputs = grid_inputs if grid_inputs.ndim > 1 else grid_inputs.unsqueeze(1)
-        # Update the grid of all KAN layers based on the provided inputs
+        # Update the grid of all KAN layers based on the provided inputs (only if out of the default grid range)  
         for kan_layer in self.kan_layers:
-            #kan_layer.to(grid_inputs.device)
-            # if the values are in the range [-1, 1], we do not apply the grid update
             if torch.min(grid_inputs) < -1 or torch.max(grid_inputs) > 1:
                 kan_layer.update_grid_from_samples(grid_inputs)
+
+    def allow_symbolic(self, kan):
+        kan.symbolic_enabled=True
+        kan.save_act=True
+        kan.auto_save=True
+        return kan
 
     def prune(self):
         for i, _ in enumerate(self.kan_layers):
             self.kan_layers[i].to(self.device)
-            # Prune the kan layer before getting the symbolic formula
             self.kan_layers[i] = self.kan_layers[i].prune()
+            # when speed_up_training is True, we need to re-allow symbolic execution
+            if self.speed_up_training:
+                self.kan_layers[i] = self.allow_symbolic(self.kan_layers[i])
 
-        # Up to this point, we need to train just the KAN layers.
-        # Therefore, we freeze all the other parameters.
-        for param in self.parameters():
-            param.requires_grad = False
-
-        for i, _ in enumerate(self.kan_layers):
-            # Unfreeze all parameters of the kan
-            for param in self.kan_layers[i].parameters():
-                param.requires_grad = True
+    def _sync_kan_tensors_to_device(self, kan_layer):
+        """
+        Ensure all KAN layer tensors are on the same device as act_fun.
+        This is needed for the plot() method which calls attribute().
+        """
+        # Get the device from act_fun (where the main computation happens)
+        target_device = kan_layer.act_fun[0].grid.device
+        
+        # Move edge_actscale and subnode_actscale to the target device
+        if hasattr(kan_layer, 'edge_actscale') and kan_layer.edge_actscale:
+            kan_layer.edge_actscale = [tensor.to(target_device) for tensor in kan_layer.edge_actscale]
+        
+        if hasattr(kan_layer, 'subnode_actscale') and kan_layer.subnode_actscale:
+            kan_layer.subnode_actscale = [tensor.to(target_device) for tensor in kan_layer.subnode_actscale]
 
     def get_learned_equations(self, log_dir):
         self.symbolic_predictors = True
@@ -196,7 +207,7 @@ class SymbolicMemoryReasoner(BaseModel):
         for i, kan_layer in enumerate(self.kan_layers):            
 
             # Get the symbolic formula
-            kan_layer.auto_symbolic(lib=SYMBOLIC_LIB)
+            kan_layer.auto_symbolic(lib=SYMBOLIC_LIB, r2_threshold=-0.3)
 
             # Freeze all parameters of the kan
             for param in kan_layer.parameters():
@@ -215,11 +226,13 @@ class SymbolicMemoryReasoner(BaseModel):
 
             # Store the equation in the corresponding list
             equations.append(nsimplify(ex_round(kan_layer.symbolic_formula()[0][0], 2)))
+
             # Plot the kan layer using the authors' plotting function
-            try:
-                kan_layer.plot(os.getcwd())
-            except:
-                print("Could not plot the KAN layer. Modify the function 'plot' in MultKAN.py to fix it")
+            self._sync_kan_tensors_to_device(kan_layer)
+            kan_layer.plot(os.getcwd())
+
+            # Move to device
+            kan_layer.to(self.device)
 
         # Store the equations in a text file
         with open(f"{log_dir}/kan_equations_pre_fine_tuning.txt", "w") as f:
@@ -450,11 +463,17 @@ class SymbolicMemoryReasoner(BaseModel):
         """
         Returns the equation associated to the KAN predictor of the model
         """
-        
-        # Remove the last element in widhts and substitute with 1
-        # This is because we want to get the symbolic expression for a single output (as we did for the other models).
-        single_output_widths = self.widths[:-1] + [1]
+
+        # Remove the last element in widths and substitute with 1
+        # This is because we want to get the symbolic expression for a single output (as we did for the other models).
+        try:
+            single_output_widths = self.widths[:-1] + [1]
+            equation = kan_expression(single_output_widths)
+        except ValueError:
+            print(f"Zeros are appended to the each element in widths, we need to remove them")
+            self.widths = [w[0] for w in self.widths]
+            single_output_widths = self.widths[:-1] + [1]
+            equation = kan_expression(single_output_widths)
 
         # Generate the abstract (operators are not defined) symbolic equivalent of the kan used by the model.
-        equation = kan_expression(single_output_widths)
         store_eq(equation, log_dir)

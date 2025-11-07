@@ -3,7 +3,7 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.cem.ConceptEmbeddingModel"
+  _target_: "src.models.baselines.cem.ConceptEmbeddingModel"
   task_penalty: ${task_penalty}
   concept_penalty: ${concept_penalty}
   int_prob: ${int_prob}

@@ -10,6 +10,7 @@ from typing import Union, List
 
 import os
 import pickle
+import dill
 
 # Import complexity module if available
 try:
@@ -126,7 +127,7 @@ def kan_expression(w: List[int], nonlinearity: Union[str, None] = None) -> sp.Ex
     This function creates a nested expression representing a KAN with the given
     layer structure. Each edge in the network has four parameters (a, b, c, d)
     and applies the transformation: φ(x) = a * g(b*x + c) + d, where g is a
-    nonlinearity function.
+    non-linear function.
     
     The network computes:
         x_{l+1,j} = Σ_i [a_{l,j,i} * g_{l,j,i}(b_{l,j,i} * x_{l,i} + c_{l,j,i}) + d_{l,j,i}]
@@ -261,18 +262,22 @@ def kan_expression(w: List[int], nonlinearity: Union[str, None] = None) -> sp.Ex
         # For vector output, return as a list
         return current_layer
 
-def store_eq(equation: sp.Expr, log_dir: Union[str, None]) -> None:
+def store_eq(equation: sp.Expr, log_dir: Union[str, None], idx: int = None) -> None:
     """
     Stores the given equations in pickle format to the specified log directory.
+    Uses dill for serialization to handle SymPy's dynamically created Function objects.
     """
 
     if log_dir is None:
         return
 
     os.makedirs(log_dir, exist_ok=True)
-    filename = os.path.join(log_dir, f"equation.pkl")
+    if idx is None:
+        filename = os.path.join(log_dir, "equation.pkl")
+    else:
+        filename = os.path.join(log_dir, f"equation_{idx}.pkl")
     with open(filename, "wb") as f:
-        pickle.dump(equation, f)
+        dill.dump(equation, f)
 
 
 if __name__ == "__main__":

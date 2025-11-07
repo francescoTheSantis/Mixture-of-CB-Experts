@@ -116,14 +116,21 @@ def get_backbone_latent_size(backbone):
     return latent_dim
 
 def get_type_from_name(dataset_name):
+    # Symbolic regression datasets
+    symbolic_prefixes = ['feynman_']
+    if any(dataset_name.startswith(prefix) for prefix in symbolic_prefixes):
+        return 'symbolic_regression'
+    
+    # Image datasets
     if dataset_name in ['mnist_addition', 'cub', 'cub_incomplete', \
                         'awa2', 'awa2_incomplete', 'xor', 'celeba', \
                         'cifar10', 'cifar100', 'mnist_arithmetic', 'mnist_arithmetic_hard', \
                         'pendulum', 'dsprites', 'dsprites_simple', 'dsprites_complex', \
                         'mnist_exponential']:
         return 'image'
-    else:
-        return 'text'
+    
+    # Text datasets (default)
+    return 'text'
 
 def get_batch_from_loader(train_loader, device):
     with torch.cuda.device(device if device != 'cpu' else 'cpu'):
@@ -231,10 +238,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         x = batch['x'] if cfg.extract_embeddings else batch['x']['input_ids']
         data_type = 'text'
 
-    if cfg.dataset.metadata.name != 'sst2':
-        input_size = torch.prod(torch.tensor(x.shape[1:])).item()
-    else:
-        input_size = x.shape[-1]
+    input_size = torch.prod(torch.tensor(x.shape[1:])).item()
         
     # Clean up GPU memory
     del batch
@@ -267,8 +271,8 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         hard_concepts = cfg.hard_concepts
         concept_type = prepare_concept_type(cfg.dataset.metadata.concept_type, cfg.engine.c_names, cfg.dataset.metadata.name)
 
-        # If cfg.dataset.equations exists, then we want to use the known equations,
-        # null otherwise
+        # If cfg.dataset.equations exists, then we want to use the known equations, 
+        # null otherwise.
         known_equations = cfg.dataset.equations if 'equations' in cfg.dataset and cfg.dataset.equations is not None else None
 
         cfg.model.params.update(
@@ -297,6 +301,40 @@ def prepare_concept_type(c_types, c_names, dataset_name):
         if dataset_name == 'mnist_exponential':
             return c_types
         return [c_types] * n_concepts
+
+def generate_data_path(cfg):
+    data_path = os.path.join(str(CACHE), 
+                             'stored_tensors', 
+                             'embeddings' if cfg.extract_embeddings else 'raw', # whether it contains embeddings or not
+                             cfg.dataset.metadata.name)
+
+    # Add backbone name
+    dataset_type = get_type_from_name(cfg.dataset.metadata.name)
+    
+    if dataset_type == 'image':
+        img_backbone_name = cfg.img_backbone_name.replace('/', '_')
+        data_path += f"/{img_backbone_name}"
+    elif dataset_type == 'text':
+        text_backbone_name = cfg.text_backbone_name.replace('/', '_')
+        data_path += f"/{text_backbone_name}"
+    elif dataset_type == 'symbolic_regression':
+        # For symbolic regression, use latent_dim and noise_std in the path
+        latent_dim = cfg.dataset.loader.get('latent_dim', 4)
+        noise_std = cfg.dataset.loader.get('noise_std', 0.0)
+        data_path += f"/latent{latent_dim}_noise{str(noise_std).replace('.', '')}"
+
+    # Add seed
+    data_path += f"/seed_{cfg.seed}"
+
+    if cfg.dataset.loader.concept_percentage != None:
+        # Add concept percentage if it is not None
+        data_path += f"_{str(cfg.dataset.loader.concept_percentage).replace('.', '')}"
+
+    train_path = f"{data_path}/train.pt"
+    val_path = f"{data_path}/val.pt"
+    test_path = f"{data_path}/test.pt"
+
+    return data_path, train_path, val_path, test_path
 
 def generate_data_path(cfg):
     data_path = os.path.join(str(CACHE), 

@@ -3,15 +3,16 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.sym_cmr.SymbolicMemoryReasoner"
+  _target_: "src.models.lin_sym_cbm.LinearSymbolicCBM"
   task_penalty: ${task_penalty}
   concept_penalty: ${concept_penalty}
   int_prob: ${int_prob}
   memory_size: ${memory_size}
   embedding_size: ${embedding_size}
   mc_approx: 1
-  equation_learning_strategy: "kan" 
+  weight_reg: 1e-5
+  embedding_memory: True
+  bias: local
 
 metadata:
-  name: m_sym_cmr_kan
-  fine_tune: True
+  name: linear_symbolic_cbm

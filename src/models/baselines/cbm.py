@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch_concepts.nn as pyc_nn
 from src.models.encoders.mlp import MLPEncoder
 from src.models.encoders.linear import LinearEncoder
-from src.models.base import BaseModel
+from src.models.baselines.base import BaseModel
 from src.utils.expression_utils import store_eq
 
 class ConceptBottleneckModel(BaseModel):

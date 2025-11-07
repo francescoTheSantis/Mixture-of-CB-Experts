@@ -8,12 +8,12 @@ loader:
   # Concepts available: value_shape, value_scale, value_orientation, value_x_position, value_y_position
   n_samples: 100000
   batch_size: 1024
-
+ 
   # Formulas for the dataset
   formulas: 
-    circle: "10 * exp(sin(pi * 2 * value_x_position) + cos (pi * 2 * value_y_position))"
-    square: "10 * exp(sin(pi * 2 * value_x_position) + cos (pi * 2 * value_y_position))"
-    heart: "10 * exp(sin(pi * 2 * value_x_position) + cos (pi * 2 * value_y_position))"
+    circle: "exp(sin(pi * 2 * value_x_position) + cos (pi * 2 * value_y_position))"
+    square: "exp(sin(pi * 2 * value_x_position) + cos (pi * 2 * value_y_position))"
+    heart: "exp(sin(pi * 2 * value_x_position) + cos (pi * 2 * value_y_position))"
 
 # Dataset parameters
 metadata:
@@ -25,4 +25,4 @@ metadata:
 
 # for this dataset, the equations connecting the concepts to the task are known
 equations: 
-  - "10 * exp(sin(pi * 2 * c0) + cos (pi * 2 * c1))" # c0 is value_x_position, c1 is value_y_position
+  - "exp(sin(pi * 2 * c0) + cos (pi * 2 * c1))" # c0 is value_x_position, c1 is value_y_position

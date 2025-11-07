@@ -50,6 +50,10 @@ from src.loaders.datasets.mawps import (
     CONCEPT_NAMES as mawps_concept_names,
     TASK_NAMES as mawps_task_names,
 )
+from src.loaders.datasets.symbolic_regression import (
+    get_symbolic_dataset,
+    SYMBOLIC_CONCEPT_NAMES,
+)
 
 from env import DATA_PATH
 
@@ -307,49 +311,6 @@ class DatasetFactory:
         )
     
     @staticmethod
-    def create_sst2_dataset(**kwargs):
-        """Create SST2 dataset"""
-        from datasets import load_dataset
-        from transformers import AutoTokenizer
-        
-        train_dataset = load_dataset('SetFit/sst2', split='train')
-        val_dataset = load_dataset('SetFit/sst2', split='validation')
-        test_dataset = load_dataset('SetFit/sst2', split='test')
-        
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
-        tokenizer.pad_token = tokenizer.eos_token
-        
-        encoded_datasets = []
-        for dataset in [train_dataset, val_dataset, test_dataset]:
-            encoded_dataset = dataset.map(
-                lambda e: tokenizer(
-                    e['text'],
-                    padding=True,
-                    truncation=True,
-                    max_length=350
-                ),
-                batched=True,
-                batch_size=len(dataset)
-            )
-            encoded_dataset = encoded_dataset.remove_columns(['text'])
-            encoded_dataset = encoded_dataset.remove_columns(['label_text'])
-            encoded_dataset = encoded_dataset[:len(encoded_dataset)]
-            encoded_datasets.append(encoded_dataset)
-        
-        from src.loaders.dataloader import TextDataset
-        
-        train_ds = TextDataset(encoded_datasets[0])
-        val_ds = TextDataset(encoded_datasets[1])
-        test_ds = TextDataset(encoded_datasets[2])
-        
-        concept_names = ['negative', 'positive']
-        task_names = [f"w_{i}" for i in range(len(tokenizer.get_vocab().keys()))]
-        
-        return train_ds, val_ds, test_ds, DatasetMetadata(
-            concept_names, task_names, None
-        )
-    
-    @staticmethod
     def create_cebab_dataset(cfg, batch_size, **kwargs):
         """Create CEBaB dataset - returns loaders directly"""
         loader = CEBaBDataset(cfg.text_backbone_name, batch_size)
@@ -473,6 +434,66 @@ class DatasetFactory:
         return loaded_train, loaded_val, loaded_test, DatasetMetadata(
             concept_names, task_names, None
         )
+    
+    @staticmethod
+    def create_symbolic_regression_dataset(
+        name, n_samples, seed, latent_dim, noise_std, 
+        train_autoencoder, use_stored_dataset=False, data_path=None, return_metadata=False, 
+        **kwargs
+    ):
+        """Create symbolic regression dataset"""
+
+        
+        # Get concept names from the registry
+        concept_names = SYMBOLIC_CONCEPT_NAMES.get(name, [])
+        task_names = ['target']  # Single regression target
+
+        if return_metadata:
+            return None, None, None, DatasetMetadata(concept_names, task_names, None)
+        
+        # Determine number of samples per split
+        train_samples = int(n_samples * 0.7)
+        val_samples = int(n_samples * 0.1)
+        test_samples = n_samples - train_samples - val_samples
+        
+        # Create train dataset (trains autoencoder)
+        train_dataset = get_symbolic_dataset(
+            name,
+            num_samples=train_samples,
+            latent_dim=latent_dim,
+            noise_std=noise_std,
+            train_autoencoder=train_autoencoder,
+            random_seed=seed,
+            use_stored_dataset=use_stored_dataset,
+            data_path=data_path,
+        )
+        
+        # Create val and test datasets (reuse autoencoder)
+        val_dataset = get_symbolic_dataset(
+            name,
+            num_samples=val_samples,
+            latent_dim=latent_dim,
+            noise_std=noise_std,
+            train_autoencoder=False,  # Use cached autoencoder
+            random_seed=seed + 1,
+            use_stored_dataset=use_stored_dataset,
+            data_path=data_path,
+        )
+        
+        test_dataset = get_symbolic_dataset(
+            name,
+            num_samples=test_samples,
+            latent_dim=latent_dim,
+            noise_std=noise_std,
+            train_autoencoder=False,  # Use cached autoencoder
+            random_seed=seed + 2,
+            use_stored_dataset=use_stored_dataset,
+            data_path=data_path,
+        )
+        
+        return train_dataset, val_dataset, test_dataset, DatasetMetadata(
+            concept_names, task_names, None
+        )
 
 
 def get_dataset(name, **kwargs):
@@ -505,8 +526,6 @@ def get_dataset(name, **kwargs):
         return factory.create_celeba_dataset(**kwargs)
     elif name in ['awa2', 'awa2_incomplete']:
         return factory.create_awa2_dataset(**kwargs)
-    elif name == 'sst2':
-        return factory.create_sst2_dataset(**kwargs)
     elif name == 'cebab':
         return factory.create_cebab_dataset(**kwargs)
     elif name in ['cifar10', 'cifar100']:
@@ -517,5 +536,10 @@ def get_dataset(name, **kwargs):
         return factory.create_dsprites_dataset(**kwargs)
     elif name == 'mawps':
         return factory.create_mawps_dataset(**kwargs)
+    elif name in [
+        'feynman_I_6_2', 'feynman_I_9_18', 'feynman_I_12_1', 'feynman_I_13_4',
+        'feynman_I_14_3', 'feynman_I_15_10'
+    ]:
+        return factory.create_symbolic_regression_dataset(name=name, **kwargs)
     else:
         raise ValueError(f"Dataset {name} not recognized.")

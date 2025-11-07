@@ -72,22 +72,34 @@ class loader(object):
         formulas=None,
         seed=42,
         n_samples=None,
+        latent_dim=None,
+        noise_std=None,
+        train_autoencoder=True,
+        use_stored_dataset=False,
     ):
+        """Initialize the loader with dataset parameters."""
         self.name = name
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.device = device[0] if isinstance(device, omegaconf.listconfig.ListConfig) else device
+        self.device = device
         self.selected_concepts = selected_concepts
         self.selected_concept_groups = selected_concept_groups
-        self.task_names = class_attributes
-        self.concept_groups = None
-        self.extract_embeddings = extract_embeddings
         self.concept_percentage = concept_percentage
+        self.task_names = class_attributes
+        self.extract_embeddings = extract_embeddings
         self.data_path = data_path
         self.dataset_already_created = dataset_already_created
         self.formulas = formulas
         self.seed = seed
         self.n_samples = n_samples
+        
+        # Symbolic regression parameters
+        self.latent_dim = latent_dim
+        self.noise_std = noise_std if noise_std is not None else 0.0
+        self.train_autoencoder = train_autoencoder
+        self.use_stored_dataset = use_stored_dataset
+        self.device = device[0] if isinstance(device, omegaconf.listconfig.ListConfig) else device
+        self.concept_groups = None
 
         # Standard transform for image datasets
         self.transform = transforms.Compose([
@@ -254,7 +266,18 @@ class loader(object):
             params['selected_concepts'] = self.selected_concepts
             params['formulas'] = self.formulas
         
+        # Add symbolic regression parameters
+        if self._is_symbolic_regression():
+            params['latent_dim'] = getattr(self, 'latent_dim', 4)
+            params['noise_std'] = getattr(self, 'noise_std', 0.0)
+            params['train_autoencoder'] = getattr(self, 'train_autoencoder', True)
+            params['use_stored_dataset'] = getattr(self, 'use_stored_dataset', False)
+        
         return params
+    
+    def _is_symbolic_regression(self):
+        """Check if the dataset is a symbolic regression dataset"""
+        return self.name.startswith('feynman_')
 
     def load_data(self, cfg=None):
         """

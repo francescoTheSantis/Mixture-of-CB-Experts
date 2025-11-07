@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
-from src.models.base import BaseModel
+from models.baselines.base import BaseModel
 import torch.nn.functional as F
 from torch_concepts.nn import concept_embedding_mixture
 from src.models.encoders.mlp import MLPEncoder

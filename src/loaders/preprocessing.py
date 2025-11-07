@@ -290,7 +290,7 @@ class TextEmbeddingExtractor:
 
         batch_size = self.train_loader.batch_size
 
-        use_custom_format = True if self.cfg.dataset.metadata.name == 'sst2' else False
+        use_custom_format = False
 
         train_loader = self._create_loader(train_embeddings, train_concepts, train_labels, batch_size, use_custom_format) # be sure to shuffle the data prior to this step
         val_loader = self._create_loader(val_embeddings, val_concepts, val_labels, batch_size, use_custom_format)

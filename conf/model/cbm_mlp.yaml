@@ -3,7 +3,7 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.cbm.ConceptBottleneckModel"
+  _target_: "src.models.baselines.cbm.ConceptBottleneckModel"
   task_penalty: ${task_penalty}
   concept_penalty: ${concept_penalty}
   task_interpretable: false

@@ -101,7 +101,7 @@ class BaseModel(nn.Module):
             h_concepts = eps * self.noise + h_concepts * (1-self.noise)
             del eps
             
-        if self.training or self.test_interventions:
+        if self.test_interventions or self.training:
             # intervene on the concepts according to the int_prob
             int_idxs = self.get_intervened_concepts_predictions(
                 c_true,
@@ -203,7 +203,7 @@ class BaseModel(nn.Module):
         c_hat = self._intervene(c_hat, c_true, int_idxs)
 
         # Check whether disjoint training is enabled
-        if self.disjoint_training and self.training:
+        if self.disjoint_training and self.phase in ['train', 'val']:
             input_concepts = c_true
         else:
             # switch to hard concepts if the corresponding variable is true

@@ -5,8 +5,7 @@ from torch_concepts.nn import functional as CF
 from torch_concepts.semantic import CMRSemantic
 from torch_concepts.nn import concept_embedding_mixture
 from src.utils.expression_utils import boolean_and_expression, store_eq
-
-from src.models.base import BaseModel
+from src.models.baselines.base import BaseModel
 from torch.nn import functional as F
 
 eps = 1e-8

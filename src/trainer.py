@@ -103,18 +103,12 @@ class Trainer:
             self.model.scaler = None
             self.model.model.scaler = None
 
-        if self.model.model.__class__.__name__ == 'SymbolicMemoryReasoner':
-            # setup the memory and selector
-            self.model.model.setup_memory()
-            # If KAN are used, we need to setup the grid for each kan in the memory.
-            # This operation is required for any kind of task (classification, regression, ...).
-            if self.model.model.equation_learning_strategy=='kan':
-                self.kan_inputs = c_trues.to(self.cfg.gpus[0])
-                self.model.model.setup_kan_grid(self.kan_inputs)
-                # Save c_true sin model as it will used to update the grid during training
-                #self.model.grid_inputs = c_trues.to(self.cfg.gpus[0])
+        if self.model.model.__class__.__name__ == 'KANSymbolicCBM':
+            self.kan_inputs = c_trues.to(self.cfg.gpus[0])
+            self.model.model.setup_kan_grid(self.kan_inputs)
+            # Save c_true sin model as it will used to update the grid during training
+            self.model.grid_inputs = c_trues.to(self.cfg.gpus[0])
             
-                
         self.trainer.fit(self.model, 
                          train_dataloader, 
                          val_dataloader, ckpt_path=ckpt_path)
@@ -331,8 +325,8 @@ class Trainer:
         print(f"Best model updated at: {self.checkpoint_dir}/best_model.ckpt")
         
         equations = []
-        for layer in self.model.model.kan_layers:
-            equations.append(nsimplify(ex_round(layer.symbolic_formula()[0][0], 3)))
+        for layer in self.model.model.kan_layers.kans:
+            equations.append(layer.symbolic_formula()[0][0])
         with open(f"{log_dir}/kan_equations_post_fine_tuning.txt", "w") as f:
             for i, eq in enumerate(equations):
                 f.write(f"KAN Layer {i+1}: {eq}\n")        

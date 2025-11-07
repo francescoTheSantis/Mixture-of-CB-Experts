@@ -8,8 +8,6 @@ import scienceplots
 import warnings
 import yaml
 from tqdm import tqdm
-import scipy.stats as stats
-
 # I used scienceplots for the style of the plots, but you can use any other style you want.
 plt.style.use(['science', 'ieee', 'no-latex'])
 

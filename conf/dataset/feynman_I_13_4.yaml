@@ -1,0 +1,25 @@
+defaults:
+  - common
+  - _self_
+
+loader: 
+  name: feynman_I_13_4
+  n_samples: 10000
+  latent_dim: 3
+  noise_std: 0.0
+  train_autoencoder: true
+
+# Dataset parameters
+metadata:
+  task: regression
+  lr: 0.001
+  name: feynman_I_13_4
+  data_type: symbolic_regression
+  concept_type: continuous
+
+latent_size: 3
+
+# Feynman I.13.4: (1/2) * m * (v**2 + u**2 + w**2)
+# Kinetic energy
+# Variables: c0=m, c1=v, c2=u, c3=w
+equations: "(1/2) * c0 * (c1**2 + c2**2 + c3**2)"

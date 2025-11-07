@@ -119,29 +119,11 @@ def main():
 
 
     ##################################################
-    ###### Visualize ablation over the memory. #######
+    ######### Visualize performance results ##########
     ##################################################
 
     paths = [
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/l_cmr/2025-09-21_14-38-19",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/licem/2025-09-22_17-34-45",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/licem_toy/2025-09-23_20-55-07",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cem/2025-09-21_18-35-59",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cem_toy/2025-09-21_20-51-11",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/dcr/2025-09-21_23-54-35",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/dcr_toy/2025-09-21_23-54-00",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/sym_cmr_kan/2025-09-21_14-39-57",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/sym_cmr_kan/2025-09-22_11-55-37",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/l_cmr/2025-09-22_11-55-41",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/l_cmr_toy/2025-09-23_11-24-59",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/blackbox/2025-09-22_11-55-42",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/blackbox/2025-09-23_19-25-55",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cmr/2025-09-22_21-58-09",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/cmr_toy/2025-09-22_21-58-36",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/sym_cmr_kan/2025-09-23_14-29-31",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/sym_cmr_kan/2025-09-23_14-29-48",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/sym_cmr_kan/2025-09-23_14-54-04",
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/output/sym_cmr_kan_toy/2025-09-24_11-13-32",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-11-03_21-41-50",
     ]
 
     try:
@@ -276,6 +258,21 @@ def main():
     except Exception as e:
         print(f"Error occurred while plotting memory ablation results: {e}")
 
+
+    #######################################################################
+    ###### Visualize the results of the symbolic regression ablation ######
+    #######################################################################
+
+    #
+    paths = [
+        "",
+    ]
+
+    try:
+        performance, _ = get_exp_from_path(paths)
+        show_symbolic_regression_results(performance, model_styles, title_font, label_font, tick_font)
+    except Exception as e:
+        print(f"Error occurred while plotting memory ablation results: {e}")
 
 if __name__ == "__main__":
     main()

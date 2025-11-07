@@ -11,7 +11,7 @@ from torchmetrics import Metric, MetricCollection
 import sympy as sp
 import os
 
-from src.models.base import BaseModel
+from src.models.baselines.base import BaseModel
 
 class Engine(pl.LightningModule):
     """
@@ -49,9 +49,7 @@ class Engine(pl.LightningModule):
         # Set the metrics
         self._set_metrics()
 
-        # If we are using the LinearMemoryReasoner model,
-        # we need to save the tensors required for the explanations.
-        if self.model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner']:
+        if self.model_name in ['LinearSymbolicCBM', 'KANSymbolicCBM']:
             self.explanations = []
             self.c_trues = []
             self.c_preds = []
@@ -120,10 +118,6 @@ class Engine(pl.LightningModule):
         c = batch['c']
         y = batch['y']
 
-        # assert x.isnan().sum() == 0, "Input tensor contains NaN values"
-        # assert c.isnan().sum() == 0, "Concept tensor contains NaN values"
-        # assert y.isnan().sum() == 0, "Target tensor contains NaN values"
-
         return x, c, y
 
     def shared_step(self, batch):
@@ -151,6 +145,7 @@ class Engine(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         self.model.global_step = self.current_epoch
+        self.model.phase = 'train'
         loss, model_output = self.shared_step(batch)
         
         # Add prefix for fine-tuning
@@ -172,7 +167,7 @@ class Engine(pl.LightningModule):
         self.update_and_log_metrics('train', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
         # compute the selection entropy
-        if self.model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner'] and self.model.memory_size>1:
+        if self.model_name in ['LinearSymbolicCBM', 'KANSymbolicCBM'] and self.model.memory_size>1:
             # Compute the entropy of the selection distribution
             selection_dist = model_output['selection_dist']
             selection_dist = torch.softmax(selection_dist, dim=-1)
@@ -189,16 +184,15 @@ class Engine(pl.LightningModule):
             self.log(entropy_name, selection_entropy)
         return loss
 
-    # def on_train_epoch_end(self):
-    #     # If the model is the symbolic memory reasoner and KANs are used to learn the equations, we need to
-    #     # update the KAN grid every 10 epochs.
-    #     if self.model_name == 'SymbolicMemoryReasoner' and \
-    #         self.model.equation_learning_strategy=='kan' and \
-    #             not self.model.symbolic_predictors:
-    #             if self.current_epoch % 10 == 0 and self.current_epoch<=50:
-    #                 self.model.setup_kan_grid(self.grid_inputs)
+    def on_train_epoch_end(self):
+        # If the model is the symbolic memory reasoner and KANs are used to learn the equations, we need to
+        # update the KAN grid every 10 epochs.
+        if self.model_name == 'KANSymbolicCBM' and not self.model.symbolic_predictors:
+                if self.current_epoch % 10 == 0 :
+                    self.model.setup_kan_grid(self.grid_inputs)
 
     def validation_step(self, batch, batch_idx):
+        self.model.phase = 'val'
         loss, model_output = self.shared_step(batch)
         
         # Add prefix for fine-tuning
@@ -220,7 +214,7 @@ class Engine(pl.LightningModule):
         self.update_and_log_metrics('val', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
         # compute the selection entropy
-        if self.model_name in ['LinearMemoryReasoner', 'SymbolicMemoryReasoner'] and self.model.memory_size>1:
+        if self.model_name in ['LinearSymbolicCBM', 'KANSymbolicCBM'] and self.model.memory_size>1:
             # Compute the entropy of the selection distribution
             selection_dist = model_output['selection_dist']
             selection_dist = torch.softmax(selection_dist, dim=-1)
@@ -236,18 +230,9 @@ class Engine(pl.LightningModule):
                 entropy_name = "val_selection_entropy"
             self.log(entropy_name, selection_entropy)
         return loss 
-    
-    # def on_test_start(self):
-    #     # If the model is the symbolic memory reasoner and
-    #     # KANs are used to learn the equations, 
-    #     if self.model_name == 'SymbolicMemoryReasoner':
-    #         # if self.model.equation_learning_strategy=='kan' and self.model.regularize:
-    #         #     # Prune the model
-    #         #     self.model.prune_kan_layers()
-    #     # substitute the learned splines with the symbolic equations.
-    #         self.model.show_explanations = True
 
     def test_step(self, batch, batch_idx):
+        self.model.phase = 'test'
         loss, model_output = self.shared_step(batch)
         self.log("test_loss", loss.item())
 
@@ -261,8 +246,8 @@ class Engine(pl.LightningModule):
         # update the tensors required for the explanations.
         c = batch['c']
         y = batch['y']
-        if self.model_name in ['LinearMemoryReasoner']:
-            if self.model_name == 'LinearMemoryReasoner':
+        if self.model_name in ['LinearSymbolicCBM', 'KANSymbolicCBM']:
+            if self.model_name == 'LinearSymbolicCBM':
                 self.explanations.append(model_output['explanations'])
             else:
                 for eq in model_output['explanations']:
@@ -279,72 +264,66 @@ class Engine(pl.LightningModule):
         else:
             return tensor
 
-    def on_test_epoch_end(self):
-        # The whole function is only executed for: LinearMemoryReasoner, SymbolicMemoryReasoner.
-        if self.model_name in ['LinearMemoryReasoner']:
-            # If the name of the class is LinearMemoryReasoner,
-            # store the tensors required for the explanations.
-            if self.model_name == 'LinearMemoryReasoner':
-                # Concatenate the tensors
-                self.explanations = torch.cat(self.explanations, dim=0)
-                # Save the predicted_CBM to a .pt file
-                torch.save(self.explanations, f"{self.csv_log_dir}/pred_CBMs.pt")
-            # elif self.model_name == 'SymbolicMemoryReasoner':
-            #     if self.dataset_name == 'mnist_arithmetic':
-            #         # read the file containing the ordered list of rules
-            #         true_eqs = pd.read_csv(f"{self.data_path}/mnist_arithmetic_equations.csv")
-            #         # read all the rules that have been selected
-            #         selected_eqs = pd.DataFrame(self.explanations, columns=['pred_equation'])
-            #         # combine the two in a single dataframe
-            #         combined_eqs = pd.DataFrame()
-            #         combined_eqs['pred_equation'] = selected_eqs['pred_equation']
-            #         combined_eqs['true_equation'] = true_eqs['equation']
-            #         # save the dataframe to a csv file
-            #         combined_eqs.to_csv(f"{self.csv_log_dir}/pred_equations.csv", index=False)
+    # def on_test_epoch_end(self):
+    #     # The whole function is only executed for: LinearMemoryReasoner, KANSymbolicCBM.
+    #     if self.model_name in ['LinearMemoryReasoner', 'KANSymbolicCBM']:
+    #         # If the name of the class is LinearMemoryReasoner,
+    #         # store the tensors required for the explanations.
+    #         if self.model_name == 'LinearMemoryReasoner':
+    #             # Concatenate the tensors
+    #             self.explanations = torch.cat(self.explanations, dim=0)
+    #             # Save the predicted_CBM to a .pt file
+    #             torch.save(self.explanations, f"{self.csv_log_dir}/pred_CBMs.pt")
+    #         # elif self.model_name == 'SymbolicMemoryReasoner':
+    #         #     if self.dataset_name == 'mnist_arithmetic':
+    #         #         # read the file containing the ordered list of rules
+    #         #         true_eqs = pd.read_csv(f"{self.data_path}/mnist_arithmetic_equations.csv")
+    #         #         # read all the rules that have been selected
+    #         #         selected_eqs = pd.DataFrame(self.explanations, columns=['pred_equation'])
+    #         #         # combine the two in a single dataframe
+    #         #         combined_eqs = pd.DataFrame()
+    #         #         combined_eqs['pred_equation'] = selected_eqs['pred_equation']
+    #         #         combined_eqs['true_equation'] = true_eqs['equation']
+    #         #         # save the dataframe to a csv file
+    #         #         combined_eqs.to_csv(f"{self.csv_log_dir}/pred_equations.csv", index=False)
 
-            self.c_trues = torch.cat(self.c_trues, dim=0)
-            self.c_preds = torch.cat(self.c_preds, dim=0)
-            self.y_trues = torch.cat(self.y_trues, dim=0)
-            if self.num_classes > 2:
-                # If the number of classes is greater than 1, we need to take the argmax
-                self.y_preds = torch.cat(self.y_preds, dim=0)
-            elif self.num_classes == 1 and not isinstance(self.model.task_loss_form, nn.MSELoss):
-                # If the number of classes is 1, we just discretize the predictions
-                # to get the predicted labels.
-                self.y_preds = (torch.cat(self.y_preds, dim=0) > 0.5).long()
-            else:
-                self.y_preds = (torch.cat(self.y_preds, dim=0)).long()
+    #         self.c_trues = torch.cat(self.c_trues, dim=0)
+    #         self.c_preds = torch.cat(self.c_preds, dim=0)
+    #         self.y_trues = torch.cat(self.y_trues, dim=0)
+    #         if self.num_classes > 2:
+    #             # If the number of classes is greater than 1, we need to take the argmax
+    #             self.y_preds = torch.cat(self.y_preds, dim=0)
+    #         elif self.num_classes == 1 and not isinstance(self.model.task_loss_form, nn.MSELoss):
+    #             # If the number of classes is 1, we just discretize the predictions
+    #             # to get the predicted labels.
+    #             self.y_preds = (torch.cat(self.y_preds, dim=0) > 0.5).long()
+    #         else:
+    #             self.y_preds = (torch.cat(self.y_preds, dim=0)).long()
 
-            # Convert the tensors to pandas dfs
-            c_preds = pd.DataFrame(self.c_preds.cpu().numpy(), columns=self.c_names)
-            c_trues = pd.DataFrame(self.c_trues.cpu().numpy(), columns=self.c_names)
+    #         # Convert the tensors to pandas dfs
+    #         c_preds = pd.DataFrame(self.c_preds.cpu().numpy(), columns=self.c_names)
+    #         c_trues = pd.DataFrame(self.c_trues.cpu().numpy(), columns=self.c_names)
 
-            # Create a list of names for the y_preds and y_trues to create 
-            # a pandas containing the list of predicted and true labels
-            if isinstance(self.model.task_loss_form, nn.MSELoss):
-                y_preds = pd.DataFrame(self.y_preds.cpu().numpy(), columns=[self.y_name])
-                y_trues = pd.DataFrame(self.y_trues.cpu().numpy(), columns=[self.y_name])
-            else:
-                if self.num_classes == 1:
-                    y_preds = pd.DataFrame(self.y_preds.long().cpu().numpy(), columns=[self.y_name])
-                    y_trues = pd.DataFrame(self.y_trues.long().cpu().numpy(), columns=[self.y_name])
-                else:
-                    y_preds = pd.DataFrame(F.one_hot(self.y_preds.cpu(), self.num_classes).squeeze().numpy(),
-                                        columns=self.class_names)
-                    y_trues = pd.DataFrame(F.one_hot(self.y_trues.long().cpu(), self.num_classes).squeeze().numpy(),
-                                        columns=self.class_names)
+    #         # Create a list of names for the y_preds and y_trues to create 
+    #         # a pandas containing the list of predicted and true labels
+    #         if isinstance(self.model.task_loss_form, nn.MSELoss):
+    #             y_preds = pd.DataFrame(self.y_preds.cpu().numpy(), columns=[self.y_name])
+    #             y_trues = pd.DataFrame(self.y_trues.cpu().numpy(), columns=[self.y_name])
+    #         else:
+    #             if self.num_classes == 1:
+    #                 y_preds = pd.DataFrame(self.y_preds.long().cpu().numpy(), columns=[self.y_name])
+    #                 y_trues = pd.DataFrame(self.y_trues.long().cpu().numpy(), columns=[self.y_name])
+    #             else:
+    #                 y_preds = pd.DataFrame(F.one_hot(self.y_preds.cpu(), self.num_classes).squeeze().numpy(),
+    #                                     columns=self.class_names)
+    #                 y_trues = pd.DataFrame(F.one_hot(self.y_trues.long().cpu(), self.num_classes).squeeze().numpy(),
+    #                                     columns=self.class_names)
 
-            # Store the pandas dfs
-            c_preds.to_csv(f"{self.csv_log_dir}/c_preds.csv", index=False)
-            c_trues.to_csv(f"{self.csv_log_dir}/c_trues.csv", index=False)
-            y_preds.to_csv(f"{self.csv_log_dir}/y_preds.csv", index=False)
-            y_trues.to_csv(f"{self.csv_log_dir}/y_trues.csv", index=False)
-    
-        # # Plot KAN layers when using the official KAN implementation
-        # if self.model_name == 'SymbolicMemoryReasoner':
-        #     if self.model.equation_learning_strategy=='kan' and self.num_classes==1:
-        #         for i, kan_layer in enumerate(self.model.kan_layers):
-        #             kan_layer.plot(folder=os.path.join(os.getcwd(), f'kan{i}_ckpt'))
+    #         # Store the pandas dfs
+    #         c_preds.to_csv(f"{self.csv_log_dir}/c_preds.csv", index=False)
+    #         c_trues.to_csv(f"{self.csv_log_dir}/c_trues.csv", index=False)
+    #         y_preds.to_csv(f"{self.csv_log_dir}/y_preds.csv", index=False)
+    #         y_trues.to_csv(f"{self.csv_log_dir}/y_trues.csv", index=False)
 
     def configure_optimizers(self):
         return [self.optimizer], [self.scheduler]

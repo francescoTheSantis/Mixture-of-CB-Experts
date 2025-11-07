@@ -3,7 +3,7 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.sym_cmr.SymbolicMemoryReasoner"
+  _target_: "src.models.prior_sym_cbm.PriorSymbolicCBM"
   task_penalty: ${task_penalty}
   concept_penalty: ${concept_penalty}
   int_prob: ${int_prob}
@@ -13,4 +13,4 @@ params:
   equation_learning_strategy: "prior_knowledge" 
 
 metadata:
-  name: m_sym_cmr_prior
+  name: prior_symbolic_cbm

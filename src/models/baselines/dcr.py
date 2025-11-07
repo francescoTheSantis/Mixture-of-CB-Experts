@@ -1,13 +1,14 @@
 import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
+from torch_concepts.semantic import ProductTNorm
+from torch_concepts.nn import functional as CF
+from src.models.baselines.base import BaseModel
+from torch.nn import functional as F
 from torch_concepts.nn import concept_embedding_mixture
-from src.models.encoders.mlp import MLPEncoder
-from src.utils.expression_utils import store_eq
+from src.utils.expression_utils import boolean_and_expression, store_eq
 
-from src.models.base import BaseModel
-
-class ConceptEmbeddingModel(BaseModel):
+class DeepConceptReasoner(BaseModel):
     def __init__(self, 
                  output_size,
                  c_names,
@@ -20,6 +21,8 @@ class ConceptEmbeddingModel(BaseModel):
                  noise=None,
                  embedding_size = 16,
                  latent_size = 128,
+                 semantic = ProductTNorm(),
+                 temperature = 100,
                  c_groups=None,
                  hard_concepts=False,
                  encoder=None,
@@ -30,7 +33,6 @@ class ConceptEmbeddingModel(BaseModel):
                  concept_penalty=1.0,
                  **kwargs
                  ):
-
         super().__init__(
                  output_size,
                  c_names,
@@ -49,31 +51,36 @@ class ConceptEmbeddingModel(BaseModel):
                  concept_type,
                  disjoint_training,
                  concept_penalty
-                 )
-
+        )
+        self.logic_reasoning = True
+        self.n_roles = 3
+        self.memory_names = ['Positive', 'Negative', 'Irrelevant']
+        
         self.embedding_size = embedding_size
+        self.task_penalty = task_penalty * 3 # BCE gives lower loss values
         self.has_concepts = True
+        self.semantic = semantic
+        self.temperature = temperature
 
         self.bottleneck = pyc_nn.ConceptEmbeddingBottleneck(
             backbone_latent_size,
             self.c_names,
             embedding_size,
-            nn.Identity()
+            activation=nn.Identity()
+        )
+        self.concept_importance_predictor = nn.Sequential(
+            nn.Linear(embedding_size, self.latent_size),
+            getattr(nn, activation)(),
+            nn.Linear(self.latent_size, output_size * self.n_roles),
+            nn.Unflatten(-1, (output_size, self.n_roles)),
         )
 
-        self.y_predictor = MLPEncoder(
-            len(self.c_names) * embedding_size,
-            output_size,
-            None,
-            latent_size,
-            activation
-        )
-
+        self.task_loss_form = nn.BCELoss()
 
     def forward(self, input):
         x, _, c_true, int_idxs = self.encode(input)
 
-        _, c_dict = self.bottleneck(
+        c_emb, c_dict = self.bottleneck(
             x,
             c_true=c_true,
             intervention_idxs=int_idxs,
@@ -83,12 +90,25 @@ class ConceptEmbeddingModel(BaseModel):
 
         c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 
-        # It is necessary to compute again since the embeddings 
-        # may have changed due to the interventions
+        # It is necessary to compute again since 
         c_emb = self.bottleneck.linear(x)
         c_emb = concept_embedding_mixture(c_emb, input_concepts)
 
-        y_hat = self.y_predictor(c_emb.flatten(-2))
+        c_weights = self.concept_importance_predictor(c_emb)
+        # adding memory dimension
+        c_weights = c_weights.unsqueeze(dim=1)
+        # soft selecting concept relevance (last role) among concepts
+        relevance = CF.soft_select(c_weights[:, :, :, :, -2:-1],
+                                   self.temperature, -3)
+        # softmax over positive/negative roles
+        polarity = c_weights[:, :, :, :, :-1].softmax(-1)
+        # batch_size x memory_size x n_concepts x n_tasks x n_roles
+        c_weights = torch.cat([polarity, 1 - relevance], dim=-1)
+
+        y_hat = CF.logic_rule_eval(c_weights, input_concepts,
+                                    semantic=self.semantic)
+        # removing memory dimension
+        y_hat = y_hat[:, :, 0]
         return {
             'y_hat': y_hat,
             'c_hat': c_hat
@@ -97,17 +117,13 @@ class ConceptEmbeddingModel(BaseModel):
     def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         return loss
-
+    
     def get_symbolic_equivalent(self, log_dir=None):
         """
         Returns the equation associated to the predictor of the model
         """
-
-        # Get as many equations as the output size
-        equations = self.y_predictor.to_symbolic()
-
-        # Each equation in the list will have the same complexity, therefore we return only the first one.
-        if len(equations)>1:
-            store_eq(equations[0], log_dir)
-        store_eq(equations, log_dir)
-
+        
+        # Return the most complex linear equation that can obtained after training 
+        # (all concepts are relevant and negated) 
+        equation = boolean_and_expression(len(self.c_names))
+        store_eq(equation, log_dir)

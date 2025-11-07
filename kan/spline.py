@@ -33,6 +33,8 @@ def B_batch(x, grid, k=0, extend=True, device='cpu'):
     
     x = x.unsqueeze(dim=2)
     grid = grid.unsqueeze(dim=0)
+    # Move grid to the same device as x
+    grid = grid.to(x.device)
     
     if k == 0:
         value = (x >= grid[:, :, :-1]) * (x < grid[:, :, 1:])
