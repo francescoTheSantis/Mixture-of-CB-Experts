@@ -13,12 +13,4 @@ hydra:
       dataset: cifar10
       model: l_cmr
 
-## Shared Concept-based model parameters
-task_penalty: 1.0
-concept_penalty: 1.0
-int_prob: 0.0
-hard_concepts: False
-# It controls whether the concept and task predictors are trained jointly or in parallel.
-disjoint_training: False
-
 img_backbone_name: google/vit-base-patch32-224-in21k

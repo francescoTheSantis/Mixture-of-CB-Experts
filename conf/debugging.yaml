@@ -10,9 +10,9 @@ hydra:
     params:
       seed: 1
       # dsprites_simple, dsprites_complex, pendulum, cub, cub_incomplete, awa2, awa2_incomplete, cifar10, cifar100
-      dataset: cub_incomplete
+      dataset: dsprites_complex
       model: kan_sym_cbm # kan_sym_cbm, lin_sym_cbm, prior_sym_cbm, cbm_linear
-      memory_size: 1
+      memory_size: 4
     
 gpus: [1]
 
@@ -21,14 +21,6 @@ patience: 20
 
 use_stored_dataset: True
 extract_embeddings: True
-
-## Shared Concept-based model parameters
-task_penalty: 1.0
-concept_penalty: 1.0
-int_prob: 0.0
-hard_concepts: False
-# It controls whether the concept and task predictors are trained jointly or in parallel.
-disjoint_training: True
 
 wandb:
   entity: null

@@ -203,7 +203,7 @@ class BaseModel(nn.Module):
         c_hat = self._intervene(c_hat, c_true, int_idxs)
 
         # Check whether disjoint training is enabled
-        if self.disjoint_training and self.phase in ['train', 'val']:
+        if self.phase in ['train', 'val']:
             input_concepts = c_true
         else:
             # switch to hard concepts if the corresponding variable is true
