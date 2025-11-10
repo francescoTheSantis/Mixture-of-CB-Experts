@@ -14,7 +14,9 @@ class KANPredictor(nn.Module):
                  device, 
                  speed_up_training, 
                  auto_save=False,
-                 regularize=True):
+                 regularize=True,
+                 y_names=None
+                ):
         
         super(KANPredictor, self).__init__()
         self.widths = widths
@@ -27,6 +29,7 @@ class KANPredictor(nn.Module):
         self.auto_save = auto_save
         self.show_explanations = False # TODO: se to true once the kan implementation is stable
         self.symbolic_predictors = False # When instantiated, the kan layers will not compute symbolic formulas
+        self.y_names = y_names
 
         kan_params = {
                 'width': self.widths, 
@@ -44,7 +47,7 @@ class KANPredictor(nn.Module):
             if self.speed_up_training:
                 kan_layer = kan_layer.speed()  # Sets: symbolic_enabled=False, save_act=False, auto_save=False
             if self.regularize:
-                self.lamb = 0.005  # Regularization strength 
+                self.lamb = 0.03  # Regularization strength 
             for param in kan_layer.get_params():
                 param.requires_grad = True
             self.kans.append(kan_layer)
@@ -89,36 +92,44 @@ class KANPredictor(nn.Module):
 
         self.symbolic_predictors = True
 
-        equations = []
+        equations = {}
         for i, kan_layer in enumerate(self.kans):
-
             # Get the symbolic formula
             kan_layer.auto_symbolic(lib=SYMBOLIC_LIB, r2_threshold=0)
 
-            for param in kan_layer.parameters():
-                param.requires_grad = True
-
-            # Enable affine parameters
-            for l in range(kan_layer.depth):
-                exec(f'kan_layer.node_bias{[l]}.requires_grad = True')
-                exec(f'kan_layer.node_scale{[l]}.requires_grad = True')
-                exec(f'kan_layer.subnode_bias{[l]}.requires_grad = True')
-                exec(f'kan_layer.subnode_scale{[l]}.requires_grad = True')
-
-            # Store the equation in the corresponding list
-            equations.append(kan_layer.symbolic_formula()[0][0])
-
             # Plot the kan layer using the authors' plotting function
-            self._sync_kan_tensors_to_device(kan_layer)
-            kan_layer.plot(os.getcwd(), idx=i+1) # so that the count starts from 1
+            # self._sync_kan_tensors_to_device(kan_layer)
+            # kan_layer.plot(os.getcwd(), idx=i+1) # so that the count starts from 1
 
-            # Move to device
-            kan_layer.to(self.device)
+            # Get the symbolic formulas and variable names
+            equations_set = {}
+            symbolic_output = kan_layer.symbolic_formula()
+            learned_equations = symbolic_output[0]
+            variable_names = symbolic_output[1]
+            equations_set = {y_name: eq for eq, y_name in zip(learned_equations, self.y_names)}
 
-        # Store the equations in a text file
-        with open(f"{log_dir}/kan_equations_pre_fine_tuning.txt", "w") as f:
-            for i, eq in enumerate(equations):
-                f.write(f"KAN Layer {i+1}: {eq}\n")
+            # Add the set of equations to the main dictionary
+            equations[i] = equations_set
+
+        # Prepare a dictionary of learned equations as strings
+        str_equations = {}
+        for set_name in equations.keys():
+            str_equations[set_name] = {}
+            for eq_name, eq_module in equations[set_name].items():
+                str_equations[set_name][eq_name] = str(eq_module)
+
+        # Save to file if log_dir is provided
+        if log_dir is not None:
+            import os
+            os.makedirs(log_dir, exist_ok=True)
+            with open(f"{log_dir}/learned_equations_kan.txt", "w") as f:
+                for set_name, eq_dict in str_equations.items():
+                    f.write(f"Set: {set_name}\n")
+                    for eq_name, eq_str in eq_dict.items():
+                        f.write(f"  {eq_name}: {eq_str}\n")
+                    f.write("\n")
+
+        return equations, variable_names
 
     def _get_explanations(self, prob_per_classifier, y_hat):
         # TODO: to be completed once the kan implementation is stable

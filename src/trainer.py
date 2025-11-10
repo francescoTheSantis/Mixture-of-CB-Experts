@@ -7,7 +7,6 @@ import pandas as pd
 from src.metrics import f1_acc_metrics
 from tqdm import tqdm
 from src.utils.scalers import StandardScaler
-from kan import nsimplify, ex_round
 
 class Trainer:
     """
@@ -247,7 +246,7 @@ class Trainer:
         self.model.model.get_learned_equations(log_dir)
 
         # Update the grid after symbolic conversion
-        self.model.model.setup_kan_grid(self.kan_inputs)
+        #self.model.model.setup_kan_grid(self.kan_inputs)
 
         print("="*50)
         print("Starting Fine-tuning Phase (Symbolic)")
@@ -326,12 +325,8 @@ class Trainer:
         print("Fine-tuning completed!")
         print(f"Best model updated at: {self.checkpoint_dir}/best_model.ckpt")
         
-        equations = []
-        for layer in self.model.model.kan_layers.kans:
-            equations.append(layer.symbolic_formula()[0][0])
-        with open(f"{log_dir}/kan_equations_post_fine_tuning.txt", "w") as f:
-            for i, eq in enumerate(equations):
-                f.write(f"KAN Layer {i+1}: {eq}\n")        
+        # Get symbolic equations after fine-tuning
+        self.model.model.get_learned_equations(log_dir, fine_tuned=True)      
 
     def interventions(self, test_dataloader, verbose=True):
         """

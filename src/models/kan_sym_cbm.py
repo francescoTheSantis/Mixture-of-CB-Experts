@@ -4,6 +4,7 @@ from src.models.baselines.base import BaseModel
 from src.utils.expression_utils import kan_expression, store_eq
 from src.models.modules.selector import SelectorModel
 from src.models.modules.kan_predictor import KANPredictor
+from src.models.modules.symbolic_predictor import SymbolicPredictor
 
 class KANSymbolicCBM(BaseModel):
     def __init__(self, 
@@ -108,27 +109,52 @@ class KANSymbolicCBM(BaseModel):
         )
 
         # KAN predictor instantiation
-        self.kan_layers = KANPredictor(
+        self.predictor = KANPredictor(
             widths=self.widths,
             grid=grid_size,
             k=k,
             memory_size=self.memory_size,
             device=self.device,
             speed_up_training=self.speed_up_training,
-            auto_save=auto_save
+            auto_save=auto_save,
+            y_names=self.y_names,
         )
 
     def setup_kan_grid(self, grid_inputs):
-        self.kan_layers.setup_kan_grid(grid_inputs)
+        self.predictor.setup_kan_grid(grid_inputs)
 
     def prune(self):
-        self.kan_layers.prune()
+        self.predictor.prune()
         
     def allow_symbolic(self):
-        self.kan_layers.allow_symbolic()
+        self.predictor.allow_symbolic()
     
-    def get_learned_equations(self, log_dir):
-        self.kan_layers.get_learned_equations(log_dir)
+    def get_learned_equations(self, log_dir, fine_tuned=False):
+        if not fine_tuned:
+            # self.predictor.get_learned_equations(log_dir)
+            # Get dictionary of learned equations
+            equations, variable_names = self.predictor.get_learned_equations(log_dir)
+
+            # If c_names is not none, substitute the variable names with c_names
+            if self.c_names is not None and self.y_names is not None:
+                substituted_equations = {}
+                for out_name, expr_dict in equations.items():
+                    substituted_equations[out_name] = {}
+                    for idx, (eq_id, expr) in enumerate(expr_dict.items()):
+                        substituted_expr = expr
+                        for var_name, c_name in zip(variable_names, self.c_names):
+                            substituted_expr = substituted_expr.subs(var_name, c_name)
+                        substituted_equations[out_name][self.y_names[idx]] = substituted_expr
+                equations = substituted_equations
+
+            # Instantiate the symbolic predictor
+            self.predictor = SymbolicPredictor(
+                equations=equations,
+                c_names=self.c_names
+            )
+            self.symbolic_predictors = True
+        
+        self.predictor.get_learned_equations(log_dir, fine_tuned=fine_tuned)
 
     ###### Forward and loss methods ######
     def forward(self, input):
@@ -146,20 +172,21 @@ class KANSymbolicCBM(BaseModel):
         selection_dist = selector_output['selection_dist']
 
         ## Equation execution block ##
-        kan_predictor_output = self.kan_layers(selector_probs, input_concepts)
+        predictor_output = self.predictor(selector_probs, input_concepts)
 
         return {
-            'y_hat': kan_predictor_output['y_hat'],
+            'y_hat': predictor_output['y_hat'],
             'c_hat': c_hat,
-            'explanations': kan_predictor_output['explanations'],
+            'explanations': predictor_output['explanations'],
             'selection_dist': selection_dist,
             'sampled_memory_idxs': selector_probs
         }
 
     def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
-        # KAN regularization: it promotes sparsity in the KAN layers
-        loss += self.kan_layers.regularization_term()
+        if not self.symbolic_predictors:
+            # KAN regularization: it promotes sparsity in the KAN layers
+            loss += self.predictor.regularization_term()
         return loss
     
     def get_symbolic_equivalent(self, log_dir=None):
