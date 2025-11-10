@@ -41,7 +41,7 @@ custom_order = [#'xor', \
 marker_size = 18
 
 # Define complexity order
-models = list(reversed(['blackbox', 'cem', 'kan_sym_cbm', 'licem', 'l_cmr', 'dcr', 'cmr']))
+models = list(reversed(['blackbox', 'cem', 'kan_symbolic_cbm', 'licem', 'linear_symbolic_cbm', 'dcr', 'cmr']))
 
 # Generate colors from a colormap
 cmap = plt.cm.RdYlGn 
@@ -51,8 +51,8 @@ model_styles = {
     'blackbox': {'marker': 'o', 'name': 'BlackBox', 'color': "black", 'size': marker_size},
     'cbm_linear': {'marker': '^', 'name': 'CBM', 'color': 'tab:orange', 'size': marker_size},
     'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:red', 'size': marker_size},
-    'kan_sym_cbm': {'marker': 'X', 'name': 'Kan-Sym-CBM', 'color': 'tab:green', 'size': marker_size},
-    'l_cmr': {'marker': 's', 'name': 'mCBM-lin', 'color': 'tab:blue', 'size': marker_size},
+    'kan_symbolic_cbm': {'marker': 'X', 'name': 'Kan-Sym-CBM', 'color': 'tab:green', 'size': marker_size},
+    'linear_symbolic_cbm': {'marker': 's', 'name': 'Lin-Sym-CBM', 'color': 'tab:blue', 'size': marker_size},
     'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:brown', 'size': marker_size},
     'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:purple', 'size': marker_size},
@@ -123,7 +123,7 @@ def main():
     ##################################################
 
     paths = [
-        "",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-11-10_20-15-03",
     ]
 
     try:

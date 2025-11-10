@@ -111,7 +111,7 @@ def get_exp_from_path(paths):
 
                 print(d)
                 
-                if d['model'] == 'l_cmr' and d['seed']==1:
+                if d['model'] == 'linear_symbolic_cbm' and d['seed']==1:
                     expl_dict = d.copy()
                     expl_dict['path'] = exp
                     lmr_paths.append(expl_dict)
@@ -121,17 +121,17 @@ def get_exp_from_path(paths):
             print(f"Error while processing {exp}: {e}")
             continue
 
-    # Filter the sym_cmr_prior according to the combination of memory size and dataset
+    # Filter the prior_symbolic_cbm according to the combination of memory size and dataset
     # if dataset==dsprites_simple, keep only memory_size==1
     # if dataset==mnist_arithmetic, keep only memory_size==4
     # if dataset==dsprites_complex, keep only memory_size==3
     # if dataset==pendulum, keep only memory_size==1
     condition = (
-        ((performance['model'] == 'm_sym_cmr_prior') & (performance['dataset'] == 'dsprites_simple') & (performance['memory_size'] == 1)) |
-        ((performance['model'] == 'm_sym_cmr_prior') & (performance['dataset'] == 'mnist_arithmetic') & (performance['memory_size'] == 4)) |
-        ((performance['model'] == 'm_sym_cmr_prior') & (performance['dataset'] == 'dsprites_complex') & (performance['memory_size'] == 3)) |
-        ((performance['model'] == 'm_sym_cmr_prior') & (performance['dataset'] == 'pendulum') & (performance['memory_size'] == 1)) |
-        (performance['model'] != 'm_sym_cmr_prior')
+        ((performance['model'] == 'prior_symbolic_cbm') & (performance['dataset'] == 'dsprites_simple') & (performance['memory_size'] == 1)) |
+        ((performance['model'] == 'prior_symbolic_cbm') & (performance['dataset'] == 'mnist_arithmetic') & (performance['memory_size'] == 4)) |
+        ((performance['model'] == 'prior_symbolic_cbm') & (performance['dataset'] == 'dsprites_complex') & (performance['memory_size'] == 3)) |
+        ((performance['model'] == 'prior_symbolic_cbm') & (performance['dataset'] == 'pendulum') & (performance['memory_size'] == 1)) |
+        (performance['model'] != 'prior_symbolic_cbm')
     )
     performance = performance[condition]
 
@@ -1099,8 +1099,8 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         'licem': 2,
         'dcr': 3,
         'cmr': 3,
-        'l_cmr': 2,
-        'm_sym_cmr_kan': 7,
+        'linear_symbolic_cbm': 2,
+        'kan_symbolic_cbm': 7,
     }
 
     # Filter out dcr and cmr for cub200, awa2, and cifar10 datasets
@@ -1184,8 +1184,8 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                 
                 # Plot each point with appropriate style
                 for i, (complexity, y_val, y_err, memory_size) in enumerate(zip(model_data['complexity'], y_values, y_errors, model_data['memory_size'])):
-                    # Use cbm_linear style if l_cmr has memory_size = 1
-                    if model == 'l_cmr' and memory_size == 1:
+                    # Use cbm_linear style if linear_symbolic_cbm has memory_size = 1
+                    if model == 'linear_symbolic_cbm' and memory_size == 1:
                         plot_style = model_styles.get('cbm_linear', model_styles[model])
                         plot_label = model_styles.get('cbm_linear', {})['name'] if 'cbm_linear' in model_styles else model_styles[model]['name']
                     else:
@@ -1298,15 +1298,15 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         if legend_ax is None and col == n_cols - 1:
             legend_ax = axes[1][col]
 
-    # Create filtered styles including both original models and cbm_linear for m_sym_cmr_kan with memory_size=1
+    # Create filtered styles including both original models and cbm_linear for kan_symbolic_cbm with memory_size=1
     filtered_styles = {}
     for name, style in model_styles.items():
         if name in performance['model'].values:
             filtered_styles[name] = style
     
-    # Add cbm_linear style if m_sym_cmr_kan appears with memory_size=1
-    if 'm_sym_cmr_kan' in performance['model'].values and 'cbm_linear' in model_styles:
-        if any((performance['model'] == 'm_sym_cmr_kan') & (performance['memory_size'] == 1)):
+    # Add cbm_linear style if kan_symbolic_cbm appears with memory_size=1
+    if 'kan_symbolic_cbm' in performance['model'].values and 'cbm_linear' in model_styles:
+        if any((performance['model'] == 'kan_symbolic_cbm') & (performance['memory_size'] == 1)):
             filtered_styles['cbm_linear'] = model_styles['cbm_linear']
 
     # Create custom legend handles
@@ -1352,8 +1352,8 @@ def plot_intervention_memory_pareto_results(df,
         'licem': 2,
         'dcr': 3,
         'cmr': 3,
-        'l_cmr': 2,
-        'm_sym_cmr_kan': 7,
+        'linear_symbolic_cbm': 2,
+        'kan_symbolic_cbm': 7,
     }
     
     # Filter out dcr and cmr for cub, awa2, and cifar10 datasets
@@ -1462,8 +1462,8 @@ def plot_intervention_memory_pareto_results(df,
                     model_data['complexity'], model_data['mean_metric'], 
                     model_data['se_metric'], model_data['memory_size'])):
                     
-                    # Use cbm_linear style if m_sym_cmr_kan has memory_size = 1
-                    if model == 'm_sym_cmr_kan' and memory_size == 1:
+                    # Use cbm_linear style if kan_symbolic_cbm has memory_size = 1
+                    if model == 'kan_symbolic_cbm' and memory_size == 1:
                         plot_style = model_styles.get('cbm_linear', model_styles[model])
                         plot_label = model_styles.get('cbm_linear', {}).get('name', model_styles[model]['name']) if 'cbm_linear' in model_styles else model_styles[model]['name']
                     else:
@@ -1587,15 +1587,15 @@ def plot_intervention_memory_pareto_results(df,
         if legend_ax is None and col == n_cols - 1:
             legend_ax = axes[1][col]
     
-    # Create filtered styles including both original models and cbm_linear for m_sym_cmr_kan with memory_size=1
+    # Create filtered styles including both original models and cbm_linear for kan_symbolic_cbm with memory_size=1
     filtered_styles = {}
     for name, style in model_styles.items():
         if name in df['model'].values:
             filtered_styles[name] = style
 
-    # Add cbm_linear style if l_cmr appears with memory_size=1
-    if 'l_cmr' in df['model'].values and 'cbm_linear' in model_styles:
-        if any((df['model'] == 'l_cmr') & (df['memory_size'] == 1)):
+    # Add cbm_linear style if linear_symbolic_cbm appears with memory_size=1
+    if 'linear_symbolic_cbm' in df['model'].values and 'cbm_linear' in model_styles:
+        if any((df['model'] == 'linear_symbolic_cbm') & (df['memory_size'] == 1)):
             filtered_styles['cbm_linear'] = model_styles['cbm_linear']
 
     # Create custom legend handles
