@@ -5,7 +5,7 @@ defaults:
 loader: 
   name: pendulum
   dataset_already_created: True
-  batch_size: 512
+  batch_size: 1024
 
 # Dataset parameters
 metadata:

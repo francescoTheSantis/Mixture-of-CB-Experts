@@ -4,7 +4,7 @@ defaults:
 
 loader: 
   name: awa2_incomplete
-  batch_size: 128
+  batch_size: 1024
   selected_concepts: [black, gray, stripes, hairless, flippers, paws, plains, fierce, solitary]
 
 # Dataset parameters

@@ -5,7 +5,7 @@ defaults:
 loader: 
   name: mnist_arithmetic_hard
   n_samples: 50000
-  batch_size: 512
+  batch_size: 1024
 
 # Dataset parameters
 metadata:

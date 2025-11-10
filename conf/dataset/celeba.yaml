@@ -4,7 +4,7 @@ defaults:
 
 loader:
   name: celeba
-  batch_size: 128  
+  batch_size: 1024  
   # We select the 8 attributes whose distribution is closer to a random uniform binary distribution
   class_attributes: ["Young","Attractive","Mouth_Slightly_Open","Smiling","Wearing_Lipstick","High_Cheekbones","Male","Heavy_Makeup"]
 

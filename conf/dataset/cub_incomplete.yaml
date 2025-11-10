@@ -4,7 +4,7 @@ defaults:
 
 loader: 
   name: cub_incomplete
-  batch_size: 128
+  batch_size: 1024
   selected_concept_groups: [has_bill_shape, has_head_pattern, has_breast_color, has_bill_length, has_wing_shape, has_tail_pattern, has_bill_color]
 
 # Dataset parameters
