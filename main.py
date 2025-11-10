@@ -2,15 +2,17 @@ from src.trainer import Trainer
 import hydra
 from omegaconf import DictConfig, open_dict
 from hydra.utils import instantiate
-from src.utilities import set_seed, set_loggers
+from src.utilities import set_seed, set_loggers, set_matmul_precision
 import torch
 import os
-from env import CACHE
 from src.utilities import update_config_from_data, is_valid_experiment, \
     generate_data_path, save_licem_linear_coefficients
 
 @hydra.main(config_path="conf", config_name="debugging")
 def main(cfg: DictConfig) -> None:
+
+    # Set the matmul precision according to the device
+    set_matmul_precision()
 
     # Initialize the wandb logger
     wandb_logger, csv_logger = set_loggers(cfg)
@@ -126,4 +128,5 @@ def main(cfg: DictConfig) -> None:
         wandb_logger.experiment.finish()
 
 if __name__ == "__main__":
+    set_matmul_precision()
     main()

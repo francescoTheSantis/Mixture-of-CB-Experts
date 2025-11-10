@@ -19,6 +19,21 @@ from env import CACHE
 warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
+def set_matmul_precision():
+    """
+    Set float32 matmul precision for better performance on CUDA devices with Tensor Cores.
+    Automatically detects the GPU and sets precision only if Tensor Cores are available.
+    """
+    if torch.cuda.is_available():
+        device_name = torch.cuda.get_device_name(0)
+        # List of GPUs with Tensor Cores that benefit from reduced precision
+        tensor_core_gpus = ['V100', 'A100', 'A6000', 'A5000', 'A4000', 'RTX', 'T4', 'H100']
+        if any(gpu in device_name for gpu in tensor_core_gpus):
+            torch.set_float32_matmul_precision('medium')
+            print(f"Setting matmul precision to 'medium' for {device_name}")
+        else:
+            print(f"Using default matmul precision for {device_name}")
+
 def set_seed(seed: int):
     print(f"Seed set to {seed}")
     random.seed(seed)
