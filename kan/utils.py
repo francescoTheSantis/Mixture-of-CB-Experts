@@ -48,15 +48,15 @@ SYMBOLIC_LIB = {'x': (lambda x: x, lambda x: x, 1, lambda x, y_th: ((), x)),
                  'tan': (lambda x: torch.tan(x), lambda x: sympy.tan(x), 3, f_tan),
                  'tanh': (lambda x: torch.tanh(x), lambda x: sympy.tanh(x), 3, lambda x, y_th: ((), torch.tanh(x))),
                  'sgn': (lambda x: torch.sign(x), lambda x: sympy.sign(x), 3, lambda x, y_th: ((), torch.sign(x))),
-                 'arcsin': (lambda x: torch.arcsin(x), lambda x: sympy.asin(x), 4, f_arcsin),
-                 'arccos': (lambda x: torch.arccos(x), lambda x: sympy.acos(x), 4, f_arccos),
-                 'arctan': (lambda x: torch.arctan(x), lambda x: sympy.atan(x), 4, lambda x, y_th: ((), torch.arctan(x))),
-                 'arctanh': (lambda x: torch.arctanh(x), lambda x: sympy.atanh(x), 4, f_arctanh),
-                 '0': (lambda x: x*0, lambda x: x*0, 0, lambda x, y_th: ((), x*0)),
-                 'gaussian': (lambda x: torch.exp(-x**2), lambda x: sympy.exp(-x**2), 3, lambda x, y_th: ((), torch.exp(-x**2))),
-                 #'cosh': (lambda x: torch.cosh(x), lambda x: sympy.cosh(x), 5),
-                 #'sigmoid': (lambda x: torch.sigmoid(x), sympy.Function('sigmoid'), 4),
-                 #'relu': (lambda x: torch.relu(x), relu),
+                #  'arcsin': (lambda x: torch.arcsin(x), lambda x: sympy.asin(x), 4, f_arcsin),
+                #  'arccos': (lambda x: torch.arccos(x), lambda x: sympy.acos(x), 4, f_arccos),
+                #  'arctan': (lambda x: torch.arctan(x), lambda x: sympy.atan(x), 4, lambda x, y_th: ((), torch.arctan(x))),
+                #  'arctanh': (lambda x: torch.arctanh(x), lambda x: sympy.atanh(x), 4, f_arctanh),
+                #  '0': (lambda x: x*0, lambda x: x*0, 0, lambda x, y_th: ((), x*0)),
+                #  'gaussian': (lambda x: torch.exp(-x**2), lambda x: sympy.exp(-x**2), 3, lambda x, y_th: ((), torch.exp(-x**2))),
+                #  'cosh': (lambda x: torch.cosh(x), lambda x: sympy.cosh(x), 5),
+                #  'sigmoid': (lambda x: torch.sigmoid(x), sympy.Function('sigmoid'), 4),
+                #  'relu': (lambda x: torch.relu(x), relu),
 }
 
 def create_dataset(f, 
@@ -160,7 +160,7 @@ def create_dataset(f,
 
 
 
-def fit_params(x, y, fun, a_range=(-10,10), b_range=(-10,10), grid_number=101, iteration=3, verbose=True, device='cpu', batch_size=10):
+def fit_params(x, y, fun, a_range=(-10,10), b_range=(-10,10), grid_number=101, iteration=3, verbose=True, device='cpu', batch_size=None):
     '''
     fit a, b, c, d such that
     
@@ -189,8 +189,8 @@ def fit_params(x, y, fun, a_range=(-10,10), b_range=(-10,10), grid_number=101, i
             print extra information if True
         device : str
             device
-        batch_size : int
-            batch size for grid evaluation to reduce memory usage. Default: 10
+        batch_size : int or None
+            batch size for grid evaluation to reduce memory usage. If None, processes entire grid at once (faster on GPU). Default: None
         
     Returns:
     --------
@@ -215,42 +215,62 @@ def fit_params(x, y, fun, a_range=(-10,10), b_range=(-10,10), grid_number=101, i
     r2 is 0.9999727010726929
     (tensor([2.9982, 1.9996, 5.0053, 0.7011]), tensor(1.0000))
     '''
+    # Ensure x and y are on the correct device
+    x = x.to(device)
+    y = y.to(device)
+    
     # fit a, b, c, d such that y=c*fun(a*x+b)+d; both x and y are 1D array.
     # sweep a and b, choose the best fitted model   
     for _ in range(iteration):
         a_ = torch.linspace(a_range[0], a_range[1], steps=grid_number, device=device)
         b_ = torch.linspace(b_range[0], b_range[1], steps=grid_number, device=device)
         
-        # Initialize r2 matrix
-        r2 = torch.zeros(grid_number, grid_number, device=device)
-        y_mean = torch.mean(y, dim=[0], keepdim=True)
+        # Precompute y statistics
+        y_mean = torch.mean(y)
         y_var = torch.sum((y - y_mean)**2)
         
-        # Process grid in batches to reduce memory usage
-        for i in range(0, grid_number, batch_size):
-            i_end = min(i + batch_size, grid_number)
-            a_batch = a_[i:i_end]
+        # If batch_size is None or large enough, process entire grid at once (much faster on GPU)
+        if batch_size is None or batch_size >= grid_number:
+            # Create full meshgrid
+            a_grid, b_grid = torch.meshgrid(a_, b_, indexing='ij')
             
-            for j in range(0, grid_number, batch_size):
-                j_end = min(j + batch_size, grid_number)
-                b_batch = b_[j:j_end]
+            # Compute function values for all grid points at once: shape (n_samples, grid_number, grid_number)
+            post_fun = fun(a_grid[None,:,:] * x[:,None,None] + b_grid[None,:,:])
+            
+            # Calculate r2 for all grid points at once
+            x_mean = torch.mean(post_fun, dim=0, keepdim=True)  # shape (1, grid_number, grid_number)
+            numerator = torch.sum((post_fun - x_mean) * (y - y_mean)[:,None,None], dim=0)**2
+            denominator = torch.sum((post_fun - x_mean)**2, dim=0) * y_var
+            r2 = numerator / (denominator + 1e-4)
+        else:
+            # Fallback to batched processing for memory-constrained scenarios
+            r2 = torch.zeros(grid_number, grid_number, device=device)
+            
+            for i in range(0, grid_number, batch_size):
+                i_end = min(i + batch_size, grid_number)
+                a_batch = a_[i:i_end]
                 
-                # Create meshgrid for this batch
-                a_grid, b_grid = torch.meshgrid(a_batch, b_batch, indexing='ij')
-                post_fun = fun(a_grid[None,:,:] * x[:,None,None] + b_grid[None,:,:])
-                
-                # Calculate r2 for this batch
-                x_mean = torch.mean(post_fun, dim=[0], keepdim=True)
-                numerator = torch.sum((post_fun - x_mean)*(y-y_mean)[:,None,None], dim=0)**2
-                denominator = torch.sum((post_fun - x_mean)**2, dim=0) * y_var
-                r2[i:i_end, j:j_end] = numerator/(denominator+1e-4)
+                for j in range(0, grid_number, batch_size):
+                    j_end = min(j + batch_size, grid_number)
+                    b_batch = b_[j:j_end]
+                    
+                    # Create meshgrid for this batch
+                    a_grid, b_grid = torch.meshgrid(a_batch, b_batch, indexing='ij')
+                    post_fun = fun(a_grid[None,:,:] * x[:,None,None] + b_grid[None,:,:])
+                    
+                    # Calculate r2 for this batch
+                    x_mean = torch.mean(post_fun, dim=0, keepdim=True)
+                    numerator = torch.sum((post_fun - x_mean) * (y - y_mean)[:,None,None], dim=0)**2
+                    denominator = torch.sum((post_fun - x_mean)**2, dim=0) * y_var
+                    r2[i:i_end, j:j_end] = numerator / (denominator + 1e-4)
         
         r2 = torch.nan_to_num(r2)
         
+        # Find best parameters
         best_id = torch.argmax(r2)
         a_id, b_id = torch.div(best_id, grid_number, rounding_mode='floor'), best_id % grid_number
         
-        
+        # Update search ranges for next iteration
         if a_id == 0 or a_id == grid_number - 1 or b_id == 0 or b_id == grid_number - 1:
             if _ == 0 and verbose==True:
                 print('Best value at boundary.')
@@ -262,7 +282,6 @@ def fit_params(x, y, fun, a_range=(-10,10), b_range=(-10,10), grid_number=101, i
                 b_range = [b_[0], b_[1]]
             if b_id == grid_number - 1:
                 b_range = [b_[-2], b_[-1]]
-            
         else:
             a_range = [a_[a_id-1], a_[a_id+1]]
             b_range = [b_[b_id-1], b_[b_id+1]]
@@ -278,9 +297,19 @@ def fit_params(x, y, fun, a_range=(-10,10), b_range=(-10,10), grid_number=101, i
             print(f'r2 is not very high, please double check if you are choosing the correct symbolic function.')
 
     post_fun = torch.nan_to_num(post_fun)
-    reg = LinearRegression().fit(post_fun[:,None].detach().cpu().numpy(), y.detach().cpu().numpy())
-    c_best = torch.from_numpy(reg.coef_)[0].to(device)
-    d_best = torch.from_numpy(np.array(reg.intercept_)).to(device)
+    
+    # GPU-accelerated linear regression using PyTorch (much faster than sklearn on GPU)
+    # Solve: y = c * post_fun + d  =>  [post_fun, ones] @ [c, d]^T = y
+    X = torch.stack([post_fun, torch.ones_like(post_fun)], dim=1)  # shape (n_samples, 2)
+    
+    # Use torch.linalg.lstsq for GPU-accelerated least squares
+    # This is equivalent to LinearRegression().fit() but stays on GPU
+    result = torch.linalg.lstsq(X, y[:,None])
+    params = result.solution.squeeze()  # shape (2,) containing [c, d]
+    
+    c_best = params[0]
+    d_best = params[1]
+    
     return torch.stack([a_best, b_best, c_best, d_best]), r2_best
 
 

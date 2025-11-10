@@ -2235,7 +2235,8 @@ class MultKAN(nn.Module):
                         if verbose >= 1:
                             print(f'fixing ({l},{i},{j}) with {name}, r2={r2}, c={c}')
 
-        self.log_history('auto_symbolic')
+        # We do not log history in order to spare time
+        # self.log_history('auto_symbolic')
 
     def symbolic_formula(self, var=None, normalizer=None, output_normalizer = None):
         '''

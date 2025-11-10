@@ -13,6 +13,7 @@ class KANPredictor(nn.Module):
                  memory_size, 
                  device, 
                  speed_up_training, 
+                 auto_save=False,
                  regularize=True):
         
         super(KANPredictor, self).__init__()
@@ -23,6 +24,7 @@ class KANPredictor(nn.Module):
         self.device = device
         self.speed_up_training = speed_up_training
         self.regularize = regularize
+        self.auto_save = auto_save
         self.show_explanations = False # TODO: se to true once the kan implementation is stable
         self.symbolic_predictors = False # When instantiated, the kan layers will not compute symbolic formulas
 
@@ -30,7 +32,8 @@ class KANPredictor(nn.Module):
                 'width': self.widths, 
                 'grid': self.grid,
                 'k': self.k,
-                'device': self.device
+                'device': self.device,
+                'auto_save': self.auto_save,
         }
 
         # Instantiate as many KAN Layers as the memory size

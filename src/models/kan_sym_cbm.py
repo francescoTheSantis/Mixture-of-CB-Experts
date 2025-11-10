@@ -87,6 +87,7 @@ class KANSymbolicCBM(BaseModel):
 
         grid_size = 5
         k = 3
+        auto_save = False
 
         self.mc_approx = mc_approx
         self.memory_size = memory_size
@@ -113,7 +114,8 @@ class KANSymbolicCBM(BaseModel):
             k=k,
             memory_size=self.memory_size,
             device=self.device,
-            speed_up_training=self.speed_up_training
+            speed_up_training=self.speed_up_training,
+            auto_save=auto_save
         )
 
     def setup_kan_grid(self, grid_inputs):
