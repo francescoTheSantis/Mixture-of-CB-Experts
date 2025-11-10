@@ -139,10 +139,14 @@ class Trainer:
         print("Allowing Symbolic substitution for KAN layers")
         print("="*50)
         
-        # NOTE: if you want, you can prune the KAN layers before allowing symbolic execution
-
         # Allow Symbolic substitution for the KAN layers
         self.model.model.allow_symbolic()
+
+        # NOTE: if you want, you can prune the KAN layers before allowing symbolic execution.
+        # Unfortunatelly, the pruning does not work when speed_up_training=True.
+        # So, if you want to prune, set speed_up_training=False in the model config.
+        # self.model.model.prune()
+
         # Update the grid
         self.model.model.setup_kan_grid(self.kan_inputs)
     

@@ -1813,7 +1813,7 @@ class MultKAN(nn.Module):
         self.forward(self.cache_data)
         self.attribute()
         self.prune_edge(edge_th, log_history=False)
-        self.log_history('prune')
+        #self.log_history('prune')
         return self
     
     def prune_input(self, threshold=1e-2, active_inputs=None, log_history=True):

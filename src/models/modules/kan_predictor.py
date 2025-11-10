@@ -44,7 +44,7 @@ class KANPredictor(nn.Module):
             if self.speed_up_training:
                 kan_layer = kan_layer.speed()  # Sets: symbolic_enabled=False, save_act=False, auto_save=False
             if self.regularize:
-                self.lamb = 0.001  # Regularization strength 
+                self.lamb = 0.005  # Regularization strength 
             for param in kan_layer.get_params():
                 param.requires_grad = True
             self.kans.append(kan_layer)
@@ -65,13 +65,10 @@ class KANPredictor(nn.Module):
             self.kans[i] = kan
         return kan
 
-    # def prune(self):
-    #     for i, _ in enumerate(self.kans):
-    #         self.kans[i].to(self.device)
-    #         # self.kans[i] = self.kans[i].prune()
-    #         # when speed_up_training is True, we need to re-allow symbolic execution
-    #         if self.speed_up_training:
-    #             self.kans[i] = self.allow_symbolic(self.kans[i])
+    def prune(self):
+        for i, _ in enumerate(self.kans):
+            self.kans[i].to(self.device)
+            self.kans[i] = self.kans[i].prune()
 
     def _sync_kan_tensors_to_device(self, kan_layer):
         """

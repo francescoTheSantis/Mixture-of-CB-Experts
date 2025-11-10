@@ -63,10 +63,10 @@ class EmbeddingExtractor:
 
         with torch.no_grad():
             for batch in tqdm(loader):
-                images = batch['x']#.to(self.device)
-                concepts = batch['c']#.to(self.device)
-                targets = batch['y']#.to(self.device)
-                bsz = images.shape[0]
+                images = batch['x']
+                concepts = batch['c']
+                targets = batch['y']
+                
                 if self.extract_embeddings and not self.cfg.dataset.metadata.name=='xor':
                     images = images.to(self.device)
                     # If the tensor has not the correct shape 
@@ -86,18 +86,22 @@ class EmbeddingExtractor:
                         outputs = outputs.last_hidden_state[:, 0, :]  # Shape: (batch_size, hidden_size)
                     else:
                         outputs = outputs.flatten(start_dim=1)
+                    
+                    # Move to CPU immediately to free GPU memory for next batch
                     embeddings.append(outputs.cpu())
                 else:
-                    # If embeddings are not extracted, just append the images
-                    embeddings.append(images.cpu())
+                    # If embeddings are not extracted, just append the images (already on CPU)
+                    embeddings.append(images)
+                    
                 if self.celeba:
                     targets = self._batch_binary_to_decimal_torch(
                         torch.stack([targets[:,i] for i in range(len(self.task_names))], dim=1)
                     )
-                labels.append(targets.cpu())
-                concepts_list.append(concepts.cpu())
+                # Append CPU tensors
+                labels.append(targets)
+                concepts_list.append(concepts)
                 
-        # Concatenate all embeddings and labels
+        # Concatenate all embeddings and labels (all already on CPU)
         embeddings = torch.cat(embeddings, dim=0)
         concepts = torch.cat(concepts_list, dim=0)
         labels = torch.cat(labels, dim=0)
@@ -201,17 +205,23 @@ class TextEmbeddingExtractor:
         with torch.no_grad():
             for batch in tqdm(loader, desc="Extracting embeddings"):
                 if self.extract_embeddings:
+                    # Move inputs to device
+                    input_ids_gpu = batch['x']["input_ids"].to(self.model.device).long()
+                    attention_mask_gpu = batch['x']["attention_mask"].to(self.model.device).long()
+                    
                     if self.cfg.dataset.metadata.name == "mawps":
                         outputs = self.model(
-                            input_ids=batch['x']["input_ids"].to(self.model.device).long(),
-                            attention_mask=batch['x']["attention_mask"].to(self.model.device).long()
+                            input_ids=input_ids_gpu,
+                            attention_mask=attention_mask_gpu
                         )
                     else:
+                        token_type_ids_gpu = batch['x']["token_type_ids"].to(self.model.device).long()
                         outputs = self.model(
-                            input_ids=batch['x']["input_ids"].to(self.model.device).long(),
-                            token_type_ids=batch['x']["token_type_ids"].to(self.model.device).long(),
-                            attention_mask=batch['x']["attention_mask"].to(self.model.device).long()
+                            input_ids=input_ids_gpu,
+                            token_type_ids=token_type_ids_gpu,
+                            attention_mask=attention_mask_gpu
                         )
+                    
                     if 'sentence-transformers' not in self.model_name:
                         emb = outputs.last_hidden_state  # shape: (B, L, D)
                         # Use the [CLS] token representation. This is useful to reduce the overall number of
@@ -219,33 +229,31 @@ class TextEmbeddingExtractor:
                         emb = emb[:, 0, :]  # shape: (B, D)
                     else:
                         # Perform pooling
-                        emb = self._mean_pooling(
-                            outputs, 
-                            batch['x']["attention_mask"].to(self.model.device).long()
-                        )
-
+                        emb = self._mean_pooling(outputs, attention_mask_gpu)
                         # Normalize embeddings
                         emb = F.normalize(emb, p=2, dim=1)
+                    
+                    # Move to CPU immediately to free GPU memory for next batch
                     embeddings.append(emb.cpu())
                 else:
                     # If the embedding is not produced, then the input of the model will be
-                    # the raw text input.
+                    # the raw text input (already on CPU from DataLoader).
                     if self.cfg.dataset.metadata.name == "mawps":
-                        input_ids.append(batch['x']["input_ids"].cpu())
-                        attention_masks.append(batch['x']["attention_mask"].cpu())
+                        input_ids.append(batch['x']["input_ids"])
+                        attention_masks.append(batch['x']["attention_mask"])
                     else:
-                        input_ids.append(batch['x']["input_ids"].cpu())
-                        attention_masks.append(batch['x']["attention_mask"].cpu())
-                        token_type_ids.append(batch['x']["token_type_ids"].cpu())
+                        input_ids.append(batch['x']["input_ids"])
+                        attention_masks.append(batch['x']["attention_mask"])
+                        token_type_ids.append(batch['x']["token_type_ids"])
 
-                # append the remaining fields
-                concepts.append(batch['c'].cpu())
+                # append the remaining fields (already on CPU)
+                concepts.append(batch['c'])
                 if "label" in batch:
-                    labels.append(batch["label"].cpu())
+                    labels.append(batch["label"])
                 else:
-                    labels.append(batch['y'].cpu())
+                    labels.append(batch['y'])
 
-            # Stack everything
+            # Stack everything (all already on CPU)
             if self.extract_embeddings:
                 input = torch.cat(embeddings, dim=0)
             else:

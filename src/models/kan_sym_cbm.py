@@ -121,6 +121,9 @@ class KANSymbolicCBM(BaseModel):
     def setup_kan_grid(self, grid_inputs):
         self.kan_layers.setup_kan_grid(grid_inputs)
 
+    def prune(self):
+        self.kan_layers.prune()
+        
     def allow_symbolic(self):
         self.kan_layers.allow_symbolic()
     
