@@ -55,7 +55,7 @@ class Trainer:
             devices=self.cfg.gpus,  
             accelerator="auto",
             enable_progress_bar=True,
-            gradient_clip_val=0.5
+            # gradient_clip_val=0.5
         )
 
         # Optimizer
@@ -212,7 +212,7 @@ class Trainer:
             devices=self.cfg.gpus,  
             accelerator="auto",
             enable_progress_bar=True,
-            gradient_clip_val=0.5
+            # gradient_clip_val=0.5
         )
         
         # Fine-tune after pruning
@@ -317,7 +317,7 @@ class Trainer:
             devices=self.cfg.gpus,  
             accelerator="auto",
             enable_progress_bar=True,
-            gradient_clip_val=0.5
+            # gradient_clip_val=0.5
         )
         
         # Fine-tune

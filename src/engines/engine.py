@@ -154,15 +154,6 @@ class Engine(pl.LightningModule):
         else:
             loss_name = "train_loss"
 
-        # if self.fine_tuning and self.fine_tuning_stage == 'pruning':
-        #     loss_name = "finetune_pruning/train_loss"
-        # elif self.fine_tuning and self.fine_tuning_stage == 'symbolic':
-        #     loss_name = "finetune_symbolic/train_loss"
-        # elif self.fine_tuning:
-        #     loss_name = "finetune/train_loss"
-        # else:
-        #     loss_name = "train_loss"
-
         self.log(loss_name, loss.item())
 
         y_hat_metrics, c_hat_metrics = self.model.filter_output_for_metrics(**model_output)
@@ -183,15 +174,6 @@ class Engine(pl.LightningModule):
                 entropy_name = f"{self.fine_tuning_stage}/train_selection_entropy"
             else:
                 entropy_name = "train_selection_entropy"
-
-            # if self.fine_tuning and self.fine_tuning_stage == 'pruning':
-            #     entropy_name = "finetune_pruning/train_selection_entropy"
-            # elif self.fine_tuning and self.fine_tuning_stage == 'symbolic':
-            #     entropy_name = "finetune_symbolic/train_selection_entropy"
-            # elif self.fine_tuning:
-            #     entropy_name = "finetune/train_selection_entropy"
-            # else:
-            #     entropy_name = "train_selection_entropy"
             
             self.log(entropy_name, selection_entropy)
         return loss
