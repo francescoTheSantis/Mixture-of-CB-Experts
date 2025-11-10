@@ -25,4 +25,4 @@ metadata:
 
 # for this dataset, the equations connecting the concepts to the task are known
 equations: 
-  - "exp(sin(pi * 2 * c0) + cos (pi * 2 * c1))" # c0 is value_x_position, c1 is value_y_position
+  - "exp(sin(3.14 * 2 * c0) + cos(3.14 * 2 * c1))" # c0 is value_x_position, c1 is value_y_position

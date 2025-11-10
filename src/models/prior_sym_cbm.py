@@ -2,7 +2,8 @@ import torch.nn as nn
 import torch_concepts.nn as pyc_nn
 from src.models.baselines.base import BaseModel
 from src.models.modules.selector import SelectorModel
-from src.models.modules.prior_predictor import PriorPredictor
+from src.models.modules.symbolic_predictor import SymbolicPredictor
+import sympy as sp
 
 class PriorSymbolicCBM(BaseModel):
     def __init__(self, 
@@ -67,10 +68,32 @@ class PriorSymbolicCBM(BaseModel):
         self.mc_approx = mc_approx
 
         # For this set of experiments, we assume we have access to known equations only for regression tasks.
-        known_equations = {'0': known_equations}
-
-        # Override the memory according to the length of the first key of known equations
-        self.memory_size = len(known_equations['0'])
+        # Convert from list format to SymbolicPredictor format
+        # Input format: [eq1, eq2, ...] - list of equations (each is a memory slot)
+        # SymbolicPredictor format: {'set0': {'eq0': task_eq1, ...}, 'set1': {'eq0': task_eq1, ...}, ...}
+        # Where each 'set' is a memory slot, and each memory slot contains equations for all tasks
+        
+        # For regression with single output, we typically have one equation per memory slot
+        # But the structure needs to support multiple task outputs
+        # Assuming known_equations is a list where each element is an equation for a different memory slot
+        # and we have a single task output
+        
+        symbolic_equations = {}
+        for memory_idx, equation in enumerate(known_equations):
+            set_name = f'set{memory_idx}'
+            symbolic_equations[set_name] = {}
+            # Single task output per memory slot
+            eq_name = 'task0'
+            # Convert string equation to sympy expression if needed
+            if isinstance(equation, str):
+                # Create local dict with concept names as symbols
+                local_dict = {f'c{i}': sp.Symbol(name) for i, name in enumerate(c_names)}
+                symbolic_equations[set_name][eq_name] = sp.sympify(equation, locals=local_dict)
+            else:
+                symbolic_equations[set_name][eq_name] = equation
+        
+        # memory_size is the number of memory slots (number of equations)
+        self.memory_size = len(known_equations)
 
         # Instantiate the selector
         self.classifier_selector = SelectorModel(
@@ -87,11 +110,15 @@ class PriorSymbolicCBM(BaseModel):
             activation=nn.Identity(), # we will later apply a sigmoid if the concept is boolean
         )
 
-        # KAN predictor instantiation
-        self.prior_predictor = PriorPredictor(
-            equations=known_equations,
+        # SymbolicPredictor instantiation with frozen parameters
+        self.prior_predictor = SymbolicPredictor(
+            equations=symbolic_equations,
             c_names=self.c_names
         )
+        
+        # Freeze all parameters of the SymbolicPredictor
+        for param in self.prior_predictor.parameters():
+            param.requires_grad = False
 
     ###### Forward and loss methods ######
     def forward(self, input):

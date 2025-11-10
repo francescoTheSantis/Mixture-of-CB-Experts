@@ -191,6 +191,9 @@ class TrainableEquation(nn.Module):
         elif expr.func == sympy.atan:
             return torch.atan(self._sympy_to_torch(expr.args[0], var_dict))
         
+        elif expr.func == sympy.tanh:
+            return torch.tanh(self._sympy_to_torch(expr.args[0], var_dict))
+
         else:
             raise NotImplementedError(f"Function {expr.func} not implemented")
     
