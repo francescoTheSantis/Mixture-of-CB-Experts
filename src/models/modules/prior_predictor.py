@@ -141,12 +141,3 @@ class PriorPredictor(nn.Module):
             'y_hat':y_hat, 
             'explanations': explanations
         }
-    
-    def get_symbolic_equivalent(self, log_dir):
-        """
-        Save the sympy equations 
-        """
-        # For this specific class, we have multiple equations (one per memory index)
-        # 
-        for i in range(self.memory_size):
-            store_eq(self.sympy_equations[i], log_dir=log_dir, idx=i)
