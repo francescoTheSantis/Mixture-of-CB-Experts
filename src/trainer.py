@@ -105,7 +105,7 @@ class Trainer:
         if self.model.model.__class__.__name__ == 'KANSymbolicCBM':
             self.kan_inputs = c_trues.to(self.cfg.gpus[0])
             self.model.model.setup_kan_grid(self.kan_inputs)
-            # Save c_true sin model as it will used to update the grid during training
+            # Save c_trues in model as it will used to update the grid during training
             self.model.grid_inputs = c_trues.to(self.cfg.gpus[0])
             
         self.trainer.fit(self.model, 
@@ -118,9 +118,7 @@ class Trainer:
             ckpt_path = f"{self.checkpoint_dir}/best_model.ckpt"
         self.trainer.test(self.model, test_dataloader, ckpt_path=ckpt_path)
 
-    def allow_symbolic(self, 
-                               train_dataloader, 
-                               val_dataloader):
+    def allow_symbolic(self, train_dataloader, val_dataloader):
         """
         Allow symbolic execution for the model.
         Train the model for a few epochs to store the activation functions in order to allow

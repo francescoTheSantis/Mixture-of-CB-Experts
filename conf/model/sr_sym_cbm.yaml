@@ -1,0 +1,15 @@
+defaults:
+  - common
+  - _self_
+  
+params:
+  _target_: "src.models.sr_sym_cbm.SymbolicRegressorCBM"
+  task_penalty: ${task_penalty}
+  concept_penalty: ${concept_penalty}
+  int_prob: ${int_prob}
+  memory_size: ${memory_size}
+  embedding_size: ${embedding_size}
+  mc_approx: 1
+
+metadata:
+  name: sr_symbolic_cbm
