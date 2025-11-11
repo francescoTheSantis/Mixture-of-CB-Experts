@@ -123,7 +123,7 @@ def main():
     ##################################################
 
     paths = [
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/test/2025-11-10_20-15-03",
+        "/home/fdesantis/projects/Linear-Memory-Reasoner/stored_results/2025-11-10_20-15-03",
     ]
 
     try:

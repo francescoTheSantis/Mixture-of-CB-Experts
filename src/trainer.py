@@ -107,7 +107,7 @@ class Trainer:
             self.model.model.setup_kan_grid(self.kan_inputs)
             # Save c_trues in model as it will used to update the grid during training
             self.model.grid_inputs = c_trues.to(self.cfg.gpus[0])
-            
+
         self.trainer.fit(self.model, 
                          train_dataloader, 
                          val_dataloader, ckpt_path=ckpt_path)
@@ -124,7 +124,12 @@ class Trainer:
         Train the model for a few epochs to store the activation functions in order to allow
         symbolic substitution of the splines.
         """
-        
+
+        model_name = self.cfg.model.metadata.name
+        # The kan model needs this training to just process the entire training set once and store the activations.
+        # therefore just 1 epoch is needed.
+        epochs = 1 if model_name == 'kan_symbolic_cbm' else self.cfg.max_epochs
+
         # Load the best checkpoint from initial training (best_model.ckpt)
         ckpt_path = f"{self.checkpoint_dir}/best_model.ckpt"
         
@@ -133,19 +138,48 @@ class Trainer:
         self.model.load_state_dict(checkpoint['state_dict'])
         
         print("\n" + "="*50)
-        print("Allowing Symbolic substitution for KAN layers")
+        print("Allowing Symbolic substitution")
         print("="*50)
         
         # Allow Symbolic substitution for the KAN layers
-        self.model.model.allow_symbolic()
+        if model_name == 'kan_symbolic_cbm':
+            self.model.model.allow_symbolic()
 
-        # NOTE: if you want, you can prune the KAN layers before allowing symbolic execution.
-        # Unfortunatelly, the pruning does not work when speed_up_training=True.
-        # So, if you want to prune, set speed_up_training=False in the model config.
-        # self.model.model.prune()
+            # NOTE: if you want, you can prune the KAN layers before allowing symbolic execution.
+            # Unfortunatelly, the pruning does not work when speed_up_training=True.
+            # So, if you want to prune, set speed_up_training=False in the model config.
+            # self.model.model.prune()
 
-        # Update the grid
-        self.model.model.setup_kan_grid(self.kan_inputs)
+            # Update the grid
+            self.model.model.setup_kan_grid(self.kan_inputs)
+            
+        # For SR-Sym-CBM, collect data for symbolic fine-tuning
+        elif model_name == 'sr_symbolic_cbm':
+            self.model.eval()
+            self.model = self.model.to(self.cfg.gpus[0])
+            # Reset stored tensors before collecting
+            self.model.model.reset_stored_tensors()
+            with torch.no_grad():
+                for batch in tqdm(train_dataloader, desc="Storing training data"):
+                    x, c, y = self.model.unpack_batch(batch)
+                    # Move the data to the GPU
+                    if isinstance(x, dict):
+                        x = {k: v.to(self.cfg.gpus[0]) for k, v in x.items()}
+                    else:  
+                        x = x.to(self.cfg.gpus[0])
+                    c = c.to(self.cfg.gpus[0])
+                    y = y.to(self.cfg.gpus[0])
+                    inputs = {'x': x, 'c': c, 'y': y}
+                    # Forward pass with storage enabled
+                    _ = self.model.model.forward(inputs, store_for_finetuning=True)
+                    # Clear GPU memory
+                    del x, c, y, inputs
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+
+            self.model = self.model.to('cpu')
+            # Run symbolic fine-tuning
+            self.model.model.run_symbolic_finetuning()
     
         # Set fine-tuning mode to change metric names
         self.model.fine_tuning = True
@@ -153,9 +187,7 @@ class Trainer:
         self.model._set_metrics()
         
         fine_tune_lr = self.cfg.dataset.metadata.lr
-        
-        print(f"Fine-tuning learning rate: {fine_tune_lr}")
-        
+                
         # Update optimizer learning rate
         for param_group in self.optimizer.param_groups:
             param_group['lr'] = fine_tune_lr
@@ -203,7 +235,7 @@ class Trainer:
         loggers = [self.wandb_logger, self.csv_logger] if self.wandb_logger is not None else self.csv_logger
 
         self.trainer = pl.Trainer(
-            max_epochs=1, #self.cfg.max_epochs,
+            max_epochs=epochs,
             callbacks=[early_stopping, checkpoint_callback, lr_monitor],
             logger=loggers,
             devices=self.cfg.gpus,  
@@ -214,9 +246,6 @@ class Trainer:
         
         # Fine-tune after pruning
         self.trainer.fit(self.model, train_dataloader, val_dataloader)
-        
-        print("Symbolic substitution allowed and fine-tuning completed!")
-        print(f"Best model updated at: {self.checkpoint_dir}/best_model.ckpt")
         
         return f"{self.checkpoint_dir}/best_model.ckpt"
 

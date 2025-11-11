@@ -79,7 +79,7 @@ def main(cfg: DictConfig) -> None:
     trainer.train(loaded_train, loaded_val)
 
     ###### Fine-tuning for symbolic cmr (kan implementation) model ######
-    if cfg.model.metadata.name == 'kan_symbolic_cbm':
+    if cfg.model.metadata.name in ['kan_symbolic_cbm', 'sr_symbolic_cbm']:
         # Phase 1: Allow symbolic execution
         print("\n" + "="*70)
         print("PHASE 1: Allow symbolic execution")
@@ -88,8 +88,10 @@ def main(cfg: DictConfig) -> None:
             loaded_train, 
             loaded_val
         )
-        
+
+    if cfg.model.metadata.name == 'kan_symbolic_cbm':
         # Phase 2: Fine-tuning with symbolic expressions
+        # This phase is needed just for the model using KAN layers as task predictors
         print("\n" + "="*70)
         print("PHASE 2: Fine-tuning with symbolic expressions")
         print("="*70)
@@ -104,7 +106,9 @@ def main(cfg: DictConfig) -> None:
     trainer.test(loaded_test)
 
     ###### Store symbolic expression associated to the predictor ######
-    model.model.get_symbolic_equivalent(log_dir)
+    file_name = f"{log_dir}/equations"
+    os.makedirs(file_name, exist_ok=True)
+    model.model.get_symbolic_equivalent(file_name)
 
     ###### Perform Interventions ######
     if model.model.has_concepts:

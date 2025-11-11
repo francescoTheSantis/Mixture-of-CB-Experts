@@ -3,20 +3,22 @@ from src.models.encoders.mlp import MLPEncoder
 from src.utils.expression_utils import store_eq
 import torch
 
-class SRPredictor(nn.Module):
+class BlackBoxPredictor(nn.Module):
     def __init__(self, 
                  memory_size, 
                  c_names,
                  output_size,
-                 pysr_params,
                  activation,
+                 latent_size,
                 ):
-        super(SRPredictor, self).__init__()
+        super(BlackBoxPredictor, self).__init__()
 
         self.memory_size = memory_size
         self.c_names = c_names
         self.output_size = output_size
-        self.pysr_params = pysr_params
+        self.show_explanations = False
+        self.activation = activation
+        self.latent_size = latent_size
 
         # Create a module of mlp encoders for each memory slot
         memory_of_predictors = nn.ModuleList()
@@ -24,12 +26,23 @@ class SRPredictor(nn.Module):
             mlp = MLPEncoder(
                 input_size=c_names,
                 output_size=output_size,
-                hidden_size=c_names,
+                hidden_size=latent_size,
                 activation=activation,
-                num_layers=2,
+                num_layers=1, # one hidden layer
             )
             memory_of_predictors.append(mlp)
         self.memory_of_predictors = memory_of_predictors
+
+    def _get_explanations(self, prob_per_classifier, y_hat):
+        # TODO: to be completed once the kan implementation is stable
+        if self.show_explanations:
+            if not self.equations_for_explanations_ready:
+                self._setup_string_equations()
+            explanations = None
+        else:
+            explanations = [None] * prob_per_classifier.size(0)
+
+        return explanations
 
     def forward(self, prob_per_classifier, input_concepts):
         bsz = input_concepts.shape[0]
@@ -54,17 +67,3 @@ class SRPredictor(nn.Module):
             'y_hat': y_hat,
             'explanations': explanations,
         }
-
-    def get_symbolic_equivalent(self, log_dir=None):
-        """
-        Returns the equation associated to the predictor of the model
-        """
-
-        # Get as many equations as the output size
-        equations = self.predictor.to_symbolic()
-
-        # If the output is greater than 1, equations will be a list.
-        # Each equation in the list will have the same complexity, therefore we return only the first one.
-        if self.output_size > 1:
-            store_eq(equations[0], log_dir)
-        store_eq(equations, log_dir)
