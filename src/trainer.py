@@ -7,6 +7,7 @@ import pandas as pd
 from src.metrics import f1_acc_metrics
 from tqdm import tqdm
 from src.utils.scalers import StandardScaler
+from src.utilities import symbolic_regression
 
 class Trainer:
     """
@@ -157,8 +158,9 @@ class Trainer:
         elif model_name == 'sr_symbolic_cbm':
             self.model.eval()
             self.model = self.model.to(self.cfg.gpus[0])
-            # Reset stored tensors before collecting
-            self.model.model.reset_stored_tensors()
+            stored_concepts = []
+            stored_targets = []
+            stored_selector_probs = []
             with torch.no_grad():
                 for batch in tqdm(train_dataloader, desc="Storing training data"):
                     x, c, y = self.model.unpack_batch(batch)
@@ -171,15 +173,34 @@ class Trainer:
                     y = y.to(self.cfg.gpus[0])
                     inputs = {'x': x, 'c': c, 'y': y}
                     # Forward pass with storage enabled
-                    _ = self.model.model.forward(inputs, store_for_finetuning=True)
+                    output = self.model.model.forward(inputs, store_for_finetuning=True)
+                    
+                    # Add to lists
+                    stored_targets.append(output['y_hat'].detach().cpu())
+                    stored_concepts.append(c.detach().cpu())
+                    stored_selector_probs.append(output['sampled_memory_idxs'].detach().cpu())
+
                     # Clear GPU memory
                     del x, c, y, inputs
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
 
-            self.model = self.model.to('cpu')
-            # Run symbolic fine-tuning
-            self.model.model.run_symbolic_finetuning()
+            # Extract equations using symbolic regression
+            print("Extracting symbolic equations from stored data...")
+            equations = symbolic_regression(
+                stored_concepts=torch.cat(stored_concepts, dim=0),
+                stored_targets=torch.cat(stored_targets, dim=0),
+                stored_selector_probs=torch.cat(stored_selector_probs, dim=0),
+                memory_size=self.model.model.memory_size,
+                output_size=self.model.model.output_size,
+                c_names=self.model.model.c_names,
+                y_names=self.model.model.y_names,
+                device=self.cfg.gpus[0],
+                pysr_params=self.model.model.pysr_params
+            )
+
+            # Run symbolic substitution to create the SymbolicPredictor
+            self.model.model.symbolic_substitution(equations)
     
         # Set fine-tuning mode to change metric names
         self.model.fine_tuning = True

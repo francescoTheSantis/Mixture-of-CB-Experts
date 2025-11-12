@@ -1,10 +1,11 @@
-from src.trainer import Trainer
 import hydra
 from omegaconf import DictConfig, open_dict
 from hydra.utils import instantiate
-from src.utilities import set_seed, set_loggers, set_matmul_precision
 import torch
 import os
+
+from src.trainer import Trainer
+from src.utilities import set_seed, set_loggers, set_matmul_precision
 from src.utilities import update_config_from_data, is_valid_experiment, \
     generate_data_path, save_licem_linear_coefficients
 
@@ -56,6 +57,11 @@ def main(cfg: DictConfig) -> None:
         torch.save(loaded_train, train_path)
         torch.save(loaded_val, val_path)
         torch.save(loaded_test, test_path)
+
+    # If the config is meant to just generate and store the dataset, exit here
+    if cfg.only_store_dataset:
+        print('Dataset stored. Exiting...')
+        return
 
     # Load the concept names and groups
     c_names, y_names, c_groups = loader.get_names()

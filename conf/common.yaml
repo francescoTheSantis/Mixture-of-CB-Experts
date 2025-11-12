@@ -54,6 +54,9 @@ use_stored_dataset: True
 # using a pre-trained model.
 extract_embeddings: True
 
+# Only preprocess and store the dataset without training any model.
+only_store_dataset: False
+
 wandb:
   # Set the params below if you want to use wandb as logger.
   # Set it to null if you do not want to use wandb.

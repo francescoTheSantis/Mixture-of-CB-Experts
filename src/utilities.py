@@ -1,23 +1,22 @@
 import os
 import torch
 import numpy as np
-import warnings
-warnings.filterwarnings("ignore")
 import random
 from omegaconf import DictConfig, OmegaConf, open_dict
 from time import time
 from pytorch_lightning.loggers import WandbLogger, CSVLogger
-import pandas as pd
-import matplotlib.pyplot as plt
 from torch import nn
 from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
-from transformers import CLIPProcessor, CLIPModel
 import transformers
-import scienceplots
 from env import CACHE
-
+import sympy as sp
+import warnings
 warnings.filterwarnings("ignore")
-plt.style.use(['science', 'ieee', 'no-latex'])
+
+# DO NOT import PySRRegressor at module level - it will be imported lazily when needed
+# from pysr import PySRRegressor
+
+# warnings.filterwarnings("ignore")
 
 def set_matmul_precision():
     """
@@ -418,3 +417,175 @@ def save_licem_linear_coefficients(model, loaded_set, log_dir, split='train'):
             torch.save(all_weights, f"{log_dir}/learned_linear_coefficients_train.pt")
         else:
             torch.save(all_weights, f"{log_dir}/learned_linear_coefficients_test_{str(round(eps,2)).replace('.', '')}.pt")
+
+
+
+def symbolic_regression(
+        stored_concepts, 
+        stored_targets, 
+        stored_selector_probs,
+        memory_size,
+        output_size,
+        c_names,
+        y_names,
+        device,
+        pysr_params,
+    ):
+
+    """
+    Fine-tune the model by replacing each MLP in the BlackBoxPredictor with 
+    symbolic equations discovered by PySR.
+    
+    This method:
+    1. Collects stored concepts, targets, and selector probabilities
+    2. For each memory slot and each output class, fits a PySR model
+    3. Extracts the best equation
+    4. Creates a SymbolicPredictor with all discovered equations
+    """
+    
+    # Lazy import PySR only when this function is called
+    # This avoids Julia initialization conflicts with PyTorch at import time
+    import pysr
+    
+    # Save current CUDA visibility and temporarily hide GPUs from Julia to avoid conflicts
+    original_cuda_visible = os.environ.get('CUDA_VISIBLE_DEVICES', None)
+    os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Hide GPUs from Julia
+    
+    try:
+        # Try to initialize Julia if not already done
+        pysr.julia_helpers.init_julia(julia_project=None, quiet=False)
+    except:
+        pass  # Already initialized, that's fine
+    
+    from pysr import PySRRegressor
+    
+    # Restore original CUDA visibility
+    if original_cuda_visible is not None:
+        os.environ['CUDA_VISIBLE_DEVICES'] = original_cuda_visible
+    else:
+        os.environ.pop('CUDA_VISIBLE_DEVICES', None)
+    
+    if len(stored_concepts) == 0:
+        raise ValueError("No stored data for fine-tuning. Run forward passes with store_for_finetuning=True first.")
+    
+    # Move all data to CPU and convert to numpy to avoid GPU conflicts with Julia
+    stored_concepts = stored_concepts.cpu()
+    stored_targets = stored_targets.cpu()
+    stored_selector_probs = stored_selector_probs.cpu()
+
+    # Handle different target shapes
+    if stored_targets.ndim == 1:
+        all_targets = all_targets.reshape(-1, 1)
+    
+    # Dictionary to store equations
+    # Structure: {memory_idx: {output_name: sympy_equation}}
+    all_equations = {i: {} for i in range(memory_size)}
+    
+    # For each memory slot
+    for memory_idx in range(memory_size):
+        # Get samples where this memory slot was selected
+        # We take the most common selection across n_samples
+        #memory_mask = (stored_selector_probs.mode(dim=1).values == memory_idx).numpy()
+        memory_mask  = (stored_selector_probs.argmax(dim=1).flatten()==memory_idx).numpy()
+        n_samples_for_memory = memory_mask.sum()
+        
+        # Filter concepts and targets for this memory slot
+        X_memory = stored_concepts[memory_mask]  # [n_samples_memory, n_concepts]
+        y_memory = stored_targets[memory_mask]    # [n_samples_memory, n_outputs]
+        
+        # Skip if no samples for this memory slot
+        if n_samples_for_memory == 0:
+            print(f"Memory slot {memory_idx} has no samples. Skipping.")
+            for output_idx in range(output_size):
+                output_name = y_names[output_idx] if output_idx < len(y_names) else f"y_{output_idx}"
+                all_equations[memory_idx][output_name] = sp.sympify("0")
+            continue
+        
+        # Note: you are running with more than 10,000 datapoints. 
+        # You should consider turning on batching (`options.batching`), and also if you need that many datapoints. 
+        # Unless you have a large amount of noise (in which case you should smooth your dataset first), 
+        # generally < 10,000 datapoints is enough to find a functional form.
+        # Given the message returned by PySR, we can subsample if needed.
+        subsample_size = 5000
+        if n_samples_for_memory > subsample_size:
+            print(f"Subsampling to {subsample_size} for PySR.")
+            indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
+            X_memory = X_memory[indices]
+            y_memory = y_memory[indices]
+
+        # For each output
+        for output_idx in range(output_size):
+            output_name = y_names[output_idx] if output_idx < len(y_names) else f"y_{output_idx}"
+                            
+            y_target = y_memory[:, output_idx]
+            
+            # Validate data: check for NaN and Inf values
+            if np.isnan(X_memory).sum()>0 or np.isinf(X_memory).sum()>0:
+                print(f"WARNING: X_memory contains NaN or Inf values for memory {memory_idx}. Cleaning data.")
+                valid_mask = ~(np.isnan(X_memory).any(axis=1) | np.isinf(X_memory).any(axis=1))
+                X_memory = X_memory[valid_mask]
+                y_target = y_target[valid_mask]
+            
+            if np.isnan(y_target).sum()>0 or np.isinf(y_target).sum()>0:
+                print(f"WARNING: y_target contains NaN or Inf values for memory {memory_idx}, output {output_name}. Cleaning data.")
+                valid_mask = ~(np.isnan(y_target) | np.isinf(y_target))
+                X_memory_clean = X_memory[valid_mask]
+                y_target = y_target[valid_mask]
+            else:
+                X_memory_clean = X_memory
+            
+            print(f"\nFitting PySR for output '{output_name}' (memory slot {memory_idx})...")
+            print(f"  Input shape: {X_memory_clean.shape}, Target shape: {y_target.shape}")
+            
+            try:
+
+                model = PySRRegressor(
+                    **pysr_params,
+                    verbosity=1,  # Reduce verbosity to avoid Julia output issues
+                    progress=True,
+                )
+
+                model.fit(X_memory_clean.cpu().numpy(), y_target.cpu().numpy())
+
+                # Get the best equation (highest score)
+                equations_df = model.equations_
+                print(f"  Pareto front has {len(equations_df)} equations")
+                
+                # Select the best equation by score
+                best_eq_row = equations_df.nlargest(1, 'score').iloc[0]
+                sympy_eq = best_eq_row['sympy_format']
+                
+                # Rename variables from x0, x1, ... to concept names
+                for i, c_name in enumerate(c_names):
+                    sympy_eq = sympy_eq.subs(sp.Symbol(f'x{i}'), sp.Symbol(c_name))
+                
+                all_equations[memory_idx][output_name] = sympy_eq
+                
+                print(f"  ✓ Best equation: {sympy_eq}")
+                print(f"    Loss: {best_eq_row['loss']:.6f}")
+                print(f"    Complexity: {best_eq_row['complexity']}")
+                print(f"    Score: {best_eq_row['score']:.6f}")
+
+                # Clean up the model
+                del model
+                
+            except Exception as e:
+                print(f"  ✗ ERROR fitting PySR for memory {memory_idx}, output {output_name}:")
+                print(f"    {type(e).__name__}: {str(e)}")
+                print(f"    Using fallback constant equation (mean value)")
+                if len(y_target) == 0:
+                    print(f"    No samples available. Using zero as fallback.")
+                    all_equations[memory_idx][output_name] = sp.sympify("0")
+                else:
+                    mean_val = float(y_target.mean())
+                    all_equations[memory_idx][output_name] = sp.sympify(str(mean_val))
+                    print(f"    Fallback equation: {mean_val}")
+
+    # Verify all equations are present
+    for memory_idx in range(memory_size):
+        for output_idx in range(output_size):
+            output_name = y_names[output_idx] if output_idx < len(y_names) else f"y_{output_idx}"
+            if output_name not in all_equations[memory_idx]:
+                raise ValueError(f"Missing equation for memory {memory_idx}, output {output_name}")
+    
+    return all_equations
