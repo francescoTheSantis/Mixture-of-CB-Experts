@@ -4,7 +4,7 @@ from src.models.baselines.base import BaseModel
 from src.models.modules.selector import SelectorModel
 from src.models.modules.blackbox_predictor import BlackBoxPredictor
 from src.models.modules.symbolic_predictor import SymbolicPredictor
-from src.utils.expression_utils import store_eq
+from src.utils.expression_utils import store_eq, chain_expression
 import numpy as np
 import torch
 import os
@@ -119,7 +119,7 @@ class SymbolicRegressorCBM(BaseModel):
             'complexity_of_constants': 1,
             'timeout_in_seconds': 60 * 3,
             'maxsize': 30,  # Limit the size of the equations.
-            'maxdepth': 4,  # Limit the depth of the equations.
+            'maxdepth': 30,  # Limit the depth of the equations to maxsize so that the most complex expression tree is a chain (easy to compute).
         }
 
         # Instantiate the predictor
@@ -188,8 +188,24 @@ class SymbolicRegressorCBM(BaseModel):
         Returns and saves all equations extracted by symbolic regression.
         This includes the complete Pareto front for each target.
         """
-        
-        # First, store all the equations in the predictor
-        equations = self.predictor.equations  # dict: memory_idx -> {output_name: sympy_expr}
+
+        # According to our metric the most complex equation is represented by an expression tree
+        # which is a chain of operations of size equal to maxsize.
+        equation = chain_expression(self.pysr_params['maxsize'])
         if log_dir is not None:
-            store_eq(equations, log_dir)
+            store_eq(equation, log_dir)
+
+        # Get equations for each memory slot
+        memory_eq_dir = os.path.join(log_dir, "memory_slots")
+        os.makedirs(memory_eq_dir, exist_ok=True)
+        self._store_memory_equations(memory_eq_dir)
+
+    def _store_memory_equations(self, dir):
+        """
+        Store the equations associated to each memory slot.
+        """
+        for mem_idx, eq_dict in equations.items():
+            mem_dir = os.path.join(dir, f"memory_slot_{mem_idx}")
+            os.makedirs(mem_dir, exist_ok=True)
+            for out_name, equation in eq_dict.items():
+                store_eq(equation)

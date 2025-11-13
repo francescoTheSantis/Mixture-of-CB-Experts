@@ -21,6 +21,7 @@ dependencies:
     - wandb
     - SciencePlots
     - hydra-core
+    - hydra-list-sweeper
     - plotly
     - scikit-learn-extra
     - datasets

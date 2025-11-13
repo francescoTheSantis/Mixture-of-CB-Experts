@@ -14,3 +14,18 @@ metadata:
   data_type: text
   concept_type: continuous
   pretrained_transformer: invokerliang/MWP-BERT-en
+
+equations:
+  - "c0 * ( c1 + c2 )"
+  - "c0 + c1 + c2"
+  - "c0 + c1 - c2"
+  - "( c0 + c1 ) / c2"
+  - "( c0 - c1 ) / c2"
+  - "c0 * ( c1 - c2 )"
+
+# x * ( y + z )
+# x + y + z
+# x + y - z
+# ( x + y ) / z
+# ( x - y ) / z
+# x * ( y - z )

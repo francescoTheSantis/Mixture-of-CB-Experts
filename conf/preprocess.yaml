@@ -1,0 +1,24 @@
+defaults:
+  - common
+  - _self_
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+      # This directory can be deleted as it only contains temporary files and the 
+      # preprocessed data will be saved in the cache.
+      dir: preprocess/${now:%Y-%m-%d_%H-%M-%S} 
+  sweeper:
+    params:
+      seed: 1, 2, 3, 4, 5
+      dataset: cub, cub_incomplete, awa2, awa2_incomplete, cifar10, mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum, mawps
+
+use_stored_dataset: False # Set this parameter to False to preprocess the dataset from scratch.
+extract_embeddings: True # Set this variable to true to preprocess the data using a pre-trained model.
+
+only_store_dataset: True # Only preprocess and store the dataset without training the model.
+
+# No need to set wandb parameters for preprocessing only.
+wandb:
+  entity: null
+  project: null

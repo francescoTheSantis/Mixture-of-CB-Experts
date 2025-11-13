@@ -12,6 +12,7 @@ from env import CACHE
 import sympy as sp
 import warnings
 warnings.filterwarnings("ignore")
+import re
 
 # DO NOT import PySRRegressor at module level - it will be imported lazily when needed
 # from pysr import PySRRegressor
@@ -391,6 +392,65 @@ def standardize_tensor(tensor, dim=0):
     standardized = (tensor - mean) / (std + eps)
 
     return standardized, mean, std
+
+
+def sanitize_concept_names(concept_names):
+    """
+    Create SymPy-safe concept names for a list of concept names.
+
+    This returns a tuple (safe_names, mapping) where safe_names is a list of
+    names guaranteed to be safe as SymPy variable identifiers and mapping is
+    a dict mapping original_name -> safe_name.
+
+    Behavior:
+      - Replace any character that is not alphanumeric or underscore with an
+        underscore.
+      - Collapse repeated underscores and strip leading/trailing underscores.
+      - If the resulting name starts with a digit, prefix it with an underscore.
+      - Ensure deterministic uniqueness by appending "_1", "_2", ... when
+        collisions occur after sanitization.
+
+    This preserves readable concept names (e.g. "eye-color" -> "eye_color",
+    "age (yrs)" -> "age_yrs") rather than mapping to generic names like
+    c0, c1.
+    """
+    safe_names = []
+    mapping = {}
+    seen = {}
+
+    for name in concept_names:
+        # Ensure string
+        orig = name
+        s = str(name)
+
+        # Replace non-alphanumeric (_ allowed) with underscore
+        s = re.sub(r'[^0-9A-Za-z_]+', '_', s)
+
+        # Collapse multiple underscores
+        s = re.sub(r'__+', '_', s)
+
+        # Strip leading/trailing underscores
+        s = s.strip('_')
+
+        # If empty after stripping, use placeholder
+        if s == '':
+            s = 'x'
+
+        # If starts with digit, prefix with underscore
+        if re.match(r'^[0-9]', s):
+            s = f"_{s}"
+
+        # Ensure uniqueness deterministically
+        base = s
+        count = seen.get(base, 0)
+        if count > 0:
+            s = f"{base}_{count}"
+        seen[base] = count + 1
+
+        safe_names.append(s)
+        mapping[orig] = s
+
+    return safe_names, mapping
 
 def save_licem_linear_coefficients(model, loaded_set, log_dir, split='train'):
     """

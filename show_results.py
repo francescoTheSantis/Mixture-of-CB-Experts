@@ -15,25 +15,24 @@ plt.style.use(['science', 'ieee', 'no-latex'])
 
 # Define the custom order
 # If the experiment you run does not contain a dataset, just remove it from the list.
-custom_order = [#'xor', \
-                #'dot', \
-                #'checkmark', \
-                #'trigonometry', \
-                #'mnist_addition', \
-                'cub', \
-                'awa2',
-                'awa2_incomplete',
-                'cub_incomplete',
-                #'cebab',
-                #'celeba',
-                'cifar10',
-                #'cifar100',
-                'dsprites_simple',
-                'dsprites_complex',
-                'mnist_arithmetic',
-                'pendulum',
-                #'mawps',
-                ]
+custom_order = [
+    'cub', 
+    'awa2',
+    'awa2_incomplete',
+    'cub_incomplete',
+    'cifar10',
+    'feynman_I_6_2',
+    'feynman_I_9_18',
+    'feynman_I_12_1',
+    'feynman_I_13_4',
+    'feynman_I_14_3',
+    'feynman_I_15_10',
+    'dsprites_simple',
+    'dsprites_complex',
+    'mnist_arithmetic',
+    'pendulum',
+    'mawps',
+]
 
 # Define a dictionary to associate marker, name, and color to each model.
 # If the experiment you run does not contain a model, just remove it from the dictionary.
@@ -53,11 +52,12 @@ model_styles = {
     'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:red', 'size': marker_size},
     'kan_symbolic_cbm': {'marker': 'X', 'name': 'Kan-Sym-CBM', 'color': 'tab:green', 'size': marker_size},
     'linear_symbolic_cbm': {'marker': 's', 'name': 'Lin-Sym-CBM', 'color': 'tab:blue', 'size': marker_size},
+    'prior_symbolic_cbm': {'marker': '*', 'name': 'Prior-Sym-CBM', 'color': 'tab:cyan', 'size': marker_size},
+    'sr_symbolic_cbm': {'marker': 'o', 'name': 'SR-Sym-CBM', 'color': 'tab:blue', 'size': marker_size},
     'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:brown', 'size': marker_size},
     'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:purple', 'size': marker_size},
 }
-
 
 # Call the function with the desired metric and font properties
 legend_font = {'size': 44}
@@ -65,65 +65,88 @@ title_font = {'size': 36, 'weight': 'bold'}
 label_font = {'size': 36}
 tick_font = {'size': 28}
 
+# Number of mechanisms of each dataset for which those are known
+fixed_memory={
+                'dsprites_simple': 1, 
+                'mnist_arithmetic': 4,
+                'dsprites_complex': 3,
+                'pendulum': 1
+            }
+
 def main():
 
-    result_figs = "figs"
+    result_figs = "results/figs"
     os.makedirs(result_figs, exist_ok=True)
 
-    table_path = "tabs"
+    table_path = "results/tabs"
     os.makedirs(table_path, exist_ok=True)
 
-    ########################################################################
-    ###### Visualize training/test distribution over licem's weights #######
-    ########################################################################
+    #######################################################################
+    ###### Visualize the results of the symbolic regression ablation ######
+    #######################################################################
+
+    # 1. show the accuracy results of symbolic regression tasks in tabular format
+    # 2. plot the intervention curves
+    # 3. compute the similarity between the learned expressions and the ground truth ones
+
+    paths = [
+        "output/sr_ablation/2025-11-13_12-51-09",
+    ]
 
     try:
+        performance, _ = get_exp_from_path(paths)
+        # Filter the performance dataframe to keep only the models in model_styles 
+        # and datasets in custom_order.
+        performance = performance[performance['model'].isin(model_styles.keys()) & \
+                                performance['dataset'].isin(custom_order)]
+        
+        show_symbolic_regression_results(performance, custom_order, table_path)
 
-        # LICEM weights path
-        weights_path = ""
-        # Store the training weights
-        train_w = torch.load(weights_path+'/learned_linear_coefficients_train.pt').squeeze(1)
-        #iterate over all the test weights and store them in a list
-        test_weights = {}
-        for file in os.listdir(weights_path):
-            if file.startswith('learned_linear_coefficients_test'):
-                key = file.replace('learned_linear_coefficients_test_', '').replace('.pt', '')
-                test_weights[key] = torch.load(os.path.join(weights_path, file)).squeeze(1)
+        # Now plot intervention results with noise=0.0
+        performance = get_intervention_from_path(paths, filtered_exps=None)
 
-        # read the c_names and y_names
-        with open(weights_path+'/c_names.txt', 'r') as f:
-            c_names = [line.strip() for line in f.readlines()]
-        with open(weights_path+'/y_names.txt', 'r') as f:
-            y_names = [line.strip() for line in f.readlines()]
+        # Filter the performance dataframe to keep only the models in model_styles 
+        # and datasets in custom_order.
+        performance = performance[performance['model'].isin(model_styles.keys()) & \
+                                performance['dataset'].isin(custom_order)]
 
-        # M-CBM-lin weights path
-        weights_path = ""
-        # Store the training weights
-        test_w_lcmr = torch.load(weights_path+'/pred_CBMs.pt').squeeze(1)
-
-        plot_licem_weights_distribution(
-            train_w, 
-            test_weights, 
-            test_w_lcmr,
-            result_figs, 
-            c_names, 
-            y_names,
-            title_font,
-            label_font,
-            tick_font,
-            legend_font
-        )
-
+        # Plot intervention results with noise=0.0
+        plot_intervention_results(performance, 
+                                    metric='accuracy', 
+                                    unique_noises=[0.0], 
+                                    title_font=title_font, 
+                                    label_font=label_font, 
+                                    tick_font=tick_font, 
+                                    legend_font=legend_font,
+                                    custom_order=regression_datasets,
+                                    model_styles=model_styles,
+                                    relative_accuracy=False,
+                                    out_dir=f'{result_figs}/sr_ablation')
     except Exception as e:
-        print(f"Error occurred while plotting LICEM weights distribution: {e}")
+        print(f"Error occurred while plotting Symbolic Regression ablation results: {e}")
 
+    ############################################################
+    ###### Visualize the results of concept size ablation ######
+    ############################################################
+
+    paths = [
+        "",
+    ]
+
+    try:
+        performance, _ = get_exp_from_path(paths)
+        # Plot the results on the concept size ablation
+        plot_concept_size_ablation(performance, model_styles, title_font, label_font, tick_font)
+    except Exception as e:
+        print(f"Error occurred while plotting memory ablation results: {e}")    
 
     ##################################################
     ######### Visualize performance results ##########
     ##################################################
 
+    # NOTE: for those experiments we show both accuracy and intervention results.
     paths = [
-        "/home/fdesantis/projects/Linear-Memory-Reasoner/stored_results/2025-11-10_20-15-03",
+        "",
     ]
 
     try:
@@ -133,7 +156,6 @@ def main():
         seeds_count = performance.groupby(['dataset', 'model', 'memory_size'])['seed'].nunique().reset_index()
         # Save in csv file
         seeds_count.to_csv(os.path.join(result_figs, 'seeds_count_memory_ablation.csv'), index=False)
-
 
         # Filter the performance dataframe to keep only the models in model_styles 
         # and datasets in custom_order.
@@ -159,13 +181,6 @@ def main():
     ##################################################
 
     try:
-
-        fixed_memory={
-                        'dsprites_simple': 1, 
-                        'mnist_arithmetic': 4,
-                        'dsprites_complex': 3,
-                        'pendulum': 1
-                    }
 
         performance, _ = get_exp_from_path(paths)
         # For the dataset for which we know the exact number of mechanisms, we select the memory size accordingly.
@@ -243,36 +258,49 @@ def main():
         print(f"Error occurred while getting intervention results from path: {e}")
 
 
-    ############################################################
-    ###### Visualize the results of concept size ablation ######
-    ############################################################
-
-    paths = [
-        "",
-    ]
+    ########################################################################
+    ###### Visualize training/test distribution over licem's weights #######
+    ########################################################################
 
     try:
-        performance, _ = get_exp_from_path(paths)
-        # Plot the results on the concept size ablation
-        plot_concept_size_ablation(performance, model_styles, title_font, label_font, tick_font)
+
+        # LICEM weights path
+        weights_path = ""
+        # Store the training weights
+        train_w = torch.load(weights_path+'/learned_linear_coefficients_train.pt').squeeze(1)
+        #iterate over all the test weights and store them in a list
+        test_weights = {}
+        for file in os.listdir(weights_path):
+            if file.startswith('learned_linear_coefficients_test'):
+                key = file.replace('learned_linear_coefficients_test_', '').replace('.pt', '')
+                test_weights[key] = torch.load(os.path.join(weights_path, file)).squeeze(1)
+
+        # read the c_names and y_names
+        with open(weights_path+'/c_names.txt', 'r') as f:
+            c_names = [line.strip() for line in f.readlines()]
+        with open(weights_path+'/y_names.txt', 'r') as f:
+            y_names = [line.strip() for line in f.readlines()]
+
+        # M-CBM-lin weights path
+        weights_path = ""
+        # Store the training weights
+        test_w_lcmr = torch.load(weights_path+'/pred_CBMs.pt').squeeze(1)
+
+        plot_licem_weights_distribution(
+            train_w, 
+            test_weights, 
+            test_w_lcmr,
+            result_figs, 
+            c_names, 
+            y_names,
+            title_font,
+            label_font,
+            tick_font,
+            legend_font
+        )
+
     except Exception as e:
-        print(f"Error occurred while plotting memory ablation results: {e}")
-
-
-    #######################################################################
-    ###### Visualize the results of the symbolic regression ablation ######
-    #######################################################################
-
-    #
-    paths = [
-        "",
-    ]
-
-    try:
-        performance, _ = get_exp_from_path(paths)
-        show_symbolic_regression_results(performance, model_styles, title_font, label_font, tick_font)
-    except Exception as e:
-        print(f"Error occurred while plotting memory ablation results: {e}")
+        print(f"Error occurred while plotting LICEM weights distribution: {e}")
 
 if __name__ == "__main__":
     main()

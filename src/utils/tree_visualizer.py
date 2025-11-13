@@ -76,9 +76,9 @@ class TreeVisualizer:
             tree: Root node of the expression tree
             
         Returns:
-            tuple: (NetworkX DiGraph, dict of node attributes)
+            tuple: (NetworkX Graph, dict of node attributes)
         """
-        G = nx.DiGraph()
+        G = nx.Graph()
         node_attrs = {}
         node_counter = [0]  # Use list to make it mutable in nested function
         input_counter = [0]  # Counter for input variables
@@ -160,12 +160,8 @@ class TreeVisualizer:
         
         # Draw the graph
         nx.draw_networkx_edges(G, pos, ax=ax, 
-                              arrows=True, 
-                              arrowsize=20,
-                              arrowstyle='->',
                               edge_color='#2c3e50',
                               width=2.5,
-                              node_size=3000,
                               alpha=0.7)
         
         # Draw nodes as grey hollow circles
@@ -211,15 +207,18 @@ class TreeVisualizer:
         Create a hierarchical layout for the tree (fallback when pygraphviz not available).
         
         Args:
-            G: NetworkX DiGraph (with edges from children to parents)
+            G: NetworkX Graph
             
         Returns:
             dict: Node positions
         """
-        # Find root (node with no outgoing edges, since edges point from children to parents)
-        root = [n for n in G.nodes() if G.out_degree(n) == 0][0]
+        # Find root (node with only one neighbor in a tree structure)
+        # In an undirected tree, we can use degree to find potential roots
+        # or just pick the first node with degree 1 or the first node overall
+        root = list(G.nodes())[0]
         
-        # Calculate levels (BFS from root, traversing backwards)
+        # For undirected graph, find a node that could be a root (any node works for BFS)
+        # We'll do BFS to assign levels
         levels = {}
         queue = [(root, 0)]
         visited = {root}
@@ -227,11 +226,11 @@ class TreeVisualizer:
         while queue:
             node, level = queue.pop(0)
             levels[node] = level
-            # Get predecessors (since edges go from children to parents)
-            for child in G.predecessors(node):
-                if child not in visited:
-                    visited.add(child)
-                    queue.append((child, level + 1))
+            # Get neighbors (undirected)
+            for neighbor in G.neighbors(node):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append((neighbor, level + 1))
         
         # Group nodes by level
         level_nodes = {}

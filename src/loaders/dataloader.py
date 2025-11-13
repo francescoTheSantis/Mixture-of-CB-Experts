@@ -25,7 +25,7 @@ from src.loaders.datasets.awa2 import (
     CONCEPT_SEMANTICS as awa2_concept_semantics,
     CONCEPT_GROUPS as awa2_concept_groups,
 )
-from src.utilities import get_type_from_name
+from src.utilities import get_type_from_name, sanitize_concept_names
 
 
 class TextDataset(torch.utils.data.Dataset):
@@ -216,12 +216,15 @@ class loader(object):
             
             self.concept_idxs_cifar = list(sorted(concept_idxs.keys()))
 
-    def get_names(self):
+    def get_names(self, cfg=None):
         """
         Get concept names, task names, and concept groups for the dataset.
         
         This method delegates to the dataset factory to retrieve metadata,
         eliminating hard-coded logic.
+        
+        Args:
+            cfg: Configuration object (required for some datasets)
         
         Returns:
             tuple: (concept_names, task_names, concept_groups)
@@ -229,10 +232,23 @@ class loader(object):
         # Build parameters for factory
         params = self._build_factory_params()
         
+        # Add cfg-specific parameters
+        if cfg is not None:
+            if self.name == 'cebab':
+                params['cfg'] = cfg
+            if self.name == 'mawps':
+                params['cfg'] = cfg
+        
         # Get dataset and metadata from factory
         _, _, _, metadata = get_dataset(self.name, **params)
         
-        return metadata.concept_names, metadata.task_names, metadata.concept_groups
+        # Ensure concept names are SymPy-safe before returning. We sanitize
+        # names by replacing spaces and special characters with underscores,
+        # collapsing repeated underscores, and prefixing an underscore if the
+        # name starts with a digit. This preserves readable names (e.g.
+        # "eye-color" -> "eye_color") rather than mapping to generic c0, c1.
+        safe_c_names, _ = sanitize_concept_names(metadata.concept_names)
+        return safe_c_names, metadata.task_names, metadata.concept_groups
     
     def _build_factory_params(self):
         """Build parameters dictionary for the dataset factory"""

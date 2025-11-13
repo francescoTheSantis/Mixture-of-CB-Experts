@@ -120,6 +120,65 @@ def boolean_and_expression(n_vars: int) -> sp.Expr:
     return expression
 
 
+def chain_expression(n: int) -> sp.Expr:
+    """
+    Generates a chain expression with n-1 edges: n_1 -> f_1 -> f_2 -> ... -> f_{N-1}.
+    
+    This function creates a chain starting with a single node n_1, followed by
+    N-1 function symbols representing edges. The chain represents a sequential 
+    computation: f_{N-1}(...f_2(f_1(n_1))...)
+    
+    Args:
+        n (int): Number defining the chain length. Must be at least 1.
+                The chain will have n-1 edges/functions.
+    
+    Returns:
+        sympy.Expr: Symbolic expression representing the chain.
+                    - For n=1: returns n_1
+                    - For n=2: returns f_1(n_1)
+                    - For n=3: returns f_2(f_1(n_1))
+                    - For n=4: returns f_3(f_2(f_1(n_1)))
+                    - For n=N: returns f_{N-1}(...f_2(f_1(n_1))...)
+        
+    Examples:
+        >>> expr = chain_expression(1)
+        >>> print(expr)
+        n_1
+        
+        >>> expr = chain_expression(2)
+        >>> print(expr)
+        f_1(n_1)
+        
+        >>> expr = chain_expression(3)
+        >>> print(expr)
+        f_2(f_1(n_1))
+        
+        >>> expr = chain_expression(4)
+        >>> print(expr)
+        f_3(f_2(f_1(n_1)))
+        
+    Raises:
+        ValueError: If n is not a positive integer.
+    """
+    if not isinstance(n, int) or n < 1:
+        raise ValueError("n must be a positive integer")
+    
+    # Start with node n_1
+    n_1 = sp.Symbol('n_1')
+    
+    # Handle case with no edges (n=1)
+    if n == 1:
+        return n_1
+    
+    # Build the chain: f_{N-1}(...f_2(f_1(n_1))...)
+    expression = n_1
+    for i in range(1, n):
+        f_i = sp.Function(f'f_{i}')
+        expression = f_i(expression)
+    
+    return expression
+
+
 def kan_expression(w: List[int], nonlinearity: Union[str, None] = None) -> sp.Expr:
     """
     Generates the symbolic expression for a Kolmogorov-Arnold Network (KAN).
@@ -284,7 +343,7 @@ if __name__ == "__main__":
     import os
     
     # Create output directory for visualizations
-    output_dir = "figures/expression_graphs"
+    output_dir = "figs/expression_graphs"
     os.makedirs(output_dir, exist_ok=True)
     
     # Example usage and testing
@@ -323,6 +382,24 @@ if __name__ == "__main__":
                    title="Boolean AND with Negations (3 variables)", 
                    save_path=f"{output_dir}/boolean_and_3vars.pdf")
     print()
+    
+    print("=" * 70)
+    print("CHAIN EXPRESSIONS")
+    print("=" * 70)
+    
+    print("Chain Expression (3 nodes):")
+    chain_expr_3 = chain_expression(3)
+    print(f"  Expression: {chain_expr_3}")
+    report_3 = complexity_report(chain_expr_3)
+    print(f"  Complexity: {report_3}")
+    
+    # Visualize smaller chain
+    print("  Generating graph visualization...")
+    chain_tree_3 = sympy_to_tree(chain_expr_3)
+    visualize_tree(chain_tree_3, 
+                   title="Chain Expression (3 nodes)", 
+                   save_path=f"{output_dir}/chain_3nodes.pdf")
+    print()
 
     print("=" * 70)
     print("KAN EXPRESSIONS")
@@ -358,7 +435,8 @@ if __name__ == "__main__":
     print("\nComplexity scales with network size:")
     print("  Linear (3 vars):         node_count =", complexity_report(linear_classifier_expression(3))['node_count'])
     print("  Boolean AND (3 vars):    node_count =", complexity_report(boolean_and_expression(3))['node_count'])
-    print("  KAN [2,1]:               node_count =", complexity_report(kan_expression([2, 1]))['node_count'])
+    print("  Chain (3 nodes):         node_count =", complexity_report(chain_expression(3))['node_count'])
+    print("  KAN 1 layer:               node_count =", complexity_report(kan_expression([2, 1]))['node_count'])
     print()
     
     print("=" * 70)
@@ -367,7 +445,8 @@ if __name__ == "__main__":
     print("\nComplexity scales with network size:")
     print("  Linear (3 vars):         visitation_length =", complexity_report(linear_classifier_expression(3))['visitation_length'])
     print("  Boolean AND (3 vars):    visitation_length =", complexity_report(boolean_and_expression(3))['visitation_length'])
-    print("  KAN [2,1]:               visitation_length =", complexity_report(kan_expression([2, 1]))['visitation_length'])
+    print("  Chain (3 nodes):         visitation_length =", complexity_report(chain_expression(3))['visitation_length'])
+    print("  KAN 1 layer:               visitation_length =", complexity_report(kan_expression([2, 1]))['visitation_length'])
     print()
 
     print("=" * 70)

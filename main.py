@@ -9,7 +9,7 @@ from src.utilities import set_seed, set_loggers, set_matmul_precision
 from src.utilities import update_config_from_data, is_valid_experiment, \
     generate_data_path, save_licem_linear_coefficients
 
-@hydra.main(config_path="conf", config_name="debugging")
+@hydra.main(config_path="conf", config_name="sr_ablation")
 def main(cfg: DictConfig) -> None:
 
     # Set the matmul precision according to the device
@@ -64,7 +64,7 @@ def main(cfg: DictConfig) -> None:
         return
 
     # Load the concept names and groups
-    c_names, y_names, c_groups = loader.get_names()
+    c_names, y_names, c_groups = loader.get_names(cfg)
 
     # Set the c_names and y_names in the config
     cfg = update_config_from_data(cfg, loaded_train, c_names, y_names, c_groups, csv_logger.log_dir)

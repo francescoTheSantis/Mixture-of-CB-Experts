@@ -198,7 +198,15 @@ class MAWPSDataset:
         self.concept_names = CONCEPT_NAMES
         self.pre_trained_transformer = pre_trained_transformer
 
-        if not already_created:
+        # Check if dataset files exist
+        train_file = os.path.join(MAWPS_DIR, 'mawps_train.pkl')
+        val_file = os.path.join(MAWPS_DIR, 'mawps_val.pkl')
+        test_file = os.path.join(MAWPS_DIR, 'mawps_test.pkl')
+        
+        files_exist = os.path.exists(train_file) and os.path.exists(val_file) and os.path.exists(test_file)
+        
+        # Create dataset if files don't exist or if explicitly requested
+        if not files_exist or not already_created:
 
             # load the dataset
             ds = load_dataset("mwpt5/MAWPS")
@@ -321,10 +329,10 @@ class MAWPSDataset:
             train_ds.to_pickle(f'{MAWPS_DIR}/mawps_train.pkl')
             val_ds.to_pickle(f'{MAWPS_DIR}/mawps_val.pkl')
             test_ds.to_pickle(f'{MAWPS_DIR}/mawps_test.pkl')
-            print(f"Datasets saved in {MAWPS_DIR}")
+            print(f"Datasets created and saved in {MAWPS_DIR}")
 
         else:
-            print(f"Using already created datasets in {MAWPS_DIR}")
+            print(f"Loading existing datasets from {MAWPS_DIR}")
         
         # load the datasets
         train_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, 'mawps_train.pkl')))
