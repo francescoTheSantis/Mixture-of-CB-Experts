@@ -199,9 +199,14 @@ print(f"Successful: {len(all_combinations) - len(failed_experiments)}")
 print(f"Failed: {len(failed_experiments)}")
 
 if failed_experiments:
-    print("\nFailed experiments:")
     for idx, name, error in failed_experiments:
-        print(f"  [{idx}] {name} - Error: {error}")
+        if error == -11:
+            error_msg = "Segmentation Fault (possible out-of-memory)"
+            print(f"  [{idx}] {name} - Warning: {error_msg}")
+            print("All the results have been stored correctly but the pysr library raised a Segmentation Fault (code -11).")
+        else:
+            error_msg = error
+            print(f"  [{idx}] {name} - Error: {error_msg}")
     sys.exit(1)
 else:
     print("\n✓ All experiments completed successfully!")

@@ -196,16 +196,47 @@ class SymbolicRegressorCBM(BaseModel):
             store_eq(equation, log_dir)
 
         # Get equations for each memory slot
-        # memory_eq_dir = os.path.join(log_dir, "memory_slots")
-        # os.makedirs(memory_eq_dir, exist_ok=True)
-        # self._store_memory_equations(memory_eq_dir)
+        if log_dir is not None:
+            memory_eq_dir = os.path.join(log_dir, "memory_slots")
+            os.makedirs(memory_eq_dir, exist_ok=True)
+            self._store_memory_equations(memory_eq_dir)
 
     def _store_memory_equations(self, dir):
         """
         Store the equations associated to each memory slot.
         """
-        for mem_idx, eq_dict in equations.items():
-            mem_dir = os.path.join(dir, f"memory_slot_{mem_idx}")
-            os.makedirs(mem_dir, exist_ok=True)
-            for out_name, equation in eq_dict.items():
-                store_eq(equation)
+        # Check if predictor has equations (i.e., if it's a SymbolicPredictor)
+        if hasattr(self.predictor, 'trainable_equations'):
+            # Store equations in both .pkl and text format
+            for mem_idx, set_name in enumerate(sorted(self.predictor.trainable_equations.keys())):
+                mem_dir = os.path.join(dir, f"memory_slot_{mem_idx}")
+                os.makedirs(mem_dir, exist_ok=True)
+                
+                # Create text file for this memory slot
+                text_file = os.path.join(mem_dir, "equations.txt")
+                with open(text_file, "w") as f:
+                    f.write(f"Memory Slot {mem_idx} (Set: {set_name})\n")
+                    f.write("=" * 60 + "\n\n")
+                    
+                    # Store each equation in this memory slot
+                    for eq_idx, eq_name in enumerate(self.predictor.equation_names[set_name]):
+                        eq_module = self.predictor.trainable_equations[set_name][eq_name]
+                        
+                        # Get the equation expression
+                        equation_expr = eq_module.sympy_expr
+                        
+                        # Store in pickle format
+                        store_eq(equation_expr, mem_dir, idx=eq_idx)
+                        
+                        # Write to text file
+                        f.write(f"Equation {eq_idx} ({eq_name}):\n")
+                        f.write(f"  Expression: {equation_expr}\n")
+                        f.write(f"  Parameters: {eq_module.get_param_values()}\n")
+                        f.write(f"  Current form: {eq_module.get_equation_string()}\n")
+                        f.write("\n")
+        else:
+            # Predictor doesn't have symbolic equations yet
+            no_equations_file = os.path.join(dir, "no_equations.txt")
+            with open(no_equations_file, "w") as f:
+                f.write("No symbolic equations available in memory yet.\n")
+                f.write("The predictor may be a BlackBoxPredictor or not yet trained.\n")

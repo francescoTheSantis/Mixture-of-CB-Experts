@@ -46,6 +46,9 @@ class Engine(pl.LightningModule):
         self.fine_tuning = fine_tuning
         self.fine_tuning_stage = None  # Will be set to 'pruning' during fine-tuning after pruning
 
+        # Initialize test predictions tracking
+        self.test_predictions = []
+
         # Set the metrics
         self._set_metrics()
 
@@ -188,6 +191,9 @@ class Engine(pl.LightningModule):
             y_hat_metrics = self.scaler.inverse_transform(y_hat_metrics)
         self.update_and_log_metrics('test', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
+        # Collect per-sample predictions for analysis
+        self._collect_test_sample_data(batch, batch_idx, model_output, y_hat_metrics, c_hat_metrics)
+
         return loss 
     
     def _denormalize(self, tensor):
@@ -201,6 +207,194 @@ class Engine(pl.LightningModule):
                 # Update the KAN grid
                 if self.current_epoch % 10 == 0 :
                     self.model.setup_kan_grid(self.grid_inputs)
+
+    def _collect_test_sample_data(self, batch, batch_idx, model_output, y_hat_metrics, c_hat_metrics):
+        """
+        Collect per-sample data during testing for later analysis.
+        """
+        batch_size = batch['y'].shape[0]
+        
+        # Get the selected memory slot index for each sample
+        if 'sampled_memory_idxs' in model_output:
+            # Shape: (batch_size, memory_size, n_samples)
+            memory_probs = model_output['sampled_memory_idxs']
+            # Get the index of selected memory slot (argmax across memory dimension)
+            selected_memory = torch.argmax(memory_probs[:, :, 0], dim=1)
+        elif 'selection_dist' in model_output:
+            # Shape: (batch_size, memory_size)
+            selected_memory = torch.argmax(model_output['selection_dist'], dim=1)
+        else:
+            # No memory selection available (shouldn't happen for the 4 target models)
+            selected_memory = torch.zeros(batch_size, dtype=torch.long)
+        
+        # Extract equations once for this batch
+        equations_per_slot = self._extract_memory_equations()
+        
+        # Store data for each sample in the batch
+        for i in range(batch_size):
+            memory_idx = selected_memory[i].item()
+            sample_data = {
+                'sample_idx': batch_idx * batch_size + i,
+                'equation': equations_per_slot.get(memory_idx, "No equation available"),
+                'c_pred': c_hat_metrics[i].detach().cpu().numpy(),
+                'y_pred': y_hat_metrics[i].detach().cpu().numpy(),
+                'c_true': batch['c'][i].detach().cpu().numpy(),
+                'y_true': batch['y'][i].detach().cpu().numpy(),
+            }
+            self.test_predictions.append(sample_data)
+
+    def _extract_memory_equations(self):
+        """
+        Extract equation strings for each memory slot based on model type.
+        Returns a dictionary mapping memory_slot_idx -> equation_string.
+        """
+        equations = {}
+        model_name = self.model_name
+        
+        if model_name == 'KANSymbolicCBM':
+            # Extract from KAN predictor or SymbolicPredictor
+            if hasattr(self.model.predictor, 'trainable_equations'):
+                # SymbolicPredictor with learned equations
+                for mem_idx, set_name in enumerate(sorted(self.model.predictor.trainable_equations.keys())):
+                    eq_strs = []
+                    for eq_name in self.model.predictor.equation_names[set_name]:
+                        eq_module = self.model.predictor.trainable_equations[set_name][eq_name]
+                        eq_strs.append(f"{eq_name}: {eq_module.get_equation_string()}")
+                    equations[mem_idx] = "; ".join(eq_strs)
+            elif hasattr(self.model.predictor, 'kans'):
+                # KANPredictor - abstract representation
+                for mem_idx in range(len(self.model.predictor.kans)):
+                    equations[mem_idx] = f"KAN{mem_idx}[{self.model.widths}]"
+            else:
+                equations[0] = "No equations available"
+        
+        elif model_name == 'LinearSymbolicCBM':
+            # Extract linear equations from memory
+            try:
+                equation_weights = self.model.linear_memory_predictor.equation_decoder(
+                    self.model.linear_memory_predictor.equation_memory.weight
+                )
+                equation_weights = equation_weights.view(
+                    self.model.memory_size, 
+                    len(self.model.linear_memory_predictor.parameters), 
+                    len(self.model.y_names)
+                )
+                weights_np = equation_weights.detach().cpu().numpy()
+                
+                for mem_idx in range(self.model.memory_size):
+                    eq_strs = []
+                    for out_idx, y_name in enumerate(self.model.y_names):
+                        # Build equation string
+                        terms = []
+                        n_concepts = len(self.model.c_names)
+                        for c_idx in range(n_concepts):
+                            weight = weights_np[mem_idx, c_idx, out_idx]
+                            if abs(weight) > 1e-6:  # Only include non-zero terms
+                                terms.append(f"{weight:.4f}*{self.model.c_names[c_idx]}")
+                        
+                        # Add bias
+                        if self.model.bias == 'local':
+                            bias_value = weights_np[mem_idx, -1, out_idx]
+                            terms.append(f"{bias_value:.4f}")
+                        elif self.model.bias == 'global':
+                            bias_value = self.model.linear_memory_predictor.bias_params[out_idx].item()
+                            terms.append(f"{bias_value:.4f}")
+                        
+                        eq_str = f"{y_name} = " + " + ".join(terms) if terms else f"{y_name} = 0"
+                        eq_strs.append(eq_str)
+                    
+                    equations[mem_idx] = "; ".join(eq_strs)
+            except Exception as e:
+                for mem_idx in range(getattr(self.model, 'memory_size', 1)):
+                    equations[mem_idx] = f"Error extracting equation: {str(e)}"
+        
+        elif model_name == 'PriorSymbolicCBM':
+            # Extract from prior_predictor
+            if hasattr(self.model.prior_predictor, 'trainable_equations'):
+                for mem_idx, set_name in enumerate(sorted(self.model.prior_predictor.trainable_equations.keys())):
+                    eq_strs = []
+                    for eq_name in self.model.prior_predictor.equation_names[set_name]:
+                        eq_module = self.model.prior_predictor.trainable_equations[set_name][eq_name]
+                        eq_strs.append(f"{eq_name}: {eq_module.get_equation_string()}")
+                    equations[mem_idx] = "; ".join(eq_strs)
+            else:
+                equations[0] = "No equations available"
+        
+        elif model_name == 'SymbolicRegressorCBM':
+            # Extract from predictor
+            if hasattr(self.model.predictor, 'trainable_equations'):
+                # SymbolicPredictor with learned equations
+                for mem_idx, set_name in enumerate(sorted(self.model.predictor.trainable_equations.keys())):
+                    eq_strs = []
+                    for eq_name in self.model.predictor.equation_names[set_name]:
+                        eq_module = self.model.predictor.trainable_equations[set_name][eq_name]
+                        eq_strs.append(f"{eq_name}: {eq_module.get_equation_string()}")
+                    equations[mem_idx] = "; ".join(eq_strs)
+            else:
+                # BlackBoxPredictor or not yet trained
+                for mem_idx in range(getattr(self.model, 'memory_size', 1)):
+                    equations[mem_idx] = "No symbolic equations (BlackBoxPredictor)"
+        
+        else:
+            # Other models - no memory-based equations
+            equations[0] = f"Model {model_name} does not use memory-based equations"
+        
+        return equations
+
+    def on_test_epoch_end(self):
+        """
+        Called at the end of the test epoch. Saves per-sample predictions to CSV.
+        """
+        if not hasattr(self, 'test_predictions') or len(self.test_predictions) == 0:
+            return
+        
+        print(f"\nProcessing {len(self.test_predictions)} test samples...")
+        
+        # Convert to DataFrame for easy saving
+        # Flatten arrays for CSV storage
+        records = []
+        for pred in self.test_predictions:
+            record = {
+                'sample_idx': pred['sample_idx'],
+                'equation': pred['equation'],
+            }
+            
+            # Add task predictions and ground truth
+            y_true = pred['y_true']
+            y_pred = pred['y_pred']
+            
+            # Handle both single and multi-output tasks
+            if y_true.ndim == 0 or (y_true.ndim == 1 and len(y_true) == 1):
+                # Single output
+                record['y_true'] = float(y_true) if y_true.ndim == 0 else float(y_true[0])
+                record['y_pred'] = float(y_pred) if y_pred.ndim == 0 else float(y_pred[0])
+            else:
+                # Multi-output
+                for task_idx, task_name in enumerate(self.class_names):
+                    record[f'y_true_{task_name}'] = float(y_true[task_idx])
+                    record[f'y_pred_{task_name}'] = float(y_pred[task_idx])
+            
+            # Add concept columns
+            c_true = pred['c_true']
+            c_pred = pred['c_pred']
+            
+            for c_idx, c_name in enumerate(self.c_names):
+                record[f'c_true_{c_name}'] = float(c_true[c_idx]) if c_true.ndim > 0 else float(c_true)
+                record[f'c_pred_{c_name}'] = float(c_pred[c_idx]) if c_pred.ndim > 0 else float(c_pred)
+            
+            records.append(record)
+        
+        df = pd.DataFrame(records)
+        
+        # Save to CSV in the log directory
+        save_path = os.path.join(self.csv_log_dir, 'test_predictions_per_sample.csv')
+        df.to_csv(save_path, index=False)
+        print(f"✓ Saved per-sample test predictions to: {save_path}")
+        print(f"  Total samples: {len(records)}")
+        print(f"  Columns: {list(df.columns)}")
+        
+        # Clear the predictions list for potential future test runs
+        self.test_predictions = []
 
     def configure_optimizers(self):
         return [self.optimizer], [self.scheduler]

@@ -4,6 +4,8 @@ from src.models.baselines.base import BaseModel
 from src.utils.expression_utils import linear_classifier_expression, store_eq
 from src.models.modules.selector import SelectorModel
 from src.models.modules.linear_predictor import LinearPredictor
+import os
+import sympy as sp
 
 class LinearSymbolicCBM(BaseModel):
     def __init__(self, 
@@ -171,3 +173,83 @@ class LinearSymbolicCBM(BaseModel):
         bias = True if self.bias != None else False
         equation = linear_classifier_expression(len(self.c_names), include_bias=bias)
         store_eq(equation, log_dir)
+
+        # Store equations for each memory slot
+        if log_dir is not None:
+            memory_eq_dir = os.path.join(log_dir, "memory_slots")
+            os.makedirs(memory_eq_dir, exist_ok=True)
+            self._store_memory_equations(memory_eq_dir)
+
+    def _store_memory_equations(self, dir):
+        """
+        Store the linear equations associated to each memory slot.
+        """
+        # Get the equation parameters from memory
+        equation_weights = self.linear_memory_predictor.equation_decoder(
+            self.linear_memory_predictor.equation_memory.weight
+        )
+        
+        # Reshape to: (memory_size, parameters, n_classes)
+        equation_weights = equation_weights.view(
+            self.memory_size, 
+            len(self.linear_memory_predictor.parameters), 
+            len(self.y_names)
+        )
+        
+        # Convert to numpy for easier processing
+        weights_np = equation_weights.detach().cpu().numpy()
+        
+        # Store equations for each memory slot
+        for mem_idx in range(self.memory_size):
+            mem_dir = os.path.join(dir, f"memory_slot_{mem_idx}")
+            os.makedirs(mem_dir, exist_ok=True)
+            
+            # Create text file for this memory slot
+            text_file = os.path.join(mem_dir, "equations.txt")
+            with open(text_file, "w") as f:
+                f.write(f"Memory Slot {mem_idx}\n")
+                f.write("=" * 60 + "\n\n")
+                
+                # Store each output equation in this memory slot
+                for out_idx, y_name in enumerate(self.y_names):
+                    # Build the symbolic expression
+                    expr = 0
+                    
+                    # Add weighted concept terms
+                    n_concepts = len(self.c_names)
+                    for c_idx in range(n_concepts):
+                        weight = weights_np[mem_idx, c_idx, out_idx]
+                        c_symbol = sp.Symbol(self.c_names[c_idx])
+                        expr += weight * c_symbol
+                    
+                    # Add bias if present
+                    if self.bias == 'local':
+                        # Local bias stored in the last parameter
+                        bias_value = weights_np[mem_idx, -1, out_idx]
+                        expr += bias_value
+                    elif self.bias == 'global':
+                        # Global bias stored separately
+                        bias_value = self.linear_memory_predictor.bias_params[out_idx].item()
+                        expr += bias_value
+                    
+                    # Store in pickle format
+                    store_eq(expr, mem_dir, idx=out_idx)
+                    
+                    # Write to text file
+                    f.write(f"Equation {out_idx} ({y_name}):\n")
+                    f.write(f"  Expression: {expr}\n")
+                    
+                    # Write weights in a readable format
+                    f.write(f"  Weights:\n")
+                    for c_idx, c_name in enumerate(self.c_names):
+                        weight = weights_np[mem_idx, c_idx, out_idx]
+                        f.write(f"    {c_name}: {weight:.6f}\n")
+                    
+                    if self.bias == 'local':
+                        bias_value = weights_np[mem_idx, -1, out_idx]
+                        f.write(f"    bias: {bias_value:.6f}\n")
+                    elif self.bias == 'global':
+                        bias_value = self.linear_memory_predictor.bias_params[out_idx].item()
+                        f.write(f"    bias (global): {bias_value:.6f}\n")
+                    
+                    f.write("\n")

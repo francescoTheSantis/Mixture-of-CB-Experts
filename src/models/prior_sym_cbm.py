@@ -3,7 +3,9 @@ import torch_concepts.nn as pyc_nn
 from src.models.baselines.base import BaseModel
 from src.models.modules.selector import SelectorModel
 from src.models.modules.symbolic_predictor import SymbolicPredictor
+from src.utils.expression_utils import store_eq
 import sympy as sp
+import os
 
 class PriorSymbolicCBM(BaseModel):
     def __init__(self, 
@@ -154,4 +156,64 @@ class PriorSymbolicCBM(BaseModel):
         """
         Returns the most complex equation stored in the memory.
         """
-        pass
+        # Find the most complex equation across all memory slots
+        max_complexity = 0
+        most_complex_eq = None
+        
+        for set_name in self.prior_predictor.trainable_equations.keys():
+            for eq_name in self.prior_predictor.equation_names[set_name]:
+                eq_module = self.prior_predictor.trainable_equations[set_name][eq_name]
+                eq_expr = eq_module.sympy_expr
+                
+                # Calculate complexity as the number of nodes in the expression tree
+                complexity = sum(1 for _ in sp.preorder_traversal(eq_expr))
+                
+                if complexity > max_complexity:
+                    max_complexity = complexity
+                    most_complex_eq = eq_expr
+        
+        # Store the most complex equation
+        if most_complex_eq is not None and log_dir is not None:
+            store_eq(most_complex_eq, log_dir)
+        
+        # Store equations for each memory slot
+        if log_dir is not None:
+            memory_eq_dir = os.path.join(log_dir, "memory_slots")
+            os.makedirs(memory_eq_dir, exist_ok=True)
+            self._store_memory_equations(memory_eq_dir)
+    
+    def _store_memory_equations(self, dir):
+        """
+        Store the prior equations associated to each memory slot.
+        """
+        # Store equations for each memory slot
+        for mem_idx, set_name in enumerate(sorted(self.prior_predictor.trainable_equations.keys())):
+            mem_dir = os.path.join(dir, f"memory_slot_{mem_idx}")
+            os.makedirs(mem_dir, exist_ok=True)
+            
+            # Create text file for this memory slot
+            text_file = os.path.join(mem_dir, "equations.txt")
+            with open(text_file, "w") as f:
+                f.write(f"Memory Slot {mem_idx} (Set: {set_name})\n")
+                f.write("=" * 60 + "\n\n")
+                
+                # Store each equation in this memory slot
+                for eq_idx, eq_name in enumerate(self.prior_predictor.equation_names[set_name]):
+                    eq_module = self.prior_predictor.trainable_equations[set_name][eq_name]
+                    
+                    # Get the equation expression
+                    equation_expr = eq_module.sympy_expr
+                    
+                    # Store in pickle format
+                    store_eq(equation_expr, mem_dir, idx=eq_idx)
+                    
+                    # Write to text file
+                    f.write(f"Equation {eq_idx} ({eq_name}):\n")
+                    f.write(f"  Original Expression: {equation_expr}\n")
+                    f.write(f"  Parameters: {eq_module.get_param_values()}\n")
+                    f.write(f"  Current form: {eq_module.get_equation_string()}\n")
+                    
+                    # Calculate and display complexity
+                    complexity = sum(1 for _ in sp.preorder_traversal(equation_expr))
+                    f.write(f"  Complexity (node count): {complexity}\n")
+                    f.write("\n")
