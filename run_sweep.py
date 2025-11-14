@@ -107,10 +107,9 @@ if LIST_PARAMS:
 print(f"Detected config groups: {CONFIG_GROUPS}")
 print()
 
-# Create output directory with timestamp
+# Prepare output directory path with timestamp (don't create it yet)
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 output_dir = f"test/{timestamp}"
-os.makedirs(output_dir, exist_ok=True)
 
 # Generate all combinations of parameters
 all_combinations = []
@@ -163,15 +162,12 @@ for i, combination in enumerate(all_combinations, 1):
     # Build all overrides including hydra output directory
     all_overrides = overrides + [f"hydra.run.dir={exp_output_dir}"]
     
-    # Build command that activates conda environment and runs the experiment
-    python_cmd = f"python main.py --config-name={CONFIG_NAME} {' '.join(all_overrides)}"
-    
-    # Use bash to source conda and activate the environment
+    # Build command to run the experiment
     cmd = [
-        'bash',
-        '-c',
-        f'source $(conda info --base)/etc/profile.d/conda.sh && conda activate lmr && {python_cmd}'
-    ]
+        sys.executable,  # Use the same Python interpreter as the one running this script
+        'main.py',
+        f'--config-name={CONFIG_NAME}'
+    ] + all_overrides
     
     print(f"\n[{i}/{len(all_combinations)}] Running experiment:")
     print(f"  Config: {', '.join(overrides)}")
