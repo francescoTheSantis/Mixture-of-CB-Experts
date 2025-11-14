@@ -66,6 +66,8 @@ def set_loggers(cfg):
     )
     # Define the tags for wandb
     tags = [cfg.dataset.metadata.name, cfg.model.metadata.name, cfg.note]
+    # Filter out None values from tags
+    tags = [tag for tag in tags if tag is not None]
     # Define the group for wandb
     group = group_format.format(**parse_hyperparams(cfg))
     if cfg.wandb.project is None or cfg.wandb.entity is None:

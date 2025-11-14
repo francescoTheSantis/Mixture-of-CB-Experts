@@ -5,11 +5,11 @@ defaults:
 hydra:
   mode: MULTIRUN
   sweep:
-      dir: output/sym_cmr_kan/${now:%Y-%m-%d_%H-%M-%S}
+      dir: output/kan_sym_cbm/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
       seed: 1, 2, 3, 4, 5
       memory_size: 1, 2, 3, 4, 5, 10, 20
       #dataset: cub, cub_incomplete, awa2, awa2_incomplete, mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum
       dataset: mnist_arithmetic, dsprites_simple, dsprites_complex, pendulum
-      model: sym_cmr_kan
+      model: kan_sym_cbm

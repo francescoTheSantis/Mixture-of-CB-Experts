@@ -40,7 +40,7 @@ custom_order = [
 marker_size = 18
 
 # Define complexity order
-models = list(reversed(['blackbox', 'cem', 'kan_symbolic_cbm', 'licem', 'linear_symbolic_cbm', 'dcr', 'cmr']))
+# models = list(reversed(['blackbox', 'cem', 'kan_symbolic_cbm', 'licem', 'linear_symbolic_cbm', 'dcr', 'cmr']))
 
 # Generate colors from a colormap
 cmap = plt.cm.RdYlGn 

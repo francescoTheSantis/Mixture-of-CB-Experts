@@ -117,7 +117,7 @@ class SymbolicRegressorCBM(BaseModel):
             'extra_sympy_mappings': extra_functions,
             'elementwise_loss': "loss(prediction, target) = (prediction - target)^2",
             'complexity_of_constants': 1,
-            'timeout_in_seconds': 60 * 3,
+            'timeout_in_seconds': 10, #60 * 3,
             'maxsize': 30,  # Limit the size of the equations.
             'maxdepth': 30,  # Limit the depth of the equations to maxsize so that the most complex expression tree is a chain (easy to compute).
         }
@@ -196,9 +196,9 @@ class SymbolicRegressorCBM(BaseModel):
             store_eq(equation, log_dir)
 
         # Get equations for each memory slot
-        memory_eq_dir = os.path.join(log_dir, "memory_slots")
-        os.makedirs(memory_eq_dir, exist_ok=True)
-        self._store_memory_equations(memory_eq_dir)
+        # memory_eq_dir = os.path.join(log_dir, "memory_slots")
+        # os.makedirs(memory_eq_dir, exist_ok=True)
+        # self._store_memory_equations(memory_eq_dir)
 
     def _store_memory_equations(self, dir):
         """

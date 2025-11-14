@@ -58,7 +58,7 @@ def get_df_name(df):
     elif df=='dsprites_simple':
         return 'dSprites-Exp.'
     elif df=='dsprites_complex':
-        return 'dSprites-Memory'
+        return 'dSprites-Composed'
     elif df=='mnist_arithmetic':
         return 'MNIST-Arith.'
     elif df=='pendulum':
