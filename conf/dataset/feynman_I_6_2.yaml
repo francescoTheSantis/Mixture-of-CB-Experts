@@ -21,4 +21,5 @@ latent_size: 2
 
 # Feynman I.6.2: exp(-(theta/sigma)**2/2) / (sqrt(2*pi) * sigma)
 # Variables: c0=theta, c1=sigma
-equations: "exp(-(c0/c1)**2/2) / (sqrt(2*pi) * c1)"
+equations: 
+  - "exp(-(c0/c1)**2/2) / (sqrt(2*pi) * c1)"

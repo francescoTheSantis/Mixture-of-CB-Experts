@@ -21,4 +21,5 @@ latent_size: 2
 
 # Feynman I.12.1: mu * Nn (simple multiplication)
 # Variables: c0=mu, c1=Nn
-equations: "c0 * c1"
+equations: 
+  - "c0 * c1"

@@ -22,4 +22,5 @@ latent_size: 2
 # Feynman I.15.10: m0 * v / sqrt(1 - v**2/c**2)
 # Relativistic momentum
 # Variables: c0=m0, c1=v, c2=c
-equations: "c0 * c1 / sqrt(1 - c1**2/c2**2)"
+equations: 
+  - "c0 * c1 / sqrt(1 - c1**2/c2**2)"

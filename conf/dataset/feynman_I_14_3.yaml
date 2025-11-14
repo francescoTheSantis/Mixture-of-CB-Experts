@@ -22,4 +22,5 @@ latent_size: 2
 # Feynman I.14.3: m * g * z
 # Potential energy
 # Variables: c0=m, c1=g, c2=z
-equations: "c0 * c1 * c2"
+equations:  
+  - "c0 * c1 * c2"

@@ -22,4 +22,5 @@ latent_size: 4
 # Feynman I.9.18: G*m1*m2/((x2-x1)**2 + (y2-y1)**2 + (z2-z1)**2)
 # Gravitational force
 # Variables: c0=G, c1=m1, c2=m2, c3=x1, c4=x2, c5=y1, c6=y2, c7=z1, c8=z2
-equations: "c0*c1*c2/((c4-c3)**2 + (c6-c5)**2 + (c8-c7)**2)"
+equations: 
+  - "c0*c1*c2/((c4-c3)**2 + (c6-c5)**2 + (c8-c7)**2)"

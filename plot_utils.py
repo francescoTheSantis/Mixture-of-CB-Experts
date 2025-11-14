@@ -90,7 +90,8 @@ regression_datasets = [
     'dsprites_simple', 
     'dsprites_complex', 
     'pendulum', 
-    'mawps']
+    'mawps'
+]
 
 #########################################
 ######### Data Extraction ###############

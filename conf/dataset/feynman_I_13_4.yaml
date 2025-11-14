@@ -22,4 +22,5 @@ latent_size: 3
 # Feynman I.13.4: (1/2) * m * (v**2 + u**2 + w**2)
 # Kinetic energy
 # Variables: c0=m, c1=v, c2=u, c3=w
-equations: "(1/2) * c0 * (c1**2 + c2**2 + c3**2)"
+equations: 
+  - "(1/2) * c0 * (c1**2 + c2**2 + c3**2)"

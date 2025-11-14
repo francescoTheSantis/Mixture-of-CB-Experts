@@ -194,6 +194,12 @@ class TrainableEquation(nn.Module):
         elif expr.func == sympy.tanh:
             return torch.tanh(self._sympy_to_torch(expr.args[0], var_dict))
 
+        elif expr == sympy.E:
+            return torch.tensor(np.e, dtype=torch.float32, device=next(iter(var_dict.values())).device)
+        
+        elif expr == sympy.pi:
+            return torch.tensor(np.pi, dtype=torch.float32, device=next(iter(var_dict.values())).device)
+
         else:
             raise NotImplementedError(f"Function {expr.func} not implemented")
     
