@@ -154,8 +154,8 @@ class Trainer:
                 epochs = self.cfg.max_epochs
 
             # Update the grid
-            self.model.model.setup_kan_grid(self.kan_inputs)
-            
+            self.model.model.setup_kan_grid(self.kan_inputs) 
+
         # For SR-Sym-CBM, collect data for symbolic fine-tuning
         elif model_name == 'sr_symbolic_cbm':
             epochs = self.cfg.max_epochs

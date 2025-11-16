@@ -97,12 +97,12 @@ class KANPredictor(nn.Module):
             # Get the symbolic formula
             kan_layer.auto_symbolic(lib=SYMBOLIC_LIB)
 
-            try:
-                # Plot the kan layer using the authors' plotting function
-                self._sync_kan_tensors_to_device(kan_layer)
-                kan_layer.plot(os.getcwd(), idx=i+1) # so that the count starts from 1
-            except Exception as e:
-                print(f"Warning: could not plot KAN layer {i} due to error: {e}")
+            # try:
+            #     # Plot the kan layer using the authors' plotting function
+            #     self._sync_kan_tensors_to_device(kan_layer)
+            #     kan_layer.plot(os.getcwd(), idx=i+1) # so that the count starts from 1
+            # except Exception as e:
+            #     print(f"Warning: could not plot KAN layer {i} due to error: {e}")
 
             # Get the symbolic formulas and variable names
             equations_set = {}
@@ -157,10 +157,7 @@ class KANPredictor(nn.Module):
         # Execute all the KAN layers
         eq_outputs = []
         for i, kan_layer in enumerate(self.kans):
-            if self.regularize:
-                eq_output = kan_layer(input_concepts, singularity_avoiding=True, y_th=1000)
-            else:
-                eq_output = kan_layer(input_concepts)
+            eq_output = kan_layer(input_concepts, singularity_avoiding=True, y_th=1000)
             eq_outputs.append(eq_output)
         # Stack the outputs along the class dimension
         eq_outputs = torch.stack(eq_outputs, dim=1) # shape: (bsz, memory_size, n_targets)

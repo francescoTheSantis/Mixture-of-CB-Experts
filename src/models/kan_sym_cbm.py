@@ -34,7 +34,7 @@ class KANSymbolicCBM(BaseModel):
                  decay_rate='cosine',
                  embedding_memory=False,
                  concept_penalty=1.0,
-                 regularize=False,
+                 regularize=True,
                  widths=None,
                  device='cpu',
                  **kwargs
@@ -123,6 +123,7 @@ class KANSymbolicCBM(BaseModel):
             speed_up_training=self.speed_up_training,
             auto_save=auto_save,
             y_names=self.y_names,
+            regularize=self.regularize,
         )
 
     def setup_kan_grid(self, grid_inputs):
