@@ -109,7 +109,7 @@ print()
 
 # Prepare output directory path with timestamp (don't create it yet)
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-output_dir = f"test/{timestamp}"
+output_dir = f"output/{CONFIG_NAME}/{timestamp}"
 
 # Generate all combinations of parameters
 all_combinations = []
@@ -160,7 +160,12 @@ for i, combination in enumerate(all_combinations, 1):
     exp_output_dir = os.path.join(output_dir, exp_name)
     
     # Build all overrides including hydra output directory
-    all_overrides = overrides + [f"hydra.run.dir={exp_output_dir}"]
+    # CRITICAL: Set hydra.mode=RUN to prevent multirun mode which creates numbered dirs
+    all_overrides = overrides + [
+        "hydra.mode=RUN",  # Force RUN mode instead of MULTIRUN
+        f"hydra.run.dir={exp_output_dir}",
+        f"hydra.sweep.dir={output_dir}"
+    ]
     
     # Build command to run the experiment
     cmd = [

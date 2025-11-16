@@ -37,7 +37,6 @@ class KANSymbolicCBM(BaseModel):
                  regularize=False,
                  widths=None,
                  device='cpu',
-                 speed_up_training=False,
                  **kwargs
                  ):
 
@@ -73,7 +72,12 @@ class KANSymbolicCBM(BaseModel):
         self.regularize = regularize
         self.symbolic_predictors = False
         self.device = device
-        self.speed_up_training = speed_up_training
+
+        # set the speed_up_training based on the output size
+        if self.output_size == 1:
+            self.speed_up_training = False
+        else:
+            self.speed_up_training = True
 
         if widths is not None:
             self.widths = widths

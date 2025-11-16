@@ -2225,15 +2225,15 @@ class MultKAN(nn.Module):
                         print(f'fixing ({l},{i},{j}) with 0')
                     else:
                         name, fun, r2, c = self.suggest_symbolic(l, i, j, a_range=a_range, b_range=b_range, lib=lib, verbose=False, weight_simple=weight_simple)
-                        # if r2 >= r2_threshold:
-                        #     self.fix_symbolic(l, i, j, name, verbose=verbose > 1, log_history=False)
-                        #     if verbose >= 1:
-                        #         print(f'fixing ({l},{i},{j}) with {name}, r2={r2}, c={c}')
-                        # else:
-                        #     print(f'For ({l},{i},{j}) the best fit was {name}, but r^2 = {r2} and this is lower than {r2_threshold}. This edge was omitted, keep training or try a different threshold.')
-                        self.fix_symbolic(l, i, j, name, verbose=verbose > 1, log_history=False)
-                        if verbose >= 1:
-                            print(f'fixing ({l},{i},{j}) with {name}, r2={r2}, c={c}')
+                        if r2 >= r2_threshold:
+                            self.fix_symbolic(l, i, j, name, verbose=verbose > 1, log_history=False)
+                            if verbose >= 1:
+                                print(f'fixing ({l},{i},{j}) with {name}, r2={r2}, c={c}')
+                        else:
+                            print(f'For ({l},{i},{j}) the best fit was {name}, but r^2 = {r2} and this is lower than {r2_threshold}. This edge was omitted, keep training or try a different threshold.')
+                        # self.fix_symbolic(l, i, j, name, verbose=verbose > 1, log_history=False)
+                        # if verbose >= 1:
+                        #     print(f'fixing ({l},{i},{j}) with {name}, r2={r2}, c={c}')
 
         # We do not log history in order to spare time
         # self.log_history('auto_symbolic')

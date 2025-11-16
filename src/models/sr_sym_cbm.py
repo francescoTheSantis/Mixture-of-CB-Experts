@@ -116,10 +116,9 @@ class SymbolicRegressorCBM(BaseModel):
             'unary_operators': unary_operators,
             'extra_sympy_mappings': extra_functions,
             'elementwise_loss': "loss(prediction, target) = (prediction - target)^2",
-            'complexity_of_constants': 1,
-            'timeout_in_seconds': 10, #60 * 3,
-            'maxsize': 30,  # Limit the size of the equations.
-            'maxdepth': 30,  # Limit the depth of the equations to maxsize so that the most complex expression tree is a chain (easy to compute).
+            # 'timeout_in_seconds': 60 * 3,
+            'maxsize': 40,  # Limit the size of the equations.
+            'maxdepth': 40,  # Limit the depth of the equations to maxsize so that the most complex expression tree is a chain (easy to compute).
         }
 
         # Instantiate the predictor

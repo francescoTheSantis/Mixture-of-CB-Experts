@@ -97,13 +97,14 @@ regression_datasets = [
 ######### Data Extraction ###############
 #########################################
 
-def get_exp_from_path(paths):
+def get_exp_from_path(path):
     # Collect all the experiments in the given paths
     exps_path = []
     lmr_paths = []
-    for path in paths:
-        exps = os.listdir(path)
-        exps_path += [os.path.join(path, exp) for exp in exps if 'multirun' not in exp]
+    experiment_dir = os.listdir(path)
+    for exp in experiment_dir:
+        exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
+
 
     performance = pd.DataFrame()
 
@@ -111,7 +112,7 @@ def get_exp_from_path(paths):
     for exp in exps_path:
         d = {}
         conf_file = os.path.join(exp, '.hydra/config.yaml')
-        result_file = os.path.join(exp, 'logs/experiment_metrics/version_0/metrics.csv') 
+        result_file = os.path.join(exp, 'logs/experiment_metrics/metrics.csv') 
         try: 
             if os.path.exists(conf_file) and os.path.exists(result_file):
                 with open(conf_file, 'r') as file:
@@ -126,7 +127,7 @@ def get_exp_from_path(paths):
                 d['path'] = exp
 
                 with open(result_file, 'r') as file:
-                    result = pd.read_csv(file, header=0)
+                    result = pd.read_csv(file)
 
                 # Select the last row of the dataframe where we test the model
                 # if 'test/y/acc' and 'test_concept_acc' are not in the dataframe, skip the experiment
@@ -144,8 +145,6 @@ def get_exp_from_path(paths):
                         d['concept_mae'] = result['test/c/mae'].iloc[-1]
                     else:
                         d['concept_acc'] = result['test/c/acc'].iloc[-1]
-
-                print(d)
                 
                 if d['model'] == 'linear_symbolic_cbm' and d['seed']==1:
                     expl_dict = d.copy()
@@ -155,22 +154,25 @@ def get_exp_from_path(paths):
                 performance = pd.concat([performance, pd.DataFrame([d])], ignore_index=True)
         except Exception as e:
             print(f"Error while processing {exp}: {e}")
+            print(f"Skipping this experiment: {d}")
             continue
 
     return performance, lmr_paths
 
-def get_intervention_from_path(paths, filtered_exps=None):
+def get_intervention_from_path(path, filtered_exps=None):
     performance = pd.DataFrame()
 
+    # Collect all the experiments in the given paths
     exps_path = []
     lmr_paths = []
-    for path in paths:
-        exps = os.listdir(path)
-        exps_path += [os.path.join(path, exp) for exp in exps if 'multirun' not in exp]
+    experiment_dir = os.listdir(path)
+    for exp in experiment_dir:
+        exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
+
 
     for exp in exps_path:
         conf_file = os.path.join(exp, '.hydra/config.yaml')
-        result_file = os.path.join(exp, 'logs/experiment_metrics/version_0/interventions.csv')        
+        result_file = os.path.join(exp, 'logs/experiment_metrics/interventions.csv')        
         if os.path.exists(conf_file) and os.path.exists(result_file):
             with open(result_file, 'r') as file:
                 d = pd.read_csv(result_file)[['noise','p_int','f1','accuracy','mae','mse']]
@@ -1770,7 +1772,496 @@ def show_symbolic_regression_results(
     create_latex_tables_from_csv(f'{table_dir}/sr_ablation_performance.csv', output_dir=table_dir)
 
 
+def compute_ted_metrics_for_sr_ablation(path):
+    """
+    Compute Tree Edit Distance (TED) metrics for symbolic regression ablation experiments.
+    
+    This function:
+    - Lists all experiment directories
+    - For each experiment, loads learned equations from the model's memory slots
+    - Loads true equations from the corresponding prior_symbolic_cbm model's memory slots
+    - Computes TED between all combinations of learned and true equations
+    - Assigns memory equations to true equations via optimal matching (minimizing total TED)
+    - Computes average TED for each experiment
+    - Returns a CSV with dataset, model, seed, and averaged TED
+    
+    Args:
+        path: Path to the sr_ablation output directory
+        
+    Returns:
+        pd.DataFrame with columns: dataset, model, seed, avg_ted
+    """
+    import dill
+    import pickle
+    try:
+        from scipy.optimize import linear_sum_assignment
+        use_scipy = True
+    except Exception as e:
+        print(f"Warning: Could not import scipy.optimize.linear_sum_assignment: {e}")
+        print("Using greedy assignment algorithm instead")
+        use_scipy = False
+    from src.utils.ted import sympy_to_tree, ted_weighted, make_costs
+    from sympy import sympify
+    
+    def greedy_assignment(cost_matrix):
+        """Greedy assignment algorithm as fallback when scipy fails."""
+        n_rows, n_cols = cost_matrix.shape
+        row_ind = []
+        col_ind = []
+        available_cols = set(range(n_cols))
+        
+        # For each row, assign to the best available column
+        for i in range(n_rows):
+            if not available_cols:
+                break
+            best_col = min(available_cols, key=lambda j: cost_matrix[i, j])
+            row_ind.append(i)
+            col_ind.append(best_col)
+            available_cols.remove(best_col)
+        
+        return np.array(row_ind), np.array(col_ind)
+    
+    # Collect all experiment paths
+    exps_path = []
+    experiment_dir = os.listdir(path)
+    for exp in experiment_dir:
+        exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
+    
+    results = []
+    
+    # Group experiments by (dataset, seed) to find corresponding prior model
+    exp_groups = {}
+    for exp_path in exps_path:
+        try:
+            config_file = os.path.join(exp_path, '.hydra/config.yaml')
+            if not os.path.exists(config_file):
+                continue
+                
+            with open(config_file, 'r') as f:
+                config = yaml.safe_load(f)
+            
+            dataset_name = config['dataset']['metadata']['name']
+            model_name = config['model']['metadata']['name']
+            seed = config['seed']
+            
+            key = (dataset_name, seed)
+            if key not in exp_groups:
+                exp_groups[key] = {}
+            exp_groups[key][model_name] = exp_path
+        except Exception as e:
+            continue
+    
+    # Process each experiment group
+    for (dataset_name, seed), models in tqdm(exp_groups.items(), desc="Processing experiment groups"):
+        # Find the prior_symbolic_cbm model for this dataset/seed
+        prior_model_path = models.get('prior_symbolic_cbm')
+        
+        if prior_model_path is None:
+            print(f"Warning: No prior_symbolic_cbm found for dataset={dataset_name}, seed={seed}")
+            # Skip all models in this group since we need the prior as ground truth
+            continue
+        
+        # Load true equations from prior model's memory slots
+        prior_memory_dir = os.path.join(prior_model_path, 'logs/experiment_metrics/equations/memory_slots')
+        if not os.path.exists(prior_memory_dir):
+            print(f"Warning: No memory slots found for prior model at {prior_model_path}")
+            continue
+        
+        prior_memory_slots = [d for d in os.listdir(prior_memory_dir) if d.startswith('memory_slot_')]
+        
+        true_equations = []
+        for mem_slot in prior_memory_slots:
+            mem_slot_dir = os.path.join(prior_memory_dir, mem_slot)
+            eq_files = [f for f in os.listdir(mem_slot_dir) if f.startswith('equation_') and f.endswith('.pkl')]
+            
+            for eq_file in eq_files:
+                eq_path = os.path.join(mem_slot_dir, eq_file)
+                try:
+                    with open(eq_path, 'rb') as f:
+                        eq = dill.load(f)
+                    true_equations.append(eq)
+                except Exception as e:
+                    print(f"Error loading prior equation from {eq_path}: {e}")
+                    continue
+        
+        if not true_equations:
+            print(f"Warning: No equations found in prior model for dataset={dataset_name}, seed={seed}")
+            continue
+        
+        # Convert true equations to trees once
+        weight_fn, rename_fn = make_costs()
+        true_trees = []
+        for eq in true_equations:
+            try:
+                tree = sympy_to_tree(eq, canonicalize_commutative=True, enforce_mul_for_add_terms=True)
+                true_trees.append(tree)
+            except Exception as e:
+                print(f"Error converting true equation to tree: {e}")
+                continue
+        
+        if not true_trees:
+            continue
+        
+        # Now process all other models in this group
+        for model_name, exp_path in models.items():
+            # Process prior_symbolic_cbm as well to show TED=0 as sanity check
+            
+            try:
+                # Find learned equations for this model
+                memory_slots_dir = os.path.join(exp_path, 'logs/experiment_metrics/equations/memory_slots')
+                if not os.path.exists(memory_slots_dir):
+                    print(f"No memory slots directory found for {exp_path}")
+                    continue
+                
+                memory_slots = [d for d in os.listdir(memory_slots_dir) if d.startswith('memory_slot_')]
+                
+                # Load all learned equations from memory slots
+                learned_equations = []
+                for mem_slot in memory_slots:
+                    mem_slot_dir = os.path.join(memory_slots_dir, mem_slot)
+                    eq_files = [f for f in os.listdir(mem_slot_dir) if f.startswith('equation_') and f.endswith('.pkl')]
+                    
+                    for eq_file in eq_files:
+                        eq_path = os.path.join(mem_slot_dir, eq_file)
+                        try:
+                            with open(eq_path, 'rb') as f:
+                                eq = dill.load(f)
+                            learned_equations.append(eq)
+                        except Exception as e:
+                            print(f"Error loading equation from {eq_path}: {e}")
+                            continue
+                
+                if not learned_equations:
+                    print(f"No learned equations found for {exp_path}")
+                    continue
+                
+                # Convert learned equations to trees
+                learned_trees = []
+                for eq in learned_equations:
+                    try:
+                        tree = sympy_to_tree(eq, canonicalize_commutative=True, enforce_mul_for_add_terms=True)
+                        learned_trees.append(tree)
+                    except Exception as e:
+                        print(f"Error converting learned equation to tree: {e}")
+                        continue
+                
+                if not learned_trees:
+                    continue
+                
+                # Compute TED matrix: rows = learned equations, cols = true equations
+                n_learned = len(learned_trees)
+                n_true = len(true_trees)
+                ted_matrix = np.zeros((n_learned, n_true))
+                
+                for i, learned_tree in enumerate(learned_trees):
+                    for j, true_tree in enumerate(true_trees):
+                        try:
+                            ted = ted_weighted(learned_tree, true_tree, weight_fn, rename_fn)
+                            ted_matrix[i, j] = ted
+                        except Exception as e:
+                            print(f"Error computing TED: {e}")
+                            ted_matrix[i, j] = np.inf
+                
+                # Optimal assignment: minimize total TED
+                # If dimensions don't match, pad with high cost
+                if n_learned != n_true:
+                    max_dim = max(n_learned, n_true)
+                    padded_matrix = np.full((max_dim, max_dim), np.max(ted_matrix) * 10)
+                    padded_matrix[:n_learned, :n_true] = ted_matrix
+                    if use_scipy:
+                        row_ind, col_ind = linear_sum_assignment(padded_matrix)
+                    else:
+                        row_ind, col_ind = greedy_assignment(padded_matrix)
+                    # Filter out padded assignments
+                    valid_mask = (row_ind < n_learned) & (col_ind < n_true)
+                    row_ind = row_ind[valid_mask]
+                    col_ind = col_ind[valid_mask]
+                else:
+                    if use_scipy:
+                        row_ind, col_ind = linear_sum_assignment(ted_matrix)
+                    else:
+                        row_ind, col_ind = greedy_assignment(ted_matrix)
+                
+                # Compute average TED for the optimal assignment
+                assigned_teds = [ted_matrix[i, j] for i, j in zip(row_ind, col_ind)]
+                avg_ted = np.mean(assigned_teds) if assigned_teds else np.nan
+                
+                results.append({
+                    'dataset': dataset_name,
+                    'model': model_name,
+                    'seed': seed,
+                    'avg_ted': avg_ted,
+                    'n_learned': n_learned,
+                    'n_true': n_true
+                })
+                
+            except Exception as e:
+                print(f"Error processing experiment {exp_path}: {e}")
+                continue
+    
+    # Create DataFrame
+    results_df = pd.DataFrame(results)
+    return results_df
 
+
+def compute_equation_complexity_for_sr_ablation(path):
+    """
+    Compute complexity (visitation length) of learned equations for symbolic regression ablation.
+    
+    This function:
+    - Lists all experiment directories
+    - For each experiment, loads learned equations from the model's memory slots
+    - Computes complexity (visitation length) for each equation
+    - Averages complexity across all equations in the memory (if memory_size > 1)
+    - Groups by (dataset, model, seed) and then averages across seeds
+    - Returns a CSV with dataset, model, and averaged complexity metrics
+    
+    Args:
+        path: Path to the sr_ablation output directory
+        
+    Returns:
+        pd.DataFrame with columns: dataset, model, mean_complexity, std_complexity, n_seeds
+    """
+    import dill
+    from src.utils.complexity import compute_complexity
+    
+    # Collect all experiment paths
+    exps_path = []
+    experiment_dir = os.listdir(path)
+    for exp in experiment_dir:
+        exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
+    
+    results = []
+    
+    # Process each experiment
+    for exp_path in tqdm(exps_path, desc="Processing experiments for complexity"):
+        try:
+            # Load config to get dataset info, model, seed
+            config_file = os.path.join(exp_path, '.hydra/config.yaml')
+            if not os.path.exists(config_file):
+                continue
+                
+            with open(config_file, 'r') as f:
+                config = yaml.safe_load(f)
+            
+            dataset_name = config['dataset']['metadata']['name']
+            model_name = config['model']['metadata']['name']
+            seed = config['seed']
+            
+            # Find all memory slots
+            memory_slots_dir = os.path.join(exp_path, 'logs/experiment_metrics/equations/memory_slots')
+            if not os.path.exists(memory_slots_dir):
+                # Skip models without memory slots (e.g., blackbox)
+                continue
+            
+            memory_slots = [d for d in os.listdir(memory_slots_dir) if d.startswith('memory_slot_')]
+            
+            # Load all learned equations from memory slots
+            learned_equations = []
+            for mem_slot in memory_slots:
+                mem_slot_dir = os.path.join(memory_slots_dir, mem_slot)
+                eq_files = [f for f in os.listdir(mem_slot_dir) if f.startswith('equation_') and f.endswith('.pkl')]
+                
+                for eq_file in eq_files:
+                    eq_path = os.path.join(mem_slot_dir, eq_file)
+                    try:
+                        with open(eq_path, 'rb') as f:
+                            eq = dill.load(f)
+                        learned_equations.append(eq)
+                    except Exception as e:
+                        print(f"Error loading equation from {eq_path}: {e}")
+                        continue
+            
+            if not learned_equations:
+                continue
+            
+            # Compute complexity for each equation
+            complexities = []
+            for eq in learned_equations:
+                try:
+                    complexity = compute_complexity(eq, metric='visitation_length')
+                    complexities.append(complexity)
+                except Exception as e:
+                    print(f"Error computing complexity: {e}")
+                    continue
+            
+            if not complexities:
+                continue
+            
+            # Average complexity across all equations in memory
+            avg_complexity = np.mean(complexities)
+            
+            results.append({
+                'dataset': dataset_name,
+                'model': model_name,
+                'seed': seed,
+                'complexity': avg_complexity,
+                'n_equations': len(complexities)
+            })
+            
+        except Exception as e:
+            print(f"Error processing experiment {exp_path}: {e}")
+            continue
+    
+    # Create DataFrame
+    results_df = pd.DataFrame(results)
+    
+    if len(results_df) == 0:
+        return results_df
+    
+    # Group by dataset and model, then average across seeds
+    summary_df = results_df.groupby(['dataset', 'model']).agg(
+        mean_complexity=('complexity', 'mean'),
+        std_complexity=('complexity', 'std'),
+        n_seeds=('seed', 'count')
+    ).reset_index()
+    
+    return summary_df
+
+
+def compare_equations_with_prior(path, selected_seed=None):
+    """
+    Compare equations learned by different models with the prior model's equations.
+    
+    This function creates a CSV showing equations side-by-side for easy comparison.
+    Each row represents one equation, showing what different models learned for it.
+    
+    Args:
+        path: Path to the sr_ablation output directory
+        selected_seed: Specific seed to use (default: uses the first available seed for each dataset)
+        
+    Returns:
+        pd.DataFrame with columns: dataset, equation_idx, prior_equation, model1_equation, model2_equation, ...
+    """
+    import dill
+    
+    # Collect all experiment paths
+    exps_path = []
+    experiment_dir = os.listdir(path)
+    for exp in experiment_dir:
+        exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
+    
+    # Group experiments by (dataset, seed)
+    exp_groups = {}
+    for exp_path in exps_path:
+        try:
+            config_file = os.path.join(exp_path, '.hydra/config.yaml')
+            if not os.path.exists(config_file):
+                continue
+                
+            with open(config_file, 'r') as f:
+                config = yaml.safe_load(f)
+            
+            dataset_name = config['dataset']['metadata']['name']
+            model_name = config['model']['metadata']['name']
+            seed = config['seed']
+            
+            key = (dataset_name, seed)
+            if key not in exp_groups:
+                exp_groups[key] = {}
+            exp_groups[key][model_name] = exp_path
+        except Exception as e:
+            continue
+    
+    # For each dataset, select a seed
+    dataset_seeds = {}
+    for (dataset, seed), models in exp_groups.items():
+        if 'prior_symbolic_cbm' not in models:
+            continue  # Skip if no prior model
+        
+        if dataset not in dataset_seeds:
+            if selected_seed is None:
+                dataset_seeds[dataset] = seed  # Use first available seed
+            elif seed == selected_seed:
+                dataset_seeds[dataset] = seed
+    
+    results = []
+    
+    # Process each dataset
+    for dataset_name, seed in tqdm(dataset_seeds.items(), desc="Comparing equations"):
+        key = (dataset_name, seed)
+        models = exp_groups[key]
+        
+        # Load prior equations first
+        prior_path = models['prior_symbolic_cbm']
+        prior_memory_dir = os.path.join(prior_path, 'logs/experiment_metrics/equations/memory_slots')
+        
+        if not os.path.exists(prior_memory_dir):
+            continue
+        
+        prior_memory_slots = sorted([d for d in os.listdir(prior_memory_dir) if d.startswith('memory_slot_')])
+        
+        # Load all prior equations
+        prior_equations = []
+        for mem_slot in prior_memory_slots:
+            mem_slot_dir = os.path.join(prior_memory_dir, mem_slot)
+            eq_files = sorted([f for f in os.listdir(mem_slot_dir) if f.startswith('equation_') and f.endswith('.pkl')])
+            
+            for eq_file in eq_files:
+                eq_path = os.path.join(mem_slot_dir, eq_file)
+                try:
+                    with open(eq_path, 'rb') as f:
+                        eq = dill.load(f)
+                    prior_equations.append(str(eq))
+                except Exception as e:
+                    print(f"Error loading prior equation from {eq_path}: {e}")
+                    prior_equations.append("ERROR")
+        
+        # Load equations from all other models
+        model_equations = {}
+        for model_name, exp_path in models.items():
+            memory_slots_dir = os.path.join(exp_path, 'logs/experiment_metrics/equations/memory_slots')
+            
+            if not os.path.exists(memory_slots_dir):
+                continue
+            
+            memory_slots = sorted([d for d in os.listdir(memory_slots_dir) if d.startswith('memory_slot_')])
+            
+            equations = []
+            for mem_slot in memory_slots:
+                mem_slot_dir = os.path.join(memory_slots_dir, mem_slot)
+                eq_files = sorted([f for f in os.listdir(mem_slot_dir) if f.startswith('equation_') and f.endswith('.pkl')])
+                
+                for eq_file in eq_files:
+                    eq_path = os.path.join(mem_slot_dir, eq_file)
+                    try:
+                        with open(eq_path, 'rb') as f:
+                            eq = dill.load(f)
+                        equations.append(str(eq))
+                    except Exception as e:
+                        print(f"Error loading equation from {eq_path}: {e}")
+                        equations.append("ERROR")
+            
+            model_equations[model_name] = equations
+        
+        # Create rows - one per equation
+        n_equations = len(prior_equations)
+        for eq_idx in range(n_equations):
+            row = {
+                'dataset': dataset_name,
+                'seed': seed,
+                'equation_idx': eq_idx,
+                'prior_equation': prior_equations[eq_idx] if eq_idx < len(prior_equations) else "N/A"
+            }
+            
+            # Add equations from each model
+            for model_name, equations in model_equations.items():
+                if model_name == 'prior_symbolic_cbm':
+                    continue  # Already added
+                row[f'{model_name}_equation'] = equations[eq_idx] if eq_idx < len(equations) else "N/A"
+            
+            results.append(row)
+    
+    # Create DataFrame
+    results_df = pd.DataFrame(results)
+    
+    # Reorder columns: dataset, seed, equation_idx, prior_equation, then other models
+    if len(results_df) > 0:
+        fixed_cols = ['dataset', 'seed', 'equation_idx', 'prior_equation']
+        model_cols = sorted([col for col in results_df.columns if col.endswith('_equation') and col != 'prior_equation'])
+        results_df = results_df[fixed_cols + model_cols]
+    
+    return results_df
 
 # def plot_licem_weights_distribution(train_w, test_w, test_w_lcmr, result_figs, c_names, y_names, title_font=None, label_font=None, tick_font=None, legend_font=None):
 #     """

@@ -80,7 +80,8 @@ def set_loggers(cfg):
                                tags=tags)
         wandb_logger.log_hyperparams(parse_hyperparams(cfg))
     csv_logger = CSVLogger("logs/",
-                           name="experiment_metrics")
+                           name="experiment_metrics",
+                           version="")  # Use empty string to avoid version folders
     return wandb_logger, csv_logger
 
 def parse_hyperparams(cfg: DictConfig):
@@ -537,7 +538,7 @@ def symbolic_regression(
 
     # Handle different target shapes
     if stored_targets.ndim == 1:
-        all_targets = all_targets.reshape(-1, 1)
+        stored_targets = stored_targets.reshape(-1, 1)
     
     # Dictionary to store equations
     # Structure: {memory_idx: {output_name: sympy_equation}}
@@ -568,7 +569,7 @@ def symbolic_regression(
         # Unless you have a large amount of noise (in which case you should smooth your dataset first), 
         # generally < 10,000 datapoints is enough to find a functional form.
         # Given the message returned by PySR, we can subsample if needed.
-        subsample_size = 5000
+        subsample_size = 10000
         if n_samples_for_memory > subsample_size:
             print(f"Subsampling to {subsample_size} for PySR.")
             indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)

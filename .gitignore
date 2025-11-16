@@ -17,6 +17,7 @@ my_sweep_3.yaml
 tabs/
 .vscode/
 results/
+stored_output/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

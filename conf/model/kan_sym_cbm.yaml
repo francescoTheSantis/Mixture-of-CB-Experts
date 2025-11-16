@@ -10,7 +10,6 @@ params:
   memory_size: ${memory_size}
   embedding_size: ${embedding_size}
   mc_approx: 1
-  speed_up_training: True
 
 metadata:
   name: kan_symbolic_cbm

@@ -192,7 +192,8 @@ class Engine(pl.LightningModule):
         self.update_and_log_metrics('test', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
         # Collect per-sample predictions for analysis
-        self._collect_test_sample_data(batch, batch_idx, model_output, y_hat_metrics, c_hat_metrics)
+        if self.model_name in ['KANSymbolicCBM', 'LinearSymbolicCBM', 'PriorSymbolicCBM', 'SymbolicRegressorCBM']:
+            self._collect_test_sample_data(batch, batch_idx, model_output, y_hat_metrics, c_hat_metrics)
 
         return loss 
     
@@ -204,9 +205,9 @@ class Engine(pl.LightningModule):
 
     def on_train_epoch_end(self):
         if self.model_name == 'KANSymbolicCBM' and not self.model.symbolic_predictors:
-                # Update the KAN grid
-                if self.current_epoch % 10 == 0 :
-                    self.model.setup_kan_grid(self.grid_inputs)
+            # Update the KAN grid
+            if self.current_epoch % 10 == 0 :
+                self.model.setup_kan_grid(self.grid_inputs)
 
     def _collect_test_sample_data(self, batch, batch_idx, model_output, y_hat_metrics, c_hat_metrics):
         """

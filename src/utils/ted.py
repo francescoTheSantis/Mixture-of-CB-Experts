@@ -114,9 +114,9 @@ def make_costs(
     num_replace_scale: float = 1.0,   # multiply numeric replacement cost
     # structural rename cost
     op_rename_cost: float = 1.0,
-    sym_rename_cost: float = 1.0,
+    sym_rename_cost: float = 1.0,     
     # insertion/deletion weights
-    weight_num_leaf: float = 0.3,     # bias/constant terms are cheaper to add/remove
+    weight_num_leaf: float = 1.0,    
     weight_sym_leaf: float = 1.0,
     weight_op_node: float  = 1.0,
 ):

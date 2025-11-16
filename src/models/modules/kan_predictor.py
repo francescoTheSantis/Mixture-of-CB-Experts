@@ -47,7 +47,7 @@ class KANPredictor(nn.Module):
             if self.speed_up_training:
                 kan_layer = kan_layer.speed()  # Sets: symbolic_enabled=False, save_act=False, auto_save=False
             if self.regularize:
-                self.lamb = 0.03  # Regularization strength 
+                self.lamb = 0.001  # Regularization strength 
             for param in kan_layer.get_params():
                 param.requires_grad = True
             self.kans.append(kan_layer)
@@ -95,11 +95,14 @@ class KANPredictor(nn.Module):
         equations = {}
         for i, kan_layer in enumerate(self.kans):
             # Get the symbolic formula
-            kan_layer.auto_symbolic(lib=SYMBOLIC_LIB, r2_threshold=0)
+            kan_layer.auto_symbolic(lib=SYMBOLIC_LIB)
 
-            # Plot the kan layer using the authors' plotting function
-            # self._sync_kan_tensors_to_device(kan_layer)
-            # kan_layer.plot(os.getcwd(), idx=i+1) # so that the count starts from 1
+            try:
+                # Plot the kan layer using the authors' plotting function
+                self._sync_kan_tensors_to_device(kan_layer)
+                kan_layer.plot(os.getcwd(), idx=i+1) # so that the count starts from 1
+            except Exception as e:
+                print(f"Warning: could not plot KAN layer {i} due to error: {e}")
 
             # Get the symbolic formulas and variable names
             equations_set = {}

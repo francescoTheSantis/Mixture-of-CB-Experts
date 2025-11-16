@@ -10,7 +10,7 @@ hydra:
   sweeper:
     grid_params:
       seed: 1, 2, 3
-      model: blackbox, kan_sym_cbm, lin_sym_cbm, prior_sym_cbm, sr_sym_cbm
+      model: sr_sym_cbm, blackbox, kan_sym_cbm, lin_sym_cbm, prior_sym_cbm
     
     # additional list sweeper - pairs each dataset with its specific memory size. 
     # Which corresponds to the actual number of mechanisms in the dataset
@@ -20,8 +20,8 @@ hydra:
     
 gpus: [1]
 
-max_epochs: 100
-patience: 20
+max_epochs: 500
+patience: 40
 
 use_stored_dataset: True
 extract_embeddings: True

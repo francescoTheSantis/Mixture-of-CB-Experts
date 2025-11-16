@@ -127,9 +127,6 @@ class Trainer:
         """
 
         model_name = self.cfg.model.metadata.name
-        # The kan model needs this training to just process the entire training set once and store the activations.
-        # therefore just 1 epoch is needed.
-        epochs = 1 if model_name == 'kan_symbolic_cbm' else self.cfg.max_epochs
 
         # Load the best checkpoint from initial training (best_model.ckpt)
         ckpt_path = f"{self.checkpoint_dir}/best_model.ckpt"
@@ -144,18 +141,24 @@ class Trainer:
         
         # Allow Symbolic substitution for the KAN layers
         if model_name == 'kan_symbolic_cbm':
-            self.model.model.allow_symbolic()
-
             # NOTE: if you want, you can prune the KAN layers before allowing symbolic execution.
             # Unfortunatelly, the pruning does not work when speed_up_training=True.
             # So, if you want to prune, set speed_up_training=False in the model config.
-            # self.model.model.prune()
+            if self.model.model.speed_up_training:
+                self.model.model.allow_symbolic()
+                print("Skipping pruning as speed_up_training=True")
+                epochs = 1
+            else:
+                print("Pruning KAN layers before allowing symbolic execution")
+                self.model.model.prune()
+                epochs = self.cfg.max_epochs
 
             # Update the grid
             self.model.model.setup_kan_grid(self.kan_inputs)
             
         # For SR-Sym-CBM, collect data for symbolic fine-tuning
         elif model_name == 'sr_symbolic_cbm':
+            epochs = self.cfg.max_epochs
             self.model.eval()
             self.model = self.model.to(self.cfg.gpus[0])
             stored_concepts = []
@@ -176,7 +179,11 @@ class Trainer:
                     output = self.model.model.forward(inputs, store_for_finetuning=True)
                     
                     # Add to lists
-                    stored_targets.append(output['y_hat'].detach().cpu())
+                    # if the problem is regression, learn the true targets, if classification, learn the logits (y_hat)
+                    if self.cfg.dataset.metadata.task == 'regression':
+                        stored_targets.append(y.detach().cpu())
+                    else:
+                        stored_targets.append(output['y_hat'].detach().cpu())
                     stored_concepts.append(c.detach().cpu())
                     stored_selector_probs.append(output['sampled_memory_idxs'].detach().cpu())
 

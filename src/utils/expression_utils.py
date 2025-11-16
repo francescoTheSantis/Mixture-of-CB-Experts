@@ -343,7 +343,7 @@ if __name__ == "__main__":
     import os
     
     # Create output directory for visualizations
-    output_dir = "figs/expression_graphs"
+    output_dir = "results/figs/expression_graphs"
     os.makedirs(output_dir, exist_ok=True)
     
     # Example usage and testing

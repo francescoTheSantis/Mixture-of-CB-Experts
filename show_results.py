@@ -51,7 +51,7 @@ model_styles = {
     'cbm_linear': {'marker': '^', 'name': 'CBM', 'color': 'tab:orange', 'size': marker_size},
     'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:red', 'size': marker_size},
     'kan_symbolic_cbm': {'marker': 'X', 'name': 'Kan-Sym-CBM', 'color': 'tab:green', 'size': marker_size},
-    'linear_symbolic_cbm': {'marker': 's', 'name': 'Lin-Sym-CBM', 'color': 'tab:blue', 'size': marker_size},
+    'linear_symbolic_cbm': {'marker': 's', 'name': 'Lin-Sym-CBM', 'color': 'tab:orange', 'size': marker_size},
     'prior_symbolic_cbm': {'marker': '*', 'name': 'Prior-Sym-CBM', 'color': 'tab:cyan', 'size': marker_size},
     'sr_symbolic_cbm': {'marker': 'o', 'name': 'SR-Sym-CBM', 'color': 'tab:blue', 'size': marker_size},
     'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:brown', 'size': marker_size},
@@ -89,12 +89,10 @@ def main():
     # 2. plot the intervention curves
     # 3. compute the similarity between the learned expressions and the ground truth ones
 
-    paths = [
-        "output/sr_ablation/2025-11-13_12-51-09",
-    ]
-
+    path = "output/sr_ablation"
+ 
     try:
-        performance, _ = get_exp_from_path(paths)
+        performance, _ = get_exp_from_path(path)
         # Filter the performance dataframe to keep only the models in model_styles 
         # and datasets in custom_order.
         performance = performance[performance['model'].isin(model_styles.keys()) & \
@@ -103,7 +101,7 @@ def main():
         show_symbolic_regression_results(performance, custom_order, table_path)
 
         # Now plot intervention results with noise=0.0
-        performance = get_intervention_from_path(paths, filtered_exps=None)
+        performance = get_intervention_from_path(path, filtered_exps=None)
 
         # Filter the performance dataframe to keep only the models in model_styles 
         # and datasets in custom_order.
@@ -122,6 +120,32 @@ def main():
                                     model_styles=model_styles,
                                     relative_accuracy=False,
                                     out_dir=f'{result_figs}/sr_ablation')
+
+        # Compute equation complexity metrics
+        print("\nComputing equation complexity metrics...")
+        complexity_results = compute_equation_complexity_for_sr_ablation(path)
+        complexity_csv_path = os.path.join(table_path, 'sr_ablation', 'complexity_metrics.csv')
+        complexity_results.to_csv(complexity_csv_path, index=False)
+        print(f"Complexity metrics saved to {complexity_csv_path}")
+        print(f"Complexity results summary:\n{complexity_results}")
+
+        # Compare equations with prior model
+        print("\nComparing learned equations with prior model...")
+        equation_comparison = compare_equations_with_prior(path)
+        equation_comparison_csv_path = os.path.join(table_path, 'sr_ablation', 'equation_comparison.csv')
+        equation_comparison.to_csv(equation_comparison_csv_path, index=False)
+        print(f"Equation comparison saved to {equation_comparison_csv_path}")
+        if len(equation_comparison) > 0:
+            print(f"Compared {len(equation_comparison)} equations across {equation_comparison['dataset'].nunique()} datasets")
+    
+        # Compute Tree Edit Distance (TED) metrics
+        print("\nComputing Tree Edit Distance (TED) metrics...")
+        ted_results = compute_ted_metrics_for_sr_ablation(path)
+        ted_csv_path = os.path.join(table_path, 'sr_ablation', 'ted_metrics.csv')
+        ted_results.to_csv(ted_csv_path, index=False)
+        print(f"TED metrics saved to {ted_csv_path}")
+        print(f"TED results summary:\n{ted_results.groupby(['dataset', 'model'])['avg_ted'].agg(['mean', 'std', 'count'])}")
+
     except Exception as e:
         print(f"Error occurred while plotting Symbolic Regression ablation results: {e}")
 
