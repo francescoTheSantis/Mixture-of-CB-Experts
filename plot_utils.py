@@ -278,7 +278,7 @@ def plot_intervention_results(
     out_dir=None,
 ):
 
-    unique_datasets = custom_order
+    unique_datasets = [d for d in df['dataset'].unique()]
 
     # Separate datasets by task type
     classification_datasets = [d for d in unique_datasets if d not in regression_datasets]
@@ -305,6 +305,9 @@ def plot_intervention_results(
         n_cols = max(len(classification_datasets), len(found_regression_datasets))
         n_rows = 2  # Force 2 rows: classification on first row, regression on second
     
+    # sort the organized_datasets according to custom_order
+    organized_datasets = [d for d in custom_order if d in organized_datasets]
+
     n_datasets = len(organized_datasets)
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 6*n_rows), sharex=False, sharey=False)

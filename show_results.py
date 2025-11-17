@@ -116,7 +116,7 @@ def main():
                                     label_font=label_font, 
                                     tick_font=tick_font, 
                                     legend_font=legend_font,
-                                    custom_order=regression_datasets,
+                                    custom_order=custom_order,
                                     model_styles=model_styles,
                                     relative_accuracy=False,
                                     out_dir=f'{result_figs}/sr_ablation')
