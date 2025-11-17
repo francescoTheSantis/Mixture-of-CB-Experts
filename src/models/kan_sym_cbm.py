@@ -37,6 +37,7 @@ class KANSymbolicCBM(BaseModel):
                  regularize=True,
                  widths=None,
                  device='cpu',
+                 speed_up_training=True,
                  **kwargs
                  ):
 
@@ -72,19 +73,19 @@ class KANSymbolicCBM(BaseModel):
         self.regularize = regularize
         self.symbolic_predictors = False
         self.device = device
-
-        # set the speed_up_training based on the output size
-        if self.output_size == 1:
-            self.speed_up_training = False
-        else:
-            self.speed_up_training = True
+        self.speed_up_training = speed_up_training
 
         if widths is not None:
             self.widths = widths
         else:
             if self.output_size == 1:
                 # Approach suggested by the authors of KAN
-                self.widths = [len(self.c_names), len(self.c_names)+1, self.output_size]
+                self.widths = [
+                    len(self.c_names), 
+                    # half of the neurons for the summation neurons and the pther half for multiplication neurons
+                    [(len(self.c_names)+1)//2, (len(self.c_names)+1)//2],
+                    [(len(self.c_names)+1)//2, (len(self.c_names)+1)//2],
+                    self.output_size]
             else:
                 # For multi-output tasks, we use a smaller architecture since the number of parameters 
                 # grows quickly with the number of outputs and this slows down the auto-symbolic search.
@@ -200,16 +201,19 @@ class KANSymbolicCBM(BaseModel):
         Returns the equation associated to the KAN predictor of the model
         """
 
-        # Remove the last element in widths and substitute with 1
-        # This is because we want to get the symbolic expression for a single output (as we did for the other models).
-        try:
-            single_output_widths = self.widths[:-1] + [1]
-            equation = kan_expression(single_output_widths)
-        except ValueError:
-            print(f"Zeros are appended to the each element in widths, we need to remove them")
-            self.widths = [w[0] for w in self.widths]
-            single_output_widths = self.widths[:-1] + [1]
-            equation = kan_expression(single_output_widths)
+        # # Remove the last element in widths and substitute with 1
+        # # This is because we want to get the symbolic expression for a single output (as we did for the other models).
+        # try:
+        #     single_output_widths = self.widths[:-1] + [1]
+        #     equation = kan_expression(single_output_widths)
+        # except ValueError:
+        #     print(f"Zeros are appended to the each element in widths, we need to remove them")
+        #     self.widths = [w[0] for w in self.widths]
+        #     single_output_widths = self.widths[:-1] + [1]
+        #     equation = kan_expression(single_output_widths)
+
+        single_output_widths = self.widths[:-1] + [[1, 0]]
+        equation = kan_expression(single_output_widths)
 
         # Generate the abstract (operators are not defined) symbolic equivalent of the kan used by the model.
         store_eq(equation, log_dir)

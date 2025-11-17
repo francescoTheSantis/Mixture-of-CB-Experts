@@ -179,7 +179,7 @@ def chain_expression(n: int) -> sp.Expr:
     return expression
 
 
-def kan_expression(w: List[int], nonlinearity: Union[str, None] = None) -> sp.Expr:
+def kan_expression(w: List[List[int]], nonlinearity: Union[str, None] = None) -> sp.Expr:
     """
     Generates the symbolic expression for a Kolmogorov-Arnold Network (KAN).
     
@@ -188,15 +188,16 @@ def kan_expression(w: List[int], nonlinearity: Union[str, None] = None) -> sp.Ex
     and applies the transformation: φ(x) = a * g(b*x + c) + d, where g is a
     non-linear function.
     
-    The network computes:
-        x_{l+1,j} = Σ_i [a_{l,j,i} * g_{l,j,i}(b_{l,j,i} * x_{l,i} + c_{l,j,i}) + d_{l,j,i}]
-    
-    for each layer l and output neuron j, where the sum is over all input neurons i.
+    The network supports two types of aggregation neurons:
+    - Summation neurons: aggregate inputs via addition (Σ)
+    - Multiplication neurons: aggregate inputs via multiplication (Π)
     
     Args:
-        w (List[int]): List of layer sizes [n_0, n_1, ..., n_L] where n_0 is the
-                       input dimension and n_L is the output dimension (typically 1
-                       for scalar output).
+        w (List[List[int]]): List of layer specifications [[n_sum_0, n_mult_0], [n_sum_1, n_mult_1], ...]
+                            where each sublist [n_sum, n_mult] specifies:
+                            - n_sum: number of summation neurons in that layer
+                            - n_mult: number of multiplication neurons in that layer
+                            The first layer specifies input dimension as [n_inputs, 0].
         nonlinearity (Union[str, None]): Name of the nonlinearity function to use.
                            If None (default), leaves the nonlinearity as an undefined
                            symbolic function g_{l,j,i}(...). Supported concrete values
@@ -204,35 +205,44 @@ def kan_expression(w: List[int], nonlinearity: Union[str, None] = None) -> sp.Ex
     
     Returns:
         sympy.Expr: Symbolic expression representing the full KAN computation.
-                    For scalar output (w[-1] == 1), returns a single expression.
+                    For scalar output (total neurons in last layer == 1), returns a single expression.
                     For vector output, returns a list-like expression.
     
     Examples:
-        >>> # KAN with undefined nonlinearity (most general form)
-        >>> expr = kan_expression([2, 1])
-        >>> # Result: a_0_0_0*g_0_0_0(b_0_0_0*x_0 + c_0_0_0) + ...
+        >>> # KAN with structure: 2 inputs -> [1 sum, 1 mult] -> 1 output (sum)
+        >>> expr = kan_expression([[2, 0], [1, 1], [1, 0]])
+        >>> # Layer 0->1: First neuron sums, second neuron multiplies
+        >>> # Layer 1->2: Output neuron sums the two previous neurons
         
         >>> # KAN with specific nonlinearity
-        >>> expr_sin = kan_expression([2, 1], nonlinearity='sin')
-        >>> # Result: a_0_0_0*sin(b_0_0_0*x_0 + c_0_0_0) + ...
+        >>> expr_sin = kan_expression([[2, 0], [1, 0]], nonlinearity='sin')
+        >>> # Result: sum of transformed inputs using sin
     
     Raises:
         ValueError: If w has fewer than 2 layers, contains non-positive integers,
+                   if the first layer has multiplication neurons,
                    or if the nonlinearity is not supported.
     
     Notes:
-        - For a network with layers w = [n_0, n_1, ..., n_L], the total number
-          of parameters is 4 * Σ_{l=0}^{L-1} (n_l * n_{l+1}).
-        - The expression grows exponentially with depth, so it may become very
-          large for deep networks.
-        - Each edge has its own nonlinearity symbol g_{l,j,i}, allowing for
-          heterogeneous activations in the general case.
+        - The first layer must be of the form [n_inputs, 0] (inputs cannot be multiplication neurons)
+        - For summation neurons: x_{l+1,j} = Σ_i [a_{l,j,i} * g(b_{l,j,i} * x_{l,i} + c_{l,j,i}) + d_{l,j,i}]
+        - For multiplication neurons: x_{l+1,j} = Π_i [a_{l,j,i} * g(b_{l,j,i} * x_{l,i} + c_{l,j,i}) + d_{l,j,i}]
+        - The expression grows exponentially with depth and multiplicatively
     """
     if not isinstance(w, (list, tuple)) or len(w) < 2:
         raise ValueError("w must be a list or tuple with at least 2 elements")
     
-    if any(not isinstance(n, int) or n <= 0 for n in w):
-        raise ValueError("All elements in w must be positive integers")
+    if any(not isinstance(layer, (list, tuple)) or len(layer) != 2 for layer in w):
+        raise ValueError("Each element in w must be a list/tuple of exactly 2 integers [n_sum, n_mult]")
+    
+    if any(not isinstance(n, int) or n < 0 for layer in w for n in layer):
+        raise ValueError("All elements in layer specifications must be non-negative integers")
+    
+    if any(sum(layer) == 0 for layer in w):
+        raise ValueError("Each layer must have at least one neuron (n_sum + n_mult > 0)")
+    
+    if w[0][1] != 0:
+        raise ValueError("First layer (input) must have n_mult = 0, i.e., be of the form [n_inputs, 0]")
     
     # Validate nonlinearity if specified
     if nonlinearity is not None:
@@ -246,19 +256,22 @@ def kan_expression(w: List[int], nonlinearity: Union[str, None] = None) -> sp.Ex
     L = len(w) - 1
     
     # Create input symbols x_0, x_1, ..., x_{n_0-1}
-    input_vars = sp.symbols(f'x_0:{w[0]}')
+    n_inputs = w[0][0]
+    input_vars = sp.symbols(f'x_0:{n_inputs}')
     
     # Initialize the current layer activations with the input
     current_layer = list(input_vars)
     
     # Process each layer
     for layer_idx in range(L):
-        n_in = w[layer_idx]      # number of neurons in current layer
-        n_out = w[layer_idx + 1]  # number of neurons in next layer
+        n_in = sum(w[layer_idx])      # total number of neurons in current layer
+        n_sum = w[layer_idx + 1][0]   # number of summation neurons in next layer
+        n_mult = w[layer_idx + 1][1]  # number of multiplication neurons in next layer
+        n_out = n_sum + n_mult        # total neurons in next layer
         next_layer = []
         
-        # Compute each output neuron
-        for j in range(n_out):
+        # Compute summation neurons (indices 0 to n_sum-1)
+        for j in range(n_sum):
             neuron_sum = 0
             
             # Sum over all input neurons
@@ -279,28 +292,7 @@ def kan_expression(w: List[int], nonlinearity: Union[str, None] = None) -> sp.Ex
                     nonlin_expr = g(arg)
                 else:
                     # Use specific nonlinearity
-                    if nonlinearity == 'exp':
-                        nonlin_expr = sp.exp(arg)
-                    elif nonlinearity == 'sin':
-                        nonlin_expr = sp.sin(arg)
-                    elif nonlinearity == 'cos':
-                        nonlin_expr = sp.cos(arg)
-                    elif nonlinearity == 'tan':
-                        nonlin_expr = sp.tan(arg)
-                    elif nonlinearity == 'tanh':
-                        nonlin_expr = sp.tanh(arg)
-                    elif nonlinearity == 'sinh':
-                        nonlin_expr = sp.sinh(arg)
-                    elif nonlinearity == 'cosh':
-                        nonlin_expr = sp.cosh(arg)
-                    elif nonlinearity == 'log':
-                        nonlin_expr = sp.log(arg)
-                    elif nonlinearity == 'sqrt':
-                        nonlin_expr = sp.sqrt(arg)
-                    elif nonlinearity == 'abs':
-                        nonlin_expr = sp.Abs(arg)
-                    elif nonlinearity == 'sign':
-                        nonlin_expr = sp.sign(arg)
+                    nonlin_expr = _apply_nonlinearity(nonlinearity, arg)
                 
                 # Build the edge expression: a * g(b * x_i + c) + d
                 edge_expr = a * nonlin_expr + d
@@ -310,16 +302,74 @@ def kan_expression(w: List[int], nonlinearity: Union[str, None] = None) -> sp.Ex
             
             next_layer.append(neuron_sum)
         
+        # Compute multiplication neurons (indices n_sum to n_sum+n_mult-1)
+        for j in range(n_sum, n_out):
+            neuron_prod = 1
+            
+            # Multiply over all input neurons
+            for i in range(n_in):
+                # Create parameter symbols for this edge
+                a = sp.Symbol(f'a_{layer_idx}_{j}_{i}')
+                b = sp.Symbol(f'b_{layer_idx}_{j}_{i}')
+                c = sp.Symbol(f'c_{layer_idx}_{j}_{i}')
+                d = sp.Symbol(f'd_{layer_idx}_{j}_{i}')
+                
+                # Create the argument for the nonlinearity
+                arg = b * current_layer[i] + c
+                
+                # Apply nonlinearity
+                if nonlinearity is None:
+                    # Leave as undefined symbolic function
+                    g = sp.Function(f'g_{layer_idx}_{j}_{i}')
+                    nonlin_expr = g(arg)
+                else:
+                    # Use specific nonlinearity
+                    nonlin_expr = _apply_nonlinearity(nonlinearity, arg)
+                
+                # Build the edge expression: a * g(b * x_i + c) + d
+                edge_expr = a * nonlin_expr + d
+                
+                # Multiply for this neuron
+                neuron_prod *= edge_expr
+            
+            next_layer.append(neuron_prod)
+        
         # Move to the next layer
         current_layer = next_layer
     
     # Return the final output
     # If output is scalar, return the single expression
-    if w[-1] == 1:
+    if sum(w[-1]) == 1:
         return current_layer[0]
     else:
         # For vector output, return as a list
         return current_layer
+
+
+def _apply_nonlinearity(nonlinearity: str, arg: sp.Expr) -> sp.Expr:
+    """Helper function to apply a specific nonlinearity to an argument."""
+    if nonlinearity == 'exp':
+        return sp.exp(arg)
+    elif nonlinearity == 'sin':
+        return sp.sin(arg)
+    elif nonlinearity == 'cos':
+        return sp.cos(arg)
+    elif nonlinearity == 'tan':
+        return sp.tan(arg)
+    elif nonlinearity == 'tanh':
+        return sp.tanh(arg)
+    elif nonlinearity == 'sinh':
+        return sp.sinh(arg)
+    elif nonlinearity == 'cosh':
+        return sp.cosh(arg)
+    elif nonlinearity == 'log':
+        return sp.log(arg)
+    elif nonlinearity == 'sqrt':
+        return sp.sqrt(arg)
+    elif nonlinearity == 'abs':
+        return sp.Abs(arg)
+    elif nonlinearity == 'sign':
+        return sp.sign(arg)
 
 def store_eq(equation: sp.Expr, log_dir: Union[str, None], idx: int = None) -> None:
     """
@@ -405,8 +455,8 @@ if __name__ == "__main__":
     print("KAN EXPRESSIONS")
     print("=" * 70)
     
-    print("\nKAN with undefined nonlinearity: [2, 1]")
-    kan_expr_undef = kan_expression([2, 1])
+    print("\nKAN with undefined nonlinearity: [[2, 0], [1, 0]] (2 inputs -> 1 sum neuron)")
+    kan_expr_undef = kan_expression([[2, 0], [1, 0]])
     print(f"  Expression: {kan_expr_undef}")
     report = complexity_report(kan_expr_undef)
     print(f"  Complexity: {report}")
@@ -416,17 +466,64 @@ if __name__ == "__main__":
     print("  Generating graph visualization...")
     kan_tree = sympy_to_tree(kan_expr_undef)
     visualize_tree(kan_tree, 
-                   title="KAN [2, 1] with Undefined Nonlinearity", 
+                   title="KAN [[2,0], [1,0]] with Undefined Nonlinearity", 
                    save_path=f"{output_dir}/kan_2_1_undefined.pdf")
     print()
     
-    # Additional KAN example with specific nonlinearity
-    print("\nKAN with sin nonlinearity: [2, 1]")
-    kan_expr_sin = kan_expression([2, 1], nonlinearity='sin')
-    print(f"  Expression (first 100 chars): {str(kan_expr_sin)[:100]}...")
-    report_sin = complexity_report(kan_expr_sin)
-    print(f"  Complexity: {report_sin}")
-
+    # Example with mixed aggregation: [[2, 0], [1, 1], [1, 0]]
+    print("=" * 70)
+    print("KAN WITH MIXED AGGREGATION: [[2, 0], [1, 1], [1, 0]]")
+    print("=" * 70)
+    print()
+    print("Structure breakdown:")
+    print("  Layer 0 (Input): x_0, x_1")
+    print()
+    print("  Layer 1 (Hidden):")
+    print("    - Neuron 0 (SUM):  aggregates inputs using ADDITION")
+    print("    - Neuron 1 (MULT): aggregates inputs using MULTIPLICATION")
+    print()
+    print("  Layer 2 (Output):")
+    print("    - Neuron 0 (SUM):  aggregates layer 1 outputs using ADDITION")
+    print()
+    
+    kan_expr_mixed = kan_expression([[2, 0], [1, 1], [1, 0]])
+    print("Full Expression:")
+    print(f"  {kan_expr_mixed}")
+    print()
+    
+    print("Breaking it down:")
+    print()
+    print("  Layer 0 -> Layer 1:")
+    print("    Hidden Neuron 0 (SUM):")
+    print("      = [a_0_0_0 * g_0_0_0(b_0_0_0*x_0 + c_0_0_0) + d_0_0_0]")
+    print("      + [a_0_0_1 * g_0_0_1(b_0_0_1*x_1 + c_0_0_1) + d_0_0_1]")
+    print()
+    print("    Hidden Neuron 1 (MULT):")
+    print("      = [a_0_1_0 * g_0_1_0(b_0_1_0*x_0 + c_0_1_0) + d_0_1_0]")
+    print("      * [a_0_1_1 * g_0_1_1(b_0_1_1*x_1 + c_0_1_1) + d_0_1_1]")
+    print()
+    print("  Layer 1 -> Layer 2:")
+    print("    Output Neuron 0 (SUM):")
+    print("      = [a_1_0_0 * g_1_0_0(b_1_0_0*h_0 + c_1_0_0) + d_1_0_0]")
+    print("      + [a_1_0_1 * g_1_0_1(b_1_0_1*h_1 + c_1_0_1) + d_1_0_1]")
+    print()
+    print("    where h_0 = Hidden Neuron 0 (sum), h_1 = Hidden Neuron 1 (mult)")
+    print()
+    
+    report_mixed = complexity_report(kan_expr_mixed)
+    print(f"Complexity: {report_mixed}")
+    print()
+    print("Key Difference:")
+    print("  - SUM neurons use + between edge outputs")
+    print("  - MULT neurons use * between edge outputs")
+    
+    # Visualize mixed KAN expression
+    print()
+    print("Generating graph visualization...")
+    kan_tree_mixed = sympy_to_tree(kan_expr_mixed)
+    visualize_tree(kan_tree_mixed, 
+                   title="KAN [[2,0], [1,1], [1,0]] Mixed Aggregation", 
+                   save_path=f"{output_dir}/kan_mixed_aggregation.pdf")
     print()
     
     print("=" * 70)
@@ -436,7 +533,8 @@ if __name__ == "__main__":
     print("  Linear (3 vars):         node_count =", complexity_report(linear_classifier_expression(3))['node_count'])
     print("  Boolean AND (3 vars):    node_count =", complexity_report(boolean_and_expression(3))['node_count'])
     print("  Chain (3 nodes):         node_count =", complexity_report(chain_expression(3))['node_count'])
-    print("  KAN 1 layer:               node_count =", complexity_report(kan_expression([2, 1]))['node_count'])
+    print("  KAN 1 layer:             node_count =", complexity_report(kan_expression([[2, 0], [1, 0]]))['node_count'])
+    print("  KAN mixed aggregation:   node_count =", complexity_report(kan_expression([[2, 0], [1, 1], [1, 0]]))['node_count'])
     print()
     
     print("=" * 70)
@@ -446,7 +544,8 @@ if __name__ == "__main__":
     print("  Linear (3 vars):         visitation_length =", complexity_report(linear_classifier_expression(3))['visitation_length'])
     print("  Boolean AND (3 vars):    visitation_length =", complexity_report(boolean_and_expression(3))['visitation_length'])
     print("  Chain (3 nodes):         visitation_length =", complexity_report(chain_expression(3))['visitation_length'])
-    print("  KAN 1 layer:               visitation_length =", complexity_report(kan_expression([2, 1]))['visitation_length'])
+    print("  KAN 1 layer:             visitation_length =", complexity_report(kan_expression([[2, 0], [1, 0]]))['visitation_length'])
+    print("  KAN mixed aggregation:   visitation_length =", complexity_report(kan_expression([[2, 0], [1, 1], [1, 0]]))['visitation_length'])
     print()
 
     print("=" * 70)

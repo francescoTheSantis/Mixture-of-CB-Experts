@@ -25,8 +25,8 @@ extra_functions = {
     "sqrt": lambda x: x**0.5,
     #"x^1.5": lambda x: x**1.5,
     "invsqrt": lambda x: 1 / x**0.5,
-    "abs": lambda x: abs(x),
-    "sgn": lambda x: 1 if x > 0 else (-1 if x < 0 else 0),
+    #"abs": lambda x: abs(x),
+    #"sgn": lambda x: 1 if x > 0 else (-1 if x < 0 else 0),
 }
 
 class SymbolicRegressorCBM(BaseModel):
