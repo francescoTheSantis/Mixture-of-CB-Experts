@@ -14,3 +14,7 @@ metadata:
   name: pendulum
   data_type: image
   concept_type: float # Continuous concepts
+
+# Equation to learn in pendulum dataset: 10 + 8 * sin(theta_rad) 
+equations:  
+  - "10 + 8 * sin(c0)"

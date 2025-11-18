@@ -15,8 +15,7 @@ from env import DATA_PATH
 
 MAWPS_DIR = f'{DATA_PATH}mawps'
 # make the directory if it does not exist
-if not os.path.exists(MAWPS_DIR):
-    os.makedirs(MAWPS_DIR)
+os.makedirs(MAWPS_DIR, exist_ok=True)
 INPUT_COLUMN = 'Question'
 TASK_NAMES = ['Answer']
 CONCEPT_NAMES = ['N_00', 'N_01', 'N_02']
@@ -189,14 +188,26 @@ class MAWPSDataset:
                     already_created: bool = False,
                     batch_size: int = 128,
                     shuffle_seed = 42,
-                    pre_trained_transformer="invokerliang/MWP-BERT-en"
+                    use_bert_pretraining: bool = False,
+                    bert_pretrain_full_dataset: bool = True,
+                    bert_num_epochs: int = 10,
+                    bert_batch_size: int = 32,
+                    bert_learning_rate: float = 2e-5,
+                    device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
                  ):
 
         self.name = "mawps"
         self.batch_size = batch_size
         self.shuffle_seed = shuffle_seed
         self.concept_names = CONCEPT_NAMES
-        self.pre_trained_transformer = pre_trained_transformer
+        self.use_bert_pretraining = use_bert_pretraining
+        self.bert_pretrain_full_dataset = bert_pretrain_full_dataset
+        self.device = device
+        
+        # BERT pretraining parameters
+        self.bert_num_epochs = bert_num_epochs
+        self.bert_batch_size = bert_batch_size
+        self.bert_learning_rate = bert_learning_rate
 
         # Check if dataset files exist
         train_file = os.path.join(MAWPS_DIR, 'mawps_train.pkl')
@@ -329,6 +340,12 @@ class MAWPSDataset:
             train_ds.to_pickle(f'{MAWPS_DIR}/mawps_train.pkl')
             val_ds.to_pickle(f'{MAWPS_DIR}/mawps_val.pkl')
             test_ds.to_pickle(f'{MAWPS_DIR}/mawps_test.pkl')
+            
+            # Save samples to text files for each split
+            self._save_samples_to_txt(train_ds, 'train')
+            self._save_samples_to_txt(val_ds, 'val')
+            self._save_samples_to_txt(test_ds, 'test')
+            
             print(f"Datasets created and saved in {MAWPS_DIR}")
 
         else:
@@ -339,8 +356,11 @@ class MAWPSDataset:
         val_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, 'mawps_val.pkl')))
         test_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, 'mawps_test.pkl')))
 
-        pretrained_model_path = self.pre_trained_transformer
-        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_path)
+        # Store BERT configuration for later use (will be used in preprocessing)
+        # The actual BERT pretraining and embedding extraction happens in preprocessing.py
+        
+        # Use bert-base-uncased as tokenizer for consistency
+        self.tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
         
         tokenized_train = train_dataset.map(
             self.preprocess_function,
@@ -359,6 +379,31 @@ class MAWPSDataset:
         self.train_dataset = tokenized_train
         self.val_dataset = tokenized_val
         self.test_dataset = tokenized_test
+
+    def _save_samples_to_txt(self, df, split_name):
+        """
+        Save all samples from a split to a text file.
+        Each sample includes: question, variable values (N_00, N_01, N_02), and answer.
+        """
+        output_file = os.path.join(MAWPS_DIR, f'mawps_{split_name}_samples.txt')
+        
+        with open(output_file, 'w') as f:
+            f.write(f"MAWPS Dataset - {split_name.upper()} Split\n")
+            f.write("=" * 80 + "\n\n")
+            
+            for idx, row in df.iterrows():
+                f.write(f"Sample {idx + 1}:\n")
+                f.write(f"Question: {row['Question']}\n")
+                f.write(f"Variables:\n")
+                f.write(f"  N_00 = {row['N_00']:.2f}\n")
+                f.write(f"  N_01 = {row['N_01']:.2f}\n")
+                f.write(f"  N_02 = {row['N_02']:.2f}\n")
+                f.write(f"Answer: {row['Answer']:.2f}\n")
+                f.write(f"Equation: {row['Equation']}\n")
+                f.write(f"Standardized Equation: {row['Standardized_Equation']}\n")
+                f.write("-" * 80 + "\n\n")
+        
+        print(f"Saved {len(df)} samples to {output_file}")
 
     def preprocess_function(self, examples):
         model_inputs = self.tokenizer(
@@ -424,6 +469,8 @@ class CustomDataCollator:
         #token_type_ids = torch.Tensor([example['token_type_ids'] for example in batch])
         attention_mask = torch.Tensor([example['attention_mask'] for example in batch])
 
+        # Include the raw question text for BERT embedding extraction
+        questions = [example.get('Question', '') for example in batch]
 
         return {
             'x': {
@@ -432,7 +479,8 @@ class CustomDataCollator:
                 'attention_mask': attention_mask
             },
             'c': concepts,
-            'y': labels
+            'y': labels,
+            'questions': questions  # Add raw text for BERT preprocessing
         }
     
 

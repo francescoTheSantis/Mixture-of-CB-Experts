@@ -14,7 +14,7 @@ import itertools
 import random
 
 from env import DATA_PATH
-from src.loaders.preprocessing import EmbeddingExtractor, TextEmbeddingExtractor
+from src.loaders.preprocessing import EmbeddingExtractor, TextEmbeddingExtractor, MAWPSBERTEmbeddingExtractor
 from src.loaders.dataset_factory import get_dataset
 from src.loaders.datasets.cub import (
     SELECTED_CONCEPTS as cub_selected_concepts,
@@ -98,7 +98,12 @@ class loader(object):
         self.noise_std = noise_std if noise_std is not None else 0.0
         self.train_autoencoder = train_autoencoder
         self.use_stored_dataset = use_stored_dataset
-        self.device = device[0] if isinstance(device, omegaconf.listconfig.ListConfig) else device
+        # Handle device - ensure it's a proper device string
+        if isinstance(device, omegaconf.listconfig.ListConfig):
+            device_id = device[0]
+            self.device = f'cuda:{device_id}' if torch.cuda.is_available() else 'cpu'
+        else:
+            self.device = device
         self.concept_groups = None
 
         # Standard transform for image datasets
@@ -373,15 +378,44 @@ class loader(object):
                 )
                 loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
             elif get_type_from_name(self.name) == 'text':
-                E_extr = TextEmbeddingExtractor(
-                    cfg,
-                    loaded_train,
-                    loaded_val,
-                    loaded_test,
-                    self.device,
-                    self.extract_embeddings
-                )
-                loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
+                # Check if this is MAWPS with BERT pretraining enabled
+                if self.name == 'mawps':
+                    bert_config = cfg.dataset.get('bert_pretraining', {})
+                    use_bert_pretraining = bert_config.get('enabled', False)
+                    
+                    if use_bert_pretraining and self.extract_embeddings:
+                        # Use MAWPS BERT embedding extractor
+                        E_extr = MAWPSBERTEmbeddingExtractor(
+                            cfg,
+                            loaded_train,
+                            loaded_val,
+                            loaded_test,
+                            self.device,
+                            self.extract_embeddings
+                        )
+                        loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
+                    else:
+                        # Use regular text embedding extractor
+                        E_extr = TextEmbeddingExtractor(
+                            cfg,
+                            loaded_train,
+                            loaded_val,
+                            loaded_test,
+                            self.device,
+                            self.extract_embeddings
+                        )
+                        loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
+                else:
+                    # For non-MAWPS text datasets, use regular text embedding extractor
+                    E_extr = TextEmbeddingExtractor(
+                        cfg,
+                        loaded_train,
+                        loaded_val,
+                        loaded_test,
+                        self.device,
+                        self.extract_embeddings
+                    )
+                    loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
         
         return loaded_train, loaded_val, loaded_test
 

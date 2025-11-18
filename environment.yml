@@ -27,7 +27,7 @@ dependencies:
     - datasets
     - numpy==1.26.4
     - pandas
-    - git+https://github.com/pyc-team/pytorch_concepts.git@models
+    #- git+https://github.com/pyc-team/pytorch_concepts.git@models
     - sympytorch
     - pysr
     - dill

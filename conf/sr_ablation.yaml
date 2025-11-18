@@ -10,13 +10,13 @@ hydra:
   sweeper:
     grid_params:
       seed: 1, 2, 3, 4, 5
-      model: kan_sym_cbm, sr_sym_cbm, blackbox, lin_sym_cbm, prior_sym_cbm
+      model: blackbox, lin_sym_cbm, prior_sym_cbm, kan_sym_cbm, sr_sym_cbm
     
     # additional list sweeper - pairs each dataset with its specific memory size. 
     # Which corresponds to the actual number of mechanisms in the dataset
     list_params:
-      dataset: feynman_I_6_2, feynman_I_9_18, feynman_I_12_1, feynman_I_13_4, feynman_I_14_3, feynman_I_15_10, dsprites_simple, pendulum, dsprites_complex, mnist_arithmetic, mawps
-      memory_size: 1, 1, 1, 1, 1, 1, 1, 1, 3, 4, 6
+      dataset: feynman_I_6_2, feynman_I_9_18, feynman_I_12_1, feynman_I_13_4, feynman_I_14_3, feynman_I_15_10, dsprites_simple, pendulum, dsprites_complex, mnist_arithmetic
+      memory_size: 1, 1, 1, 1, 1, 1, 1, 1, 3, 4
     
 gpus: [1]
 

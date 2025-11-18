@@ -20,7 +20,7 @@ class Trainer:
         self.model = model
         self.epss = np.arange(0, 0.6, 0.1) # Noise levels for interventions
         self.p_ints = np.arange(0, 1.1, 0.1) # Intervention probabilities
-        self.scale_target = cfg.scale_target if 'scale_target' in cfg else True
+        self.scale_variables = cfg.scale_variables if 'scale_variables' in cfg else True
 
     def build_trainer(self):
         early_stopping = EarlyStopping(
@@ -90,24 +90,44 @@ class Trainer:
         c_trues = torch.cat(c_trues, dim=0)
         y_trues = torch.cat(y_trues, dim=0)
 
-        # If regression, standardize the target variable and store the scaler in the model
-        if self.model.model.task == 'regression' and self.scale_target:
+        # If regression, standardize the target variable and concepts, and store the scalers in the model
+        if self.model.model.task == 'regression' and self.scale_variables:
             # Fit scaler to y data
-            scaler = StandardScaler(dims=(0,))
-            scaler.fit(y_trues)
+            y_scaler = StandardScaler(dims=(0,))
+            y_scaler.fit(y_trues)
 
-            # Store the scaler in the engine & model
-            self.model.scaler = scaler
-            self.model.model.scaler = scaler
+            # Store the y scaler in the engine & model
+            self.model.y_scaler = y_scaler
+            self.model.model.y_scaler = y_scaler
+            
+            # Fit scalers to concept data (one per concept)
+            n_concepts = c_trues.shape[1]
+            c_scalers = []
+            for i in range(n_concepts):
+                c_scaler = StandardScaler(dims=(0,))
+                c_scaler.fit(c_trues[:, i:i+1])
+                c_scalers.append(c_scaler)
+            
+            # Store the concept scalers in the engine & model
+            self.model.c_scalers = c_scalers
+            self.model.model.c_scalers = c_scalers
         else:
-            self.model.scaler = None
-            self.model.model.scaler = None
+            self.model.y_scaler = None
+            self.model.model.y_scaler = None
+            self.model.c_scalers = None
+            self.model.model.c_scalers = None
 
         if self.model.model.__class__.__name__ == 'KANSymbolicCBM':
-            self.kan_inputs = c_trues.to(self.cfg.gpus[0])
+            # Scale concepts if needed before setting up KAN grid
+            kan_inputs_to_use = c_trues.clone().to(self.cfg.gpus[0])
+            if self.model.model.task == 'regression' and self.scale_variables:
+                for i, c_scaler in enumerate(self.model.c_scalers):
+                    kan_inputs_to_use[:, i:i+1] = c_scaler.transform(kan_inputs_to_use[:, i:i+1])
+            
+            self.kan_inputs = kan_inputs_to_use
             self.model.model.setup_kan_grid(self.kan_inputs)
-            # Save c_trues in model as it will used to update the grid during training
-            self.model.grid_inputs = c_trues.to(self.cfg.gpus[0])
+            # Save scaled c_trues in model as it will be used to update the grid during training
+            self.model.grid_inputs = kan_inputs_to_use
 
         self.trainer.fit(self.model, 
                          train_dataloader, 
@@ -153,7 +173,7 @@ class Trainer:
                 self.model.model.prune()
                 epochs = self.cfg.max_epochs
 
-            # Update the grid
+            # Update the grid (self.kan_inputs is already scaled from train function)
             self.model.model.setup_kan_grid(self.kan_inputs) 
 
         # For SR-Sym-CBM, collect data for symbolic fine-tuning
@@ -192,12 +212,26 @@ class Trainer:
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
 
+            # Concatenate stored data
+            concatenated_concepts = torch.cat(stored_concepts, dim=0)
+            concatenated_targets = torch.cat(stored_targets, dim=0)
+            concatenated_selector_probs = torch.cat(stored_selector_probs, dim=0)
+            
+            # Scale concepts and targets if scale_variables is True and task is regression
+            if self.cfg.dataset.metadata.task == 'regression' and self.scale_variables:
+                # Scale targets
+                concatenated_targets = self.model.y_scaler.transform(concatenated_targets)
+                
+                # Scale concepts (one by one using per-concept scalers)
+                for i, c_scaler in enumerate(self.model.c_scalers):
+                    concatenated_concepts[:, i:i+1] = c_scaler.transform(concatenated_concepts[:, i:i+1])
+            
             # Extract equations using symbolic regression
             print("Extracting symbolic equations from stored data...")
             equations = symbolic_regression(
-                stored_concepts=torch.cat(stored_concepts, dim=0),
-                stored_targets=torch.cat(stored_targets, dim=0),
-                stored_selector_probs=torch.cat(stored_selector_probs, dim=0),
+                stored_concepts=concatenated_concepts,
+                stored_targets=concatenated_targets,
+                stored_selector_probs=concatenated_selector_probs,
                 memory_size=self.model.model.memory_size,
                 output_size=self.model.model.output_size,
                 c_names=self.model.model.c_names,
@@ -437,9 +471,9 @@ class Trainer:
                     y = torch.cat(y_trues, dim=0).numpy()
                     y_preds = torch.cat(y_preds, dim=0)
 
-                    if self.cfg.dataset.metadata.task == 'regression' and self.scale_target:
+                    if self.cfg.dataset.metadata.task == 'regression' and self.scale_variables:
                         # If regression, inverse transform the predictions
-                        y_preds = self.model.scaler.inverse_transform(y_preds)
+                        y_preds = self.model.y_scaler.inverse_transform(y_preds)
 
                     y_preds = y_preds.numpy()
 

@@ -25,7 +25,7 @@ class Engine(pl.LightningModule):
                 data_type: Optional[str] = None,
                 dataset_name: Optional[str] = None,
                 data_path: Optional[str] = None,
-                scale_target: bool = True,
+                scale_variables: bool = True,
                 fine_tuning: bool = False
                 ):
         super(Engine, self).__init__()
@@ -41,8 +41,8 @@ class Engine(pl.LightningModule):
         self.csv_log_dir = csv_log_dir
         self.dataset_name = dataset_name
         self.data_path = data_path
-        self.scale_target = scale_target
-        self.model.scale_target = scale_target
+        self.scale_variables = scale_variables
+        self.model.scale_variables = scale_variables
         self.fine_tuning = fine_tuning
         self.fine_tuning_stage = None  # Will be set to 'pruning' during fine-tuning after pruning
 
@@ -122,17 +122,31 @@ class Engine(pl.LightningModule):
         # Maintain the shape of c to be (batch_size, n_concepts)
         batch['c'] = batch['c'] if batch['c'].ndim > 1 else batch['c'].unsqueeze(-1)
 
-        # model forward
-        model_output = self.forward(batch)
+        # Scale concepts and targets BEFORE forward pass if needed
+        if self.model.task == 'regression' and self.scale_variables:
+            # Clone to avoid modifying the original batch data
+            c_scaled = batch['c'].clone()
+            y_scaled = batch['y'].clone()
+            
+            # Scale targets
+            y_scaled = self.y_scaler.transform(y_scaled)
+            
+            # Scale concepts if model has them
+            if self.model.has_concepts:
+                for i, c_scaler in enumerate(self.c_scalers):
+                    c_scaled[:, i:i+1] = c_scaler.transform(c_scaled[:, i:i+1])
+            
+            # Create a new batch dict with scaled values
+            batch_scaled = {**batch, 'c': c_scaled, 'y': y_scaled}
+        else:
+            batch_scaled = batch
+
+        # model forward (with scaled batch if scale_variables=True)
+        model_output = self.forward(batch_scaled)
 
         # Compute loss
         y_hat_loss, c_hat_loss = self.model.filter_output_for_loss(**model_output)
-        if self.model.task == 'regression' and self.scale_target:
-            y_loss = self.scaler.transform(batch['y'])
-        else:
-            y_loss = batch['y']
-
-        loss = self.model.loss(y_hat_loss, y_loss, c_hat_loss, batch['c'])
+        loss = self.model.loss(y_hat_loss, batch_scaled['y'], c_hat_loss, batch_scaled['c'])
 
         return loss, model_output
 
@@ -151,9 +165,15 @@ class Engine(pl.LightningModule):
 
         y_hat_metrics, c_hat_metrics = self.model.filter_output_for_metrics(**model_output)
         # compute task metrics
-        # if the task is regression, we denormalize the target variable to compute the metrics
-        if self.model.task == 'regression' and self.scale_target:
-            y_hat_metrics = self.scaler.inverse_transform(y_hat_metrics.detach())
+        # if the task is regression, we denormalize the predictions to compute the metrics on original scale
+        if self.model.task == 'regression' and self.scale_variables:
+            y_hat_metrics = self.y_scaler.inverse_transform(y_hat_metrics.detach())
+            if self.model.has_concepts:
+                c_hat_metrics_denorm = c_hat_metrics.clone().detach()
+                for i, c_scaler in enumerate(self.c_scalers):
+                    c_hat_metrics_denorm[:, i:i+1] = c_scaler.inverse_transform(c_hat_metrics[:, i:i+1].detach())
+                c_hat_metrics = c_hat_metrics_denorm
+        # Use original unscaled batch for ground truth metrics
         self.update_and_log_metrics('train', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
         return loss
@@ -172,9 +192,15 @@ class Engine(pl.LightningModule):
 
         y_hat_metrics, c_hat_metrics = self.model.filter_output_for_metrics(**model_output)
         # compute task metrics
-        # if the task is regression, we denormalize the target variable to compute the metrics
-        if self.model.task == 'regression' and self.scale_target:
-            y_hat_metrics = self.scaler.inverse_transform(y_hat_metrics)
+        # if the task is regression, we denormalize the predictions to compute the metrics on original scale
+        if self.model.task == 'regression' and self.scale_variables:
+            y_hat_metrics = self.y_scaler.inverse_transform(y_hat_metrics)
+            if self.model.has_concepts:
+                c_hat_metrics_denorm = c_hat_metrics.clone()
+                for i, c_scaler in enumerate(self.c_scalers):
+                    c_hat_metrics_denorm[:, i:i+1] = c_scaler.inverse_transform(c_hat_metrics[:, i:i+1])
+                c_hat_metrics = c_hat_metrics_denorm
+        # Use original unscaled batch for ground truth metrics
         self.update_and_log_metrics('val', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
         return loss 
@@ -186,9 +212,15 @@ class Engine(pl.LightningModule):
 
         y_hat_metrics, c_hat_metrics = self.model.filter_output_for_metrics(**model_output)
         # compute task metrics
-        # if the task is regression, we denormalize the target variable to compute the metrics
-        if self.model.task == 'regression' and self.scale_target:
-            y_hat_metrics = self.scaler.inverse_transform(y_hat_metrics)
+        # if the task is regression, we denormalize the predictions to compute the metrics on original scale
+        if self.model.task == 'regression' and self.scale_variables:
+            y_hat_metrics = self.y_scaler.inverse_transform(y_hat_metrics)
+            if self.model.has_concepts:
+                c_hat_metrics_denorm = c_hat_metrics.clone()
+                for i, c_scaler in enumerate(self.c_scalers):
+                    c_hat_metrics_denorm[:, i:i+1] = c_scaler.inverse_transform(c_hat_metrics[:, i:i+1])
+                c_hat_metrics = c_hat_metrics_denorm
+        # Use original unscaled batch for ground truth metrics
         self.update_and_log_metrics('test', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
         # Collect per-sample predictions for analysis
@@ -205,7 +237,7 @@ class Engine(pl.LightningModule):
 
     def on_train_epoch_end(self):
         if self.model_name == 'KANSymbolicCBM' and not self.model.symbolic_predictors:
-            # Update the KAN grid
+            # Update the KAN grid (self.grid_inputs is already scaled from trainer)
             if self.current_epoch % 10 == 0 :
                 self.model.setup_kan_grid(self.grid_inputs)
 

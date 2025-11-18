@@ -272,7 +272,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
         c_groups = dict(c_groups)
 
     backbone = cfg.img_backbone_name if get_type_from_name(cfg.dataset.metadata.name) == 'image' \
-                else cfg.dataset.metadata.pretrained_transformer if cfg.dataset.metadata.name == 'mawps' \
+                else "bert-base-uncased" if cfg.dataset.metadata.name == 'mawps' \
                                         else cfg.text_backbone_name
     backbone_latent_size = cfg.dataset.latent_size if cfg.extract_embeddings else get_backbone_latent_size(backbone)
 
@@ -283,7 +283,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             csv_log_dir = csv_log_dir,
             data_type = data_type,
             dataset_name = cfg.dataset.metadata.name,
-            scale_target = cfg.scale_target if 'scale_target' in cfg else True
+            scale_variables = cfg.scale_variables if 'scale_variables' in cfg else True
         )
 
         hard_concepts = cfg.hard_concepts

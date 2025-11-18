@@ -420,11 +420,30 @@ class DatasetFactory:
     @staticmethod
     def create_mawps_dataset(cfg, batch_size, seed, **kwargs):
         """Create MAWPS dataset - returns loaders directly"""
+        # Extract BERT pretraining parameters from config
+        bert_config = cfg.dataset.get('bert_pretraining', {})
+        use_bert_pretraining = bert_config.get('enabled', False)
+        bert_pretrain_full_dataset = bert_config.get('use_full_dataset', True)
+        bert_num_epochs = bert_config.get('num_epochs', 10)
+        bert_batch_size = bert_config.get('batch_size', 32)
+        bert_learning_rate = bert_config.get('learning_rate', 2e-5)
+        
+        # Determine device from config
+        if hasattr(cfg, 'gpus') and cfg.gpus and len(cfg.gpus) > 0:
+            device = f'cuda:{cfg.gpus[0]}' if torch.cuda.is_available() else 'cpu'
+        else:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        
         loader = MAWPSDataset(
             cfg.dataset.loader.dataset_already_created,
             batch_size=batch_size,
             shuffle_seed=seed,
-            pre_trained_transformer=cfg.dataset.metadata.pretrained_transformer
+            use_bert_pretraining=use_bert_pretraining,
+            bert_pretrain_full_dataset=bert_pretrain_full_dataset,
+            bert_num_epochs=bert_num_epochs,
+            bert_batch_size=bert_batch_size,
+            bert_learning_rate=bert_learning_rate,
+            device=device
         )
         loaded_train, loaded_val, loaded_test = loader.collator()
         
