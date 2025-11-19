@@ -6,11 +6,23 @@ import pickle
 import sympy as sp
 import pandas as pd
 import matplotlib.pyplot as plt
+import json
+import time
 from datasets import load_dataset, Dataset
 from torch.utils.data import ConcatDataset
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
-from env import DATA_PATH
+from openai import OpenAI
+
+try:
+    from env import DATA_PATH, OPENAI_API_KEY
+except:
+    import sys
+    from pathlib import Path
+    # Add the project root to path (3 levels up from this file)
+    project_root = Path(__file__).resolve().parent.parent.parent.parent
+    sys.path.insert(0, str(project_root))
+    from env import DATA_PATH, OPENAI_API_KEY
 
 
 MAWPS_DIR = f'{DATA_PATH}mawps'
@@ -91,7 +103,7 @@ def histogram_of_formulas(formulas, name = 'hist'):
     plt.bar(formulas_hist.keys(), formulas_hist.values())
     plt.xticks(rotation=90, ha='right')
     plt.tight_layout()
-    plt.savefig(f'{MAWPS_DIR}/formula_{name}.png')
+    plt.savefig(f'{MAWPS_DIR}/formula_{name}.pdf')
     plt.clf()
     return formulas_hist
 
@@ -132,37 +144,159 @@ def replace_values(values, answers, formulas, cap=5):
 
     return new_values, new_answers
 
-def augment_data(df, augment_factor = 0.3, seed=42):
-    # take some random rows
-    n_rows_total = int(len(df)*augment_factor)
-    new_df = pd.DataFrame()
-    if augment_factor < 1:
-        rows = df.sample(n=n_rows_total, random_state=seed)
-        temp_rows = rows.copy().reset_index(drop=True)
-        new_values, new_answers = replace_values(temp_rows['Numbers'].tolist(), 
-                                                temp_rows['Answer'].tolist(), 
-                                                temp_rows['Equation'].tolist())
-        temp_rows['Numbers'] = [new_values[i] for i in range(len(new_values))]
-        temp_rows['Answer'] = new_answers
-        new_df = pd.concat([new_df, temp_rows], ignore_index=True)
+def augment_data(df, augmenting_factor=10, seed=42):
+    """
+    Augment dataset using OpenAI GPT-4o to generate similar math word problems.
+    For each sample, generates augmenting_factor new questions that use the same equation.
+    
+    Args:
+        df: DataFrame with columns ['Question', 'Equation', 'Standardized_Equation', 'Answer']
+        augmenting_factor: Number of new questions to generate per original sample
+        seed: Random seed for reproducibility
+    
+    Returns:
+        Augmented DataFrame with original + generated samples
+    """
+    if not OPENAI_API_KEY:
+        print("Warning: OPENAI_API_KEY not set. Skipping augmentation.")
+        return df
+    
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    new_rows = []
+    
+    print(f"Augmenting dataset with {augmenting_factor} new questions per sample...")
+    print(f"Total samples to process: {len(df)}")
+    
+    for idx, row in df.iterrows():
+        if idx % 10 == 0:
+            print(f"Processing sample {idx + 1}/{len(df)}...")
+        
+        original_question = row['Question']
+        equation = row['Equation']
+        standardized_eq = row['Standardized_Equation']
+        
+        # Create prompt for GPT-4o
+        prompt = f"""You are a math word problem generator. Given an original word problem and its equation, generate {augmenting_factor} DIFFERENT word problems that require the SAME equation to solve.
+
+Original question: "{original_question}"
+Equation used: {equation}
+
+IMPORTANT RULES:
+1. Generate {augmenting_factor} completely NEW and DIFFERENT word problems (different contexts, scenarios, objects)
+2. Each problem MUST use exactly the same equation structure: {equation}
+3. Use placeholders N_00, N_01, N_02 for the three numerical values
+4. Provide 3 positive numbers (between 0.1 and 50) for each problem
+5. Numbers MUST be real or integer values (NO NaN, NO infinity, NO null values)
+6. Make problems realistic and contextually diverse (different from the original)
+
+Provide your response as a JSON array with {augmenting_factor} objects, each containing:
+- "question": the new word problem with N_00, N_01, N_02 placeholders
+- "numbers": array of exactly 3 valid numeric values (real or integer, no NaN)
+
+Example format:
+[
+  {{
+    "question": "A baker made N_00 cookies on Monday and N_01 cookies on Tuesday. If he packages them in boxes of N_02 cookies each, how many boxes does he need?",
+    "numbers": [24.5, 18.3, 6.0]
+  }}
+]
+
+Provide ONLY the JSON array, no additional text."""
+        
+        try:
+            # Call OpenAI API
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that generates math word problems in JSON format."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.9,  # Higher temperature for more diversity
+                max_tokens=2000
+            )
+            
+            response_text = response.choices[0].message.content.strip()
+            
+            # Remove markdown code blocks if present
+            if response_text.startswith('```'):
+                response_text = response_text.split('```')[1]
+                if response_text.startswith('json'):
+                    response_text = response_text[4:]
+                response_text = response_text.strip()
+            
+            # Parse JSON response
+            generated_problems = json.loads(response_text)
+            
+            # Process each generated problem
+            for problem in generated_problems:
+                new_question = problem['question']
+                numbers = problem['numbers']
+                
+                if len(numbers) != 3:
+                    print(f"Warning: Skipping problem with {len(numbers)} numbers (expected 3)")
+                    continue
+                
+                # Calculate answer using the equation
+                symbols = [sp.Symbol(f'N_0{j}') for j in range(3)]
+                subs_dict = {s: val for s, val in zip(symbols, numbers)}
+                
+                try:
+                    expr = sp.sympify(equation)
+                    answer = float(expr.evalf(subs=subs_dict))
+                    
+                    # Create new row
+                    new_row = {
+                        'Question': new_question,
+                        'Equation': equation,
+                        'Standardized_Equation': standardized_eq,
+                        'Answer': answer,
+                        'N_00': numbers[0],
+                        'N_01': numbers[1],
+                        'N_02': numbers[2]
+                    }
+                    new_rows.append(new_row)
+                    
+                except Exception as e:
+                    print(f"Error calculating answer for generated problem: {e}")
+                    continue
+            
+            # Rate limiting: sleep to avoid hitting API limits
+            time.sleep(0.5)
+            
+        except Exception as e:
+            print(f"Error generating problems for sample {idx}: {e}")
+            continue
+    
+    # Create DataFrame from new rows
+    if new_rows:
+        augmented_df = pd.DataFrame(new_rows)
+
+        # replace placeholders N_0i in questions with the actual numbers in the original dataframe
+        N_00 = []
+        N_01 = []
+        N_02 = []
+        for i in range(len(df)):
+            row = df.iloc[i]
+            question_with_values = replace_N_with_values(
+                row['Question'], 
+                row['Numbers']
+            )
+            df.at[i, 'Question'] = question_with_values
+            N_00.append(row['Numbers'][0])
+            N_01.append(row['Numbers'][1])
+            N_02.append(row['Numbers'][2])
+        df['N_00'] = N_00
+        df['N_01'] = N_01
+        df['N_02'] = N_02
+
+        # Concatenate with original
+        columns_to_keep = ['Question', 'Equation', 'Standardized_Equation', 'Answer', 'N_00', 'N_01', 'N_02']
+        df = pd.concat([df[columns_to_keep], augmented_df[columns_to_keep]], ignore_index=True)
+        print(f"Successfully generated {len(new_rows)} new samples")
     else:
-        batch_size = min(32, n_rows_total-len(df))
-        while len(new_df) < n_rows_total:
-            rows = df.sample(n=batch_size, random_state=seed)
-            temp_rows = rows.copy().reset_index(drop=True)
-            new_values, new_answers = replace_values(temp_rows['Numbers'].tolist(), 
-                                                    temp_rows['Answer'].tolist(), 
-                                                    temp_rows['Equation'].tolist())
-            temp_rows['Numbers'] = [new_values[i] for i in range(len(new_values))]
-            temp_rows['Answer'] = new_answers
-            new_df = pd.concat([new_df, temp_rows], ignore_index=True)
-
-        if len(new_df) > n_rows_total:
-            new_df = new_df.sample(n=n_rows_total, random_state=seed).reset_index(drop=True)
-
-    # concatenate these new rows to the original dataframe
-    df = pd.concat([df, new_df], ignore_index=True)
-    # shuffle the dataframe
+        print("No new samples were generated")
+    
+    # Shuffle the dataframe
     df = df.sample(frac=1, random_state=seed).reset_index(drop=True)
     return df
     
@@ -223,7 +357,7 @@ class MAWPSDataset:
             ds = load_dataset("mwpt5/MAWPS")
             ds = ds['train']
 
-            # identify constant and linear formulas
+            # identify linear formulas
             ds = ds.add_column('Isconstant', [is_constant_formula(eq) for eq in ds['Equation']])
             ds = ds.add_column('Islinear', [is_linear_formula(eq) for eq in ds['Equation']])
 
@@ -300,32 +434,46 @@ class MAWPSDataset:
             formulas_hist_train = histogram_of_formulas(train_ds['Standardized_Equation'], name = 'hist_train')
             formulas_hist_val = histogram_of_formulas(val_ds['Standardized_Equation'], name = 'hist_val')
             formulas_hist_test = histogram_of_formulas(test_ds['Standardized_Equation'], name = 'hist_test')
-
+            
             # training data augmentation
-            train_ds = augment_data(train_ds, augment_factor=150, seed=self.shuffle_seed)
-            val_ds = augment_data(val_ds, augment_factor=100, seed=self.shuffle_seed)
+            train_ds = augment_data(train_ds, augmenting_factor=10, seed=self.shuffle_seed)
+
+            # create concepts columns with values from Numbers (do this before replacing in questions)
+            # Check if N_00, N_01, N_02 already exist (from augmentation) or need to be created from Numbers
+            if 'N_00' not in train_ds.columns:
+                for i in range(3):
+                    train_ds[CONCEPT_NAMES[i]] = train_ds['Numbers'].apply(lambda x: x[i])
+            if 'N_00' not in val_ds.columns:
+                for i in range(3):
+                    val_ds[CONCEPT_NAMES[i]] = val_ds['Numbers'].apply(lambda x: x[i])
+            if 'N_00' not in test_ds.columns:
+                for i in range(3):
+                    test_ds[CONCEPT_NAMES[i]] = test_ds['Numbers'].apply(lambda x: x[i])
 
             # replace N_0i with numbers in the Question column
-            train_questions = [replace_N_with_values(q, nums) for q, nums in zip(train_ds['Question'], train_ds['Numbers'])]
-            val_questions = [replace_N_with_values(q, nums) for q, nums in zip(val_ds['Question'], val_ds['Numbers'])]
-            test_questions = [replace_N_with_values(q, nums) for q, nums in zip(test_ds['Question'], test_ds['Numbers'])]
+            train_questions = [replace_N_with_values(q, [row['N_00'], row['N_01'], row['N_02']]) 
+                             for idx, row in train_ds.iterrows() for q in [row['Question']]]
+            val_questions = [replace_N_with_values(q, [row['N_00'], row['N_01'], row['N_02']]) 
+                           for idx, row in val_ds.iterrows() for q in [row['Question']]]
+            test_questions = [replace_N_with_values(q, [row['N_00'], row['N_01'], row['N_02']]) 
+                            for idx, row in test_ds.iterrows() for q in [row['Question']]]
+            
             train_ds = train_ds.drop(columns=['Question'])
             val_ds = val_ds.drop(columns=['Question'])
             test_ds = test_ds.drop(columns=['Question'])
             train_ds = train_ds.assign(Question=train_questions)
             val_ds = val_ds.assign(Question=val_questions)
             test_ds = test_ds.assign(Question=test_questions)
-
-            # create concepts columns with values from Numbers
-            for i in range(3):
-                train_ds[CONCEPT_NAMES[i]] = train_ds['Numbers'].apply(lambda x: x[i])
-                val_ds[CONCEPT_NAMES[i]] = val_ds['Numbers'].apply(lambda x: x[i])
-                test_ds[CONCEPT_NAMES[i]] = test_ds['Numbers'].apply(lambda x: x[i])
-
-            # eliminate unnecessary columns
-            train_ds = train_ds.drop(columns=['Isconstant', 'Islinear', 'Numbers'])
-            val_ds = val_ds.drop(columns=['Isconstant', 'Islinear', 'Numbers'])
-            test_ds = test_ds.drop(columns=['Isconstant', 'Islinear', 'Numbers'])
+            
+            cols_to_drop = ['Isconstant', 'Islinear']
+            if 'Numbers' in val_ds.columns:
+                cols_to_drop.append('Numbers')
+            val_ds = val_ds.drop(columns=cols_to_drop)
+            
+            cols_to_drop = ['Isconstant', 'Islinear']
+            if 'Numbers' in test_ds.columns:
+                cols_to_drop.append('Numbers')
+            test_ds = test_ds.drop(columns=cols_to_drop)
 
             formulas_hist_train = histogram_of_formulas(train_ds['Standardized_Equation'], name = 'hist_train')
             formulas_hist_val = histogram_of_formulas(val_ds['Standardized_Equation'], name = 'hist_val')
@@ -340,6 +488,11 @@ class MAWPSDataset:
             train_ds.to_pickle(f'{MAWPS_DIR}/mawps_train.pkl')
             val_ds.to_pickle(f'{MAWPS_DIR}/mawps_val.pkl')
             test_ds.to_pickle(f'{MAWPS_DIR}/mawps_test.pkl')
+            
+            # Save as CSV files as well
+            train_ds.to_csv(f'{MAWPS_DIR}/mawps_train.csv', index=False)
+            val_ds.to_csv(f'{MAWPS_DIR}/mawps_val.csv', index=False)
+            test_ds.to_csv(f'{MAWPS_DIR}/mawps_test.csv', index=False)
             
             # Save samples to text files for each split
             self._save_samples_to_txt(train_ds, 'train')
@@ -482,7 +635,65 @@ class CustomDataCollator:
             'y': labels,
             'questions': questions  # Add raw text for BERT preprocessing
         }
+
+
+if __name__ == "__main__":
+    # Test the augment_data function
+    print("Testing augment_data function...")
     
+    # Create a small test dataframe with a few samples
+    test_data = {
+        'Question': [
+            'At the town carnival Oliver rode the ferris wheel N_00 times and the bumper cars N_01 times . If each ride cost N_02 tickets , how many tickets did he use ?',
+            'In one week , an airplane pilot flew N_00 miles on Tuesday and N_01 miles on Thursday . If the pilot flies the same number of miles N_02 weeks in a row , how many miles does the pilot fly in all ?'
+        ],
+        'Equation': [
+            'N_02 * ( N_00 + N_01 )',
+            'N_02 * ( N_00 + N_01 )'
+        ],
+        'Standardized_Equation': [
+            'z * ( x + y )',
+            'z * ( x + y )'
+        ],
+        'Answer': [45.0, 210.0],
+        'N_00': [3.0, 50.0],
+        'N_01': [6.0, 20.0],
+        'N_02': [5.0, 3.0]
+    }
+    
+    test_df = pd.DataFrame(test_data)
+    
+    print("\nOriginal DataFrame:")
+    print(test_df)
+    print(f"\nOriginal size: {len(test_df)} samples")
+    
+    # Test with augmenting_factor=2 (generate 2 new questions per sample)
+    print("\nRunning augmentation with augmenting_factor=2...")
+    augmented_df = augment_data(test_df, augmenting_factor=2, seed=42)
+    
+    print(f"\nAugmented size: {len(augmented_df)} samples")
+    print(f"New samples generated: {len(augmented_df) - len(test_df)}")
+    
+    print("\nAugmented DataFrame:")
+    print(augmented_df)
+    
+    # Save results to CSV for inspection
+    output_file = f'{MAWPS_DIR}/test_augmentation.csv'
+    augmented_df.to_csv(output_file, index=False)
+    print(f"\nTest results saved to: {output_file}")
+    
+    # Display a few generated samples
+    print("\n" + "="*80)
+    print("Sample Generated Questions:")
+    print("="*80)
+    new_samples = augmented_df.tail(min(4, len(augmented_df) - len(test_df)))
+    for idx, row in new_samples.iterrows():
+        print(f"\nSample {idx + 1}:")
+        print(f"Question: {row['Question']}")
+        print(f"Numbers: N_00={row['N_00']:.2f}, N_01={row['N_01']:.2f}, N_02={row['N_02']:.2f}")
+        print(f"Equation: {row['Equation']}")
+        print(f"Answer: {row['Answer']:.2f}")
+        print("-" * 80)
 
 
 
