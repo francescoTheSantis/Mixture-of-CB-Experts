@@ -54,6 +54,11 @@ from src.loaders.datasets.symbolic_regression import (
     get_symbolic_dataset,
     SYMBOLIC_CONCEPT_NAMES,
 )
+from src.loaders.datasets.synthetic_physics_dataset.synthetic_motion_dataset import (
+    get_synthetic_motion_loaders,
+    CONCEPT_NAMES as synthetic_motion_concept_names,
+    TASK_NAMES as synthetic_motion_task_names,
+)
 
 from env import DATA_PATH
 
@@ -420,14 +425,6 @@ class DatasetFactory:
     @staticmethod
     def create_mawps_dataset(cfg, batch_size, seed, **kwargs):
         """Create MAWPS dataset - returns loaders directly"""
-        # Extract BERT pretraining parameters from config
-        bert_config = cfg.dataset.get('bert_pretraining', {})
-        use_bert_pretraining = bert_config.get('enabled', False)
-        bert_pretrain_full_dataset = bert_config.get('use_full_dataset', True)
-        bert_num_epochs = bert_config.get('num_epochs', 10)
-        bert_batch_size = bert_config.get('batch_size', 32)
-        bert_learning_rate = bert_config.get('learning_rate', 2e-5)
-        
         # Determine device from config
         if hasattr(cfg, 'gpus') and cfg.gpus and len(cfg.gpus) > 0:
             device = f'cuda:{cfg.gpus[0]}' if torch.cuda.is_available() else 'cpu'
@@ -438,12 +435,8 @@ class DatasetFactory:
             cfg.dataset.loader.dataset_already_created,
             batch_size=batch_size,
             shuffle_seed=seed,
-            use_bert_pretraining=use_bert_pretraining,
-            bert_pretrain_full_dataset=bert_pretrain_full_dataset,
-            bert_num_epochs=bert_num_epochs,
-            bert_batch_size=bert_batch_size,
-            bert_learning_rate=bert_learning_rate,
-            device=device
+            device=device,
+            pre_trained_transformer=cfg.text_backbone_name
         )
         loaded_train, loaded_val, loaded_test = loader.collator()
         
@@ -513,6 +506,35 @@ class DatasetFactory:
         return train_dataset, val_dataset, test_dataset, DatasetMetadata(
             concept_names, task_names, None
         )
+    
+    @staticmethod
+    def create_synthetic_motion_dataset(
+        batch_size, 
+        num_workers, 
+        n_samples=300,
+        acceleration_values=None,
+        dataset_already_created=False,
+        **kwargs
+    ):
+        """Create Synthetic Motion dataset - returns loaders directly (no preprocessing needed)"""
+        if acceleration_values is None:
+            acceleration_values = [0.5]
+        
+        train_loader, val_loader, test_loader = get_synthetic_motion_loaders(
+            batch_size=batch_size,
+            num_workers=num_workers,
+            embeddings_file="embeddings.npz",
+            n_samples=n_samples,
+            acceleration_values=acceleration_values,
+            dataset_already_created=dataset_already_created
+        )
+        
+        concept_names = synthetic_motion_concept_names
+        task_names = synthetic_motion_task_names
+        
+        return train_loader, val_loader, test_loader, DatasetMetadata(
+            concept_names, task_names, None
+        )
 
 
 def get_dataset(name, **kwargs):
@@ -560,5 +582,7 @@ def get_dataset(name, **kwargs):
         'feynman_I_14_3', 'feynman_I_15_10'
     ]:
         return factory.create_symbolic_regression_dataset(name=name, **kwargs)
+    elif name == 'synthetic_motion':
+        return factory.create_synthetic_motion_dataset(**kwargs)
     else:
         raise ValueError(f"Dataset {name} not recognized.")

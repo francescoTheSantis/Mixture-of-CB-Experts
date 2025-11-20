@@ -31,3 +31,4 @@ dependencies:
     - sympytorch
     - pysr
     - dill
+    - av

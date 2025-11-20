@@ -139,6 +139,10 @@ def get_type_from_name(dataset_name):
     if any(dataset_name.startswith(prefix) for prefix in symbolic_prefixes):
         return 'symbolic_regression'
     
+    # Video datasets (pre-embedded)
+    if dataset_name in ['synthetic_motion']:
+        return 'video'
+    
     # Image datasets
     if dataset_name in ['mnist_addition', 'cub', 'cub_incomplete', \
                         'awa2', 'awa2_incomplete', 'xor', 'celeba', \
@@ -283,7 +287,7 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
             csv_log_dir = csv_log_dir,
             data_type = data_type,
             dataset_name = cfg.dataset.metadata.name,
-            scale_variables = cfg.scale_variables if 'scale_variables' in cfg else True
+            scale_variables = cfg.scale_variables if 'scale_variables' in cfg else False
         )
 
         hard_concepts = cfg.hard_concepts

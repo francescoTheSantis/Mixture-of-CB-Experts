@@ -9,18 +9,10 @@ loader:
 # Dataset parameters
 metadata:
   task: regression
-  lr: 0.001
+  lr: 0.0001
   name: mawps
   data_type: text
   concept_type: continuous
-
-# BERT Pretraining parameters
-bert_pretraining:
-  enabled: True  # Set to True to enable BERT pretraining
-  use_full_dataset: True  # True = train on all splits, False = train only on train split
-  num_epochs: 5
-  batch_size: 128
-  learning_rate: 2e-5
 
 equations:
   - "c0 * ( c1 + c2 )"

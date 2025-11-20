@@ -54,6 +54,8 @@ def main(cfg: DictConfig) -> None:
         torch.save(loaded_val, val_path)
         torch.save(loaded_test, test_path)
 
+    # test embeddings quality
+
     # If the config is meant to just generate and store the dataset, exit here
     if cfg.only_store_dataset:
         print('Dataset stored. Exiting...')

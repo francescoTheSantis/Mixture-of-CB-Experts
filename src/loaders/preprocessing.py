@@ -182,10 +182,7 @@ class TextEmbeddingExtractor:
         self.extract_embeddings = extract_embeddings
         self.task_names = task_names
 
-        if cfg.dataset.metadata.name == "mawps":
-            self.model_name = "invokerliang/MWP-BERT-en"
-        else:
-            self.model_name = cfg.text_backbone_name
+        self.model_name = cfg.text_backbone_name
         self.model = AutoModel.from_pretrained(self.model_name, torch_dtype=torch.bfloat16, use_safetensors=True)
 
     #Mean Pooling - Take attention mask into account for correct averaging
@@ -210,25 +207,27 @@ class TextEmbeddingExtractor:
                     # Move inputs to device
                     input_ids_gpu = batch['x']["input_ids"].to(self.model.device).long()
                     attention_mask_gpu = batch['x']["attention_mask"].to(self.model.device).long()
+
+                    token_type_ids_gpu = batch['x']["token_type_ids"].to(self.model.device).long()
+                    outputs = self.model(
+                        input_ids=input_ids_gpu,
+                        token_type_ids=token_type_ids_gpu,
+                        attention_mask=attention_mask_gpu
+                    )
                     
-                    if self.cfg.dataset.metadata.name == "mawps":
-                        outputs = self.model(
-                            input_ids=input_ids_gpu,
-                            attention_mask=attention_mask_gpu
-                        )
-                    else:
-                        token_type_ids_gpu = batch['x']["token_type_ids"].to(self.model.device).long()
-                        outputs = self.model(
-                            input_ids=input_ids_gpu,
-                            token_type_ids=token_type_ids_gpu,
-                            attention_mask=attention_mask_gpu
-                        )
-                    
-                    if 'sentence-transformers' not in self.model_name:
-                        emb = outputs.last_hidden_state  # shape: (B, L, D)
+                    if 'sentence-transformers' in self.model_name:
+                        # NOTE: we decided to not use the [CLS] token representation for sentence-transformers
+                        # but the concatenaion of the whole embeddings.
+
+                        # emb = outputs.last_hidden_state  # shape: (B, L, D)
                         # Use the [CLS] token representation. This is useful to reduce the overall number of
                         # parameters of the model while preserving expressivity in the embeddings.
-                        emb = emb[:, 0, :]  # shape: (B, D)
+                        # emb = emb[:, 0, :]  # shape: (B, D)
+
+                        # Extract the last hidden state
+                        emb = outputs.last_hidden_state  # shape: (B, L, D)
+                        # Flatten the embeddings
+                        emb = emb.flatten(1).float()
                     else:
                         # Perform pooling
                         emb = self._mean_pooling(outputs, attention_mask_gpu)
@@ -279,18 +278,14 @@ class TextEmbeddingExtractor:
         return input, concepts, labels
 
 
-    def _create_loader(self, x, c, y, batch_size, use_custom_format=False):
+    def _create_loader(self, x, c, y, batch_size):
         """Helper function to create a DataLoader from embeddings and labels."""
-        if use_custom_format:
-            # TODO: implement a custom dataset format
-            pass
+        if self.extract_embeddings:
+            dataset = [{'x': _x.float(), 'c': _c, 'y': _y} for _x, _c, _y in zip(x, c, y)]
         else:
-            if self.extract_embeddings:
-                dataset = [{'x': _x.float(), 'c': _c, 'y': _y} for _x, _c, _y in zip(x, c, y)]
-            else:
-                dataset = [{'x': {'input_ids': input_ids.long(), 'attention_mask': attention_mask, 'token_type_ids': token_type_ids}, 'c': _c, 'y': _y} 
-                                for input_ids, attention_mask, token_type_ids, _c, _y in zip(x['input_ids'], x['attention_mask'], x['token_type_ids'], c, y)]
-            return DataLoader(dataset, batch_size=batch_size)
+            dataset = [{'x': {'input_ids': input_ids.long(), 'attention_mask': attention_mask, 'token_type_ids': token_type_ids}, 'c': _c, 'y': _y} 
+                            for input_ids, attention_mask, token_type_ids, _c, _y in zip(x['input_ids'], x['attention_mask'], x['token_type_ids'], c, y)]
+        return DataLoader(dataset, batch_size=batch_size)
 
     def produce_loaders(self, selected_concepts=None, task_names=None):
         """Produces new DataLoaders with embeddings instead of raw text."""
@@ -300,11 +295,9 @@ class TextEmbeddingExtractor:
 
         batch_size = self.train_loader.batch_size
 
-        use_custom_format = False
-
-        train_loader = self._create_loader(train_embeddings, train_concepts, train_labels, batch_size, use_custom_format) # be sure to shuffle the data prior to this step
-        val_loader = self._create_loader(val_embeddings, val_concepts, val_labels, batch_size, use_custom_format)
-        test_loader = self._create_loader(test_embeddings, test_concepts, test_labels, batch_size, use_custom_format)
+        train_loader = self._create_loader(train_embeddings, train_concepts, train_labels, batch_size) # be sure to shuffle the data prior to this step
+        val_loader = self._create_loader(val_embeddings, val_concepts, val_labels, batch_size)
+        test_loader = self._create_loader(test_embeddings, test_concepts, test_labels, batch_size)
 
         return train_loader, val_loader, test_loader
 
@@ -347,182 +340,3 @@ class TextEmbeddingDataset(torch.utils.data.Dataset):
                 "Features and word labels must have the same sequence length"
 
         return features, concept_label, word_label
-
-
-class MAWPSBERTEmbeddingExtractor:
-    """
-    Handles BERT pretraining and embedding extraction for MAWPS dataset.
-    This class manages the full pipeline:
-    1. Checking if a pretrained BERT model exists
-    2. Training a new BERT model if needed (sentence reconstruction task)
-    3. Loading the pretrained model
-    4. Extracting embeddings for all dataset splits
-    """
-    def __init__(self,
-                 cfg,
-                 train_loader,
-                 val_loader,
-                 test_loader,
-                 device='cuda',
-                 extract_embeddings=True):
-        from src.loaders.datasets.mawps_bert_pretraining import (
-            MAWPSBERTPretrainer,
-            extract_bert_embeddings
-        )
-        from env import DATA_PATH
-        
-        self.cfg = cfg
-        self.train_loader = train_loader
-        self.val_loader = val_loader
-        self.test_loader = test_loader
-        self.device = device
-        self.extract_embeddings = extract_embeddings
-        
-        # Extract BERT configuration from config
-        bert_config = cfg.dataset.get('bert_pretraining', {})
-        self.use_bert_pretraining = bert_config.get('enabled', False)
-        self.bert_pretrain_full_dataset = bert_config.get('use_full_dataset', True)
-        self.bert_num_epochs = bert_config.get('num_epochs', 10)
-        self.bert_batch_size = bert_config.get('batch_size', 32)
-        self.bert_learning_rate = bert_config.get('learning_rate', 2e-5)
-        
-        # Store references to the helper functions
-        self.MAWPSBERTPretrainer = MAWPSBERTPretrainer
-        self.extract_bert_embeddings = extract_bert_embeddings
-        self.DATA_PATH = DATA_PATH
-        self.MAWPS_DIR = f'{DATA_PATH}mawps'
-        
-    def _pretrain_or_load_bert(self):
-        """
-        Pretrain BERT if model doesn't exist, otherwise load existing model.
-        Returns the BERT model, tokenizer, and max_length.
-        """
-        print("\n" + "="*80)
-        print("BERT PRETRAINING MODE ENABLED FOR MAWPS")
-        print(f"Using device: {self.device}")
-        print("="*80)
-        
-        # Check if pretrained model exists
-        if not self.MAWPSBERTPretrainer.model_exists():
-            print("\nPretrained BERT model not found. Starting pretraining...")
-            
-            # Initialize pretrainer
-            pretrainer = self.MAWPSBERTPretrainer(
-                use_full_dataset=self.bert_pretrain_full_dataset,
-                pretrained_model_name='bert-base-uncased',
-                batch_size=self.bert_batch_size,
-                learning_rate=self.bert_learning_rate,
-                num_epochs=self.bert_num_epochs,
-                device=self.device
-            )
-            
-            # Train the model
-            pretrainer.train()
-        else:
-            print("\nPretrained BERT model found. Loading model...")
-        
-        # Load the pretrained model
-        bert_model, bert_tokenizer, max_length = self.MAWPSBERTPretrainer.load_pretrained_model(device=self.device)
-        print(f"BERT model loaded successfully. Max sequence length: {max_length}")
-        
-        return bert_model, bert_tokenizer, max_length
-    
-    def _extract_embeddings_from_loader(self, loader, bert_model, bert_tokenizer, max_length):
-        """
-        Extract BERT embeddings for a given dataloader.
-        Returns embeddings, concepts, and labels.
-        """
-        all_embeddings = []
-        all_concepts = []
-        all_labels = []
-        
-        print(f"Extracting BERT embeddings from loader...")
-        
-        for batch in tqdm(loader, desc="Processing batches"):
-            # Get concepts and labels from batch
-            concepts = batch['c']
-            labels = batch['y']
-            
-            # Decode the input_ids to get the original sentences
-            # The batch should have 'questions' field added by CustomDataCollator
-            if 'questions' in batch:
-                # Use the raw questions directly
-                batch_sentences = batch['questions']
-            else:
-                # Fallback: decode from input_ids if questions not available
-                input_ids = batch['x']['input_ids']
-                batch_sentences = []
-                for ids in input_ids:
-                    sentence = bert_tokenizer.decode(ids.long(), skip_special_tokens=True)
-                    batch_sentences.append(sentence)
-            
-            # Extract BERT embeddings for this batch of sentences
-            batch_embeddings = self.extract_bert_embeddings(
-                bert_model, 
-                bert_tokenizer, 
-                batch_sentences, 
-                max_length, 
-                self.device, 
-                batch_size=len(batch_sentences)
-            )
-            
-            # Flatten embeddings: (batch_size, max_length, 768) -> (batch_size, max_length * 768)
-            batch_embeddings_flat = batch_embeddings.view(batch_embeddings.shape[0], -1)
-            
-            all_embeddings.append(batch_embeddings_flat.cpu())
-            all_concepts.append(concepts.cpu())
-            all_labels.append(labels.cpu())
-        
-        # Concatenate all batches
-        embeddings = torch.cat(all_embeddings, dim=0)
-        concepts = torch.cat(all_concepts, dim=0)
-        labels = torch.cat(all_labels, dim=0)
-        
-        print(f"Extracted embeddings shape: {embeddings.shape}")
-        
-        return embeddings, concepts, labels
-    
-    def _create_loader(self, embeddings, concepts, labels, batch_size):
-        """Helper function to create a DataLoader from embeddings and labels."""
-        dataset = [{'x': e.float(), 'c': c, 'y': l} 
-                   for e, c, l in zip(embeddings, concepts, labels)]
-        return DataLoader(dataset, batch_size=batch_size, shuffle=False)
-    
-    def produce_loaders(self):
-        """
-        Main method to produce loaders with BERT embeddings.
-        Returns train, val, test loaders with BERT embeddings as input.
-        """
-        if not self.use_bert_pretraining or not self.extract_embeddings:
-            # If BERT pretraining is disabled or we're not extracting embeddings,
-            # just return the original loaders
-            return self.train_loader, self.val_loader, self.test_loader
-        
-        # Step 1: Pretrain or load BERT model
-        bert_model, bert_tokenizer, max_length = self._pretrain_or_load_bert()
-        
-        # Step 2: Extract embeddings for all splits
-        print("\nExtracting BERT embeddings for all splits...")
-        
-        train_embeddings, train_concepts, train_labels = self._extract_embeddings_from_loader(
-            self.train_loader, bert_model, bert_tokenizer, max_length
-        )
-        val_embeddings, val_concepts, val_labels = self._extract_embeddings_from_loader(
-            self.val_loader, bert_model, bert_tokenizer, max_length
-        )
-        test_embeddings, test_concepts, test_labels = self._extract_embeddings_from_loader(
-            self.test_loader, bert_model, bert_tokenizer, max_length
-        )
-        
-        # Step 3: Create new loaders with embeddings
-        batch_size = self.train_loader.batch_size
-        
-        train_loader = self._create_loader(train_embeddings, train_concepts, train_labels, batch_size)
-        val_loader = self._create_loader(val_embeddings, val_concepts, val_labels, batch_size)
-        test_loader = self._create_loader(test_embeddings, test_concepts, test_labels, batch_size)
-        
-        print(f"\nBERT embeddings extraction complete!")
-        print(f"Embedding dimension per sample: {train_embeddings.shape[1]} (max_length * 768)")
-        print("="*80 + "\n")
-        
-        return train_loader, val_loader, test_loader

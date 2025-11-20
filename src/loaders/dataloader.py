@@ -14,7 +14,7 @@ import itertools
 import random
 
 from env import DATA_PATH
-from src.loaders.preprocessing import EmbeddingExtractor, TextEmbeddingExtractor, MAWPSBERTEmbeddingExtractor
+from src.loaders.preprocessing import EmbeddingExtractor, TextEmbeddingExtractor
 from src.loaders.dataset_factory import get_dataset
 from src.loaders.datasets.cub import (
     SELECTED_CONCEPTS as cub_selected_concepts,
@@ -76,6 +76,7 @@ class loader(object):
         noise_std=None,
         train_autoencoder=True,
         use_stored_dataset=False,
+        acceleration_values=None,
     ):
         """Initialize the loader with dataset parameters."""
         self.name = name
@@ -98,6 +99,10 @@ class loader(object):
         self.noise_std = noise_std if noise_std is not None else 0.0
         self.train_autoencoder = train_autoencoder
         self.use_stored_dataset = use_stored_dataset
+        
+        # Synthetic motion parameters
+        self.acceleration_values = acceleration_values if acceleration_values is not None else [0.5]
+        
         # Handle device - ensure it's a proper device string
         if isinstance(device, omegaconf.listconfig.ListConfig):
             device_id = device[0]
@@ -294,6 +299,10 @@ class loader(object):
             params['train_autoencoder'] = getattr(self, 'train_autoencoder', True)
             params['use_stored_dataset'] = getattr(self, 'use_stored_dataset', False)
         
+        # Add synthetic motion parameters
+        if self.name == 'synthetic_motion':
+            params['acceleration_values'] = self.acceleration_values
+        
         return params
     
     def _is_symbolic_regression(self):
@@ -326,8 +335,8 @@ class loader(object):
         # Get datasets from factory
         train_data, val_data, test_data, _ = get_dataset(self.name, **params)
         
-        # Some datasets return loaders directly (text datasets, pendulum, etc.)
-        returns_loaders = self.name in ['cebab', 'pendulum', 'mawps']
+        # Some datasets return loaders directly (text datasets, pendulum, video datasets, etc.)
+        returns_loaders = self.name in ['cebab', 'pendulum', 'mawps', 'synthetic_motion']
         
         if not returns_loaders:
             # Create DataLoaders for datasets that return Dataset objects
@@ -363,8 +372,10 @@ class loader(object):
         
         # Apply embedding extraction if needed
         # Note: cfg is required for embedding extraction
+        # Video datasets (synthetic_motion) already have embeddings, so skip preprocessing
         if cfg is not None:
-            if get_type_from_name(self.name) == 'image' and self.extract_embeddings:
+            dataset_type = get_type_from_name(self.name)
+            if dataset_type == 'image' and self.extract_embeddings:
                 celeba_flag = True if self.name == 'celeba' else False
                 E_extr = EmbeddingExtractor(
                     cfg,
@@ -377,45 +388,18 @@ class loader(object):
                     self.extract_embeddings
                 )
                 loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
-            elif get_type_from_name(self.name) == 'text':
-                # Check if this is MAWPS with BERT pretraining enabled
-                if self.name == 'mawps':
-                    bert_config = cfg.dataset.get('bert_pretraining', {})
-                    use_bert_pretraining = bert_config.get('enabled', False)
-                    
-                    if use_bert_pretraining and self.extract_embeddings:
-                        # Use MAWPS BERT embedding extractor
-                        E_extr = MAWPSBERTEmbeddingExtractor(
-                            cfg,
-                            loaded_train,
-                            loaded_val,
-                            loaded_test,
-                            self.device,
-                            self.extract_embeddings
-                        )
-                        loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
-                    else:
-                        # Use regular text embedding extractor
-                        E_extr = TextEmbeddingExtractor(
-                            cfg,
-                            loaded_train,
-                            loaded_val,
-                            loaded_test,
-                            self.device,
-                            self.extract_embeddings
-                        )
-                        loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
-                else:
-                    # For non-MAWPS text datasets, use regular text embedding extractor
-                    E_extr = TextEmbeddingExtractor(
-                        cfg,
-                        loaded_train,
-                        loaded_val,
-                        loaded_test,
-                        self.device,
-                        self.extract_embeddings
-                    )
-                    loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
+            elif dataset_type == 'text':
+                # Use text embedding extractor for all text datasets
+                E_extr = TextEmbeddingExtractor(
+                    cfg,
+                    loaded_train,
+                    loaded_val,
+                    loaded_test,
+                    self.device,
+                    self.extract_embeddings
+                )
+                loaded_train, loaded_val, loaded_test = E_extr.produce_loaders()
+            # Video datasets ('video' type) skip preprocessing - already have embeddings
         
         return loaded_train, loaded_val, loaded_test
 

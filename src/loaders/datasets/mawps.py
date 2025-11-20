@@ -13,6 +13,7 @@ from torch.utils.data import ConcatDataset
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 from openai import OpenAI
+from sklearn.model_selection import train_test_split
 
 try:
     from env import DATA_PATH, OPENAI_API_KEY
@@ -23,9 +24,10 @@ except:
     project_root = Path(__file__).resolve().parent.parent.parent.parent
     sys.path.insert(0, str(project_root))
     from env import DATA_PATH, OPENAI_API_KEY
+from tqdm import tqdm
 
 
-MAWPS_DIR = f'{DATA_PATH}mawps'
+MAWPS_DIR = os.path.join(DATA_PATH, 'mawps')
 # make the directory if it does not exist
 os.makedirs(MAWPS_DIR, exist_ok=True)
 INPUT_COLUMN = 'Question'
@@ -91,7 +93,7 @@ def standardize_formula(formula: str) -> str:
         print(f"Error standardizing formula '{formula}': {e}")
         return formula
     
-def histogram_of_formulas(formulas, name = 'hist'):
+def histogram_of_formulas(formulas, name = 'hist', suffix=''):
     formulas_hist = dict()
     for eq in formulas:
         if eq in formulas_hist:
@@ -103,7 +105,7 @@ def histogram_of_formulas(formulas, name = 'hist'):
     plt.bar(formulas_hist.keys(), formulas_hist.values())
     plt.xticks(rotation=90, ha='right')
     plt.tight_layout()
-    plt.savefig(f'{MAWPS_DIR}/formula_{name}.pdf')
+    plt.savefig(f'{MAWPS_DIR}/formula_{name}_{suffix}.pdf')
     plt.clf()
     return formulas_hist
 
@@ -146,7 +148,7 @@ def replace_values(values, answers, formulas, cap=5):
 
 def augment_data(df, augmenting_factor=10, seed=42):
     """
-    Augment dataset using OpenAI GPT-4o to generate similar math word problems.
+    Augment dataset using OpenAI GPT-4o to generate similar math problems.
     For each sample, generates augmenting_factor new questions that use the same equation.
     
     Args:
@@ -157,6 +159,12 @@ def augment_data(df, augmenting_factor=10, seed=42):
     Returns:
         Augmented DataFrame with original + generated samples
     """
+
+    columns_to_keep = ['Question', 'Equation', 'Answer', 'N_00', 'N_01', 'N_02']
+
+    if augmenting_factor == 0:
+        return df[columns_to_keep]
+
     if not OPENAI_API_KEY:
         print("Warning: OPENAI_API_KEY not set. Skipping augmentation.")
         return df
@@ -167,36 +175,42 @@ def augment_data(df, augmenting_factor=10, seed=42):
     print(f"Augmenting dataset with {augmenting_factor} new questions per sample...")
     print(f"Total samples to process: {len(df)}")
     
-    for idx, row in df.iterrows():
-        if idx % 10 == 0:
-            print(f"Processing sample {idx + 1}/{len(df)}...")
+    for idx, row in tqdm(df.iterrows(), total=len(df), desc="Augmenting samples"):
         
         original_question = row['Question']
         equation = row['Equation']
-        standardized_eq = row['Standardized_Equation']
+        
+        # Calculate range hints for the LLM based on original numbers
+        n0_range = f"{max(0.1, row['N_00'] * 0.5):.1f} to {row['N_00'] * 2:.1f}"
+        n1_range = f"{max(0.1, row['N_01'] * 0.5):.1f} to {row['N_01'] * 2:.1f}"
+        n2_range = f"{max(0.1, row['N_02'] * 0.5):.1f} to {row['N_02'] * 2:.1f}"
         
         # Create prompt for GPT-4o
-        prompt = f"""You are a math word problem generator. Given an original word problem and its equation, generate {augmenting_factor} DIFFERENT word problems that require the SAME equation to solve.
+        prompt = f"""You are a math problem generator. Given an original math problem and its equation, generate {augmenting_factor} DIFFERENT problems that require the SAME equation to solve.
 
 Original question: "{original_question}"
 Equation used: {equation}
+Original numbers: N_00={row['N_00']:.2f}, N_01={row['N_01']:.2f}, N_02={row['N_02']:.2f}
 
 IMPORTANT RULES:
-1. Generate {augmenting_factor} completely NEW and DIFFERENT word problems (different contexts, scenarios, objects)
+1. Generate {augmenting_factor} completely NEW and DIFFERENT problems (different contexts, scenarios, objects)
 2. Each problem MUST use exactly the same equation structure: {equation}
-3. Use placeholders N_00, N_01, N_02 for the three numerical values
-4. Provide 3 positive numbers (between 0.1 and 50) for each problem
+3. The numbers N_00, N_01, N_02 refer to the three numerical values where the index indicates their order of appearance in the question.
+4. Provide 3 positive numbers in SIMILAR RANGES to the original sample:
+   - N_00 should be in range: {n0_range}
+   - N_01 should be in range: {n1_range}
+   - N_02 should be in range: {n2_range}
 5. Numbers MUST be real or integer values (NO NaN, NO infinity, NO null values)
 6. Make problems realistic and contextually diverse (different from the original)
 
 Provide your response as a JSON array with {augmenting_factor} objects, each containing:
-- "question": the new word problem with N_00, N_01, N_02 placeholders
+- "question": the new problem statement
 - "numbers": array of exactly 3 valid numeric values (real or integer, no NaN)
 
 Example format:
 [
   {{
-    "question": "A baker made N_00 cookies on Monday and N_01 cookies on Tuesday. If he packages them in boxes of N_02 cookies each, how many boxes does he need?",
+    "question": "A baker made 24.5 cookies on Monday and 18.3 cookies on Tuesday. If he packages them in boxes of 6.0 cookies each, how many boxes does he need?",
     "numbers": [24.5, 18.3, 6.0]
   }}
 ]
@@ -208,7 +222,7 @@ Provide ONLY the JSON array, no additional text."""
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that generates math word problems in JSON format."},
+                    {"role": "system", "content": "You are a helpful assistant that generates math problems in JSON format."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.9,  # Higher temperature for more diversity
@@ -248,7 +262,6 @@ Provide ONLY the JSON array, no additional text."""
                     new_row = {
                         'Question': new_question,
                         'Equation': equation,
-                        'Standardized_Equation': standardized_eq,
                         'Answer': answer,
                         'N_00': numbers[0],
                         'N_01': numbers[1],
@@ -260,8 +273,8 @@ Provide ONLY the JSON array, no additional text."""
                     print(f"Error calculating answer for generated problem: {e}")
                     continue
             
-            # Rate limiting: sleep to avoid hitting API limits
-            time.sleep(0.5)
+            # # Rate limiting: sleep to avoid hitting API limits
+            # time.sleep(0.5)
             
         except Exception as e:
             print(f"Error generating problems for sample {idx}: {e}")
@@ -270,34 +283,11 @@ Provide ONLY the JSON array, no additional text."""
     # Create DataFrame from new rows
     if new_rows:
         augmented_df = pd.DataFrame(new_rows)
-
-        # replace placeholders N_0i in questions with the actual numbers in the original dataframe
-        N_00 = []
-        N_01 = []
-        N_02 = []
-        for i in range(len(df)):
-            row = df.iloc[i]
-            question_with_values = replace_N_with_values(
-                row['Question'], 
-                row['Numbers']
-            )
-            df.at[i, 'Question'] = question_with_values
-            N_00.append(row['Numbers'][0])
-            N_01.append(row['Numbers'][1])
-            N_02.append(row['Numbers'][2])
-        df['N_00'] = N_00
-        df['N_01'] = N_01
-        df['N_02'] = N_02
-
         # Concatenate with original
-        columns_to_keep = ['Question', 'Equation', 'Standardized_Equation', 'Answer', 'N_00', 'N_01', 'N_02']
         df = pd.concat([df[columns_to_keep], augmented_df[columns_to_keep]], ignore_index=True)
         print(f"Successfully generated {len(new_rows)} new samples")
     else:
         print("No new samples were generated")
-    
-    # Shuffle the dataframe
-    df = df.sample(frac=1, random_state=seed).reset_index(drop=True)
     return df
     
 
@@ -311,8 +301,9 @@ def replace_N_with_values(question: str, values: list) -> str:
     return new_question
 
 def count_vars(expr):
-    # Prendi solo le lettere x, y, z
-    return len({v for v in expr if v in {'x', 'y', 'z'}})
+    # check how many different variables are in the expression
+    symbols = symbols_in_order(expr)
+    return len(symbols)
 
 
 
@@ -322,31 +313,20 @@ class MAWPSDataset:
                     already_created: bool = False,
                     batch_size: int = 128,
                     shuffle_seed = 42,
-                    use_bert_pretraining: bool = False,
-                    bert_pretrain_full_dataset: bool = True,
-                    bert_num_epochs: int = 10,
-                    bert_batch_size: int = 32,
-                    bert_learning_rate: float = 2e-5,
-                    device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
+                    device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
+                    pre_trained_transformer: str = 'bert-base-uncased'
                  ):
 
         self.name = "mawps"
         self.batch_size = batch_size
         self.shuffle_seed = shuffle_seed
         self.concept_names = CONCEPT_NAMES
-        self.use_bert_pretraining = use_bert_pretraining
-        self.bert_pretrain_full_dataset = bert_pretrain_full_dataset
         self.device = device
-        
-        # BERT pretraining parameters
-        self.bert_num_epochs = bert_num_epochs
-        self.bert_batch_size = bert_batch_size
-        self.bert_learning_rate = bert_learning_rate
 
-        # Check if dataset files exist
-        train_file = os.path.join(MAWPS_DIR, 'mawps_train.pkl')
-        val_file = os.path.join(MAWPS_DIR, 'mawps_val.pkl')
-        test_file = os.path.join(MAWPS_DIR, 'mawps_test.pkl')
+        # Check if dataset files exist for this specific seed
+        train_file = os.path.join(MAWPS_DIR, f'mawps_train_seed{shuffle_seed}.pkl')
+        val_file = os.path.join(MAWPS_DIR, f'mawps_val_seed{shuffle_seed}.pkl')
+        test_file = os.path.join(MAWPS_DIR, f'mawps_test_seed{shuffle_seed}.pkl')
         
         files_exist = os.path.exists(train_file) and os.path.exists(val_file) and os.path.exists(test_file)
         
@@ -364,93 +344,43 @@ class MAWPSDataset:
             # eliminate constant functions
             ds = ds.filter(lambda example: not example['Isconstant'])
 
-            # standardize formulas
-            ds = ds.add_column('Standardized_Equation', [standardize_formula(eq) for eq in ds['Equation']])
-            formulas_hist = histogram_of_formulas(ds['Standardized_Equation'])
+            # compute dictionary of ocntaining key=Equation, value=count
+            formulas_hist = histogram_of_formulas(ds['Equation'], name='all', suffix='pre_filtering')
 
-            # keep only formulas that appear at least 60 times
-            frequent_formulas = {eq for eq, count in formulas_hist.items() if count >= 60}
+            # Keep only formulas with 3 variables
+            formulas_3_vars = [expr for expr in formulas_hist.keys() if count_vars(expr) == 3]
 
-            # Remove formulas with 2 variables
-            formulas_2_vars = [expr for expr in frequent_formulas if count_vars(expr) == 2]
-            if len(formulas_2_vars) >0:
-                formulas_2_vars = set(formulas_2_vars)
-                frequent_formulas = frequent_formulas - formulas_2_vars
+            # Eliminate formulas that do not have 3 variables
+            ds = ds.filter(lambda example: example['Equation'] in formulas_3_vars)
 
-            # eliminate from frequent formulas all the linears except from one
-            #linears = {eq for eq in frequent_formulas if is_linear_formula(eq)}
-            #if len(linears) > 0:
-            #    linears = list(linears)
-            #    # order linears in base of their count in formulas_hist
-            #    linears.sort(key=lambda x: formulas_hist[x], reverse=True)
-            #    frequent_formulas = frequent_formulas - set(linears[:-1])
-            ds = ds.filter(lambda example: example['Standardized_Equation'] in frequent_formulas)
+            # Eliminate formulas that happear less than 30 times
+            frequent_formulas = {eq for eq, count in formulas_hist.items() if count >= 30}
+            ds = ds.filter(lambda example: example['Equation'] in frequent_formulas)
 
-            # check composition
-            formulas_hist = histogram_of_formulas(ds['Standardized_Equation'])
-
-            # cap numbers between 0.1 and 5 and update answers accordingly
-            numbers = [list(map(float, num.split())) for num in ds['Numbers']]
-            new_numbers, new_answers = replace_values(numbers, ds['Answer'], ds['Equation'])
+            # Divide the dataset into train, val, test splits (70%, 10%, 20%)
+            # Stratify over the Equation
+            ds = ds.to_pandas() 
+            train_ds, test_ds = train_test_split(ds, train_size=0.7, test_size=0.3, stratify=ds['Equation'], shuffle=True)
+            val_ds, test_ds = train_test_split(test_ds, train_size=(1/3), test_size=(2/3), stratify=test_ds['Equation'], shuffle=True)
             
-            ds = ds.remove_columns('Numbers')
-            ds = ds.add_column('Numbers', [new_numbers[i] for i in range(len(ds))])
-            ds = ds.remove_columns('Answer')
-            ds = ds.add_column('Answer', new_answers)
-                   
-            # divide in train, val, test stratifying by Standardized_Equation
-            unique_formulas = list(formulas_hist.keys())
-            for unique_form in unique_formulas:
-                sub_ds = ds.filter(lambda example: example['Standardized_Equation'] == unique_form)
-                sub_ds = sub_ds.shuffle(seed=self.shuffle_seed)
-                n = len(sub_ds)
-                n_train = int(0.5 * n)
-                n_val = int(0.25 * n)
-                train_ds_temp = sub_ds.select(range(n_train))
-                val_ds_temp = sub_ds.select(range(n_train, n_train + n_val))
-                test_ds_temp = sub_ds.select(range(n_train + n_val, n))
+            # Check if the splits preserve the equation distribution
+            histogram_of_formulas(train_ds['Equation'], name='train', suffix='pre_augmentation')
+            histogram_of_formulas(val_ds['Equation'], name='val', suffix='pre_augmentation')
+            histogram_of_formulas(test_ds['Equation'], name='test', suffix='pre_augmentation')
 
-                # transform in pandas dataframe
-                train_ds_temp = train_ds_temp.to_pandas()
-                val_ds_temp = val_ds_temp.to_pandas()
-                test_ds_temp = test_ds_temp.to_pandas()
-
-                # concatenate the datasets
-                if 'train_ds' in locals():
-                    train_ds = pd.concat([train_ds, train_ds_temp], ignore_index=True)
-                    val_ds = pd.concat([val_ds, val_ds_temp], ignore_index=True)
-                    test_ds = pd.concat([test_ds, test_ds_temp], ignore_index=True)
-                else:
-                    train_ds = train_ds_temp
-                    val_ds = val_ds_temp
-                    test_ds = test_ds_temp
-
-            # shuffle the datasets
-            train_ds = train_ds.sample(frac=1, random_state=self.shuffle_seed).reset_index(drop=True)
-            val_ds = val_ds.sample(frac=1, random_state=self.shuffle_seed).reset_index(drop=True)
-            test_ds = test_ds.sample(frac=1, random_state=self.shuffle_seed).reset_index(drop=True)
-
-            # check composition
-            formulas_hist_train = histogram_of_formulas(train_ds['Standardized_Equation'], name = 'hist_train')
-            formulas_hist_val = histogram_of_formulas(val_ds['Standardized_Equation'], name = 'hist_val')
-            formulas_hist_test = histogram_of_formulas(test_ds['Standardized_Equation'], name = 'hist_test')
-            
-            # training data augmentation
-            train_ds = augment_data(train_ds, augmenting_factor=10, seed=self.shuffle_seed)
-
-            # create concepts columns with values from Numbers (do this before replacing in questions)
+            # Create concepts columns with values from Numbers (do this before replacing in questions)
             # Check if N_00, N_01, N_02 already exist (from augmentation) or need to be created from Numbers
             if 'N_00' not in train_ds.columns:
                 for i in range(3):
-                    train_ds[CONCEPT_NAMES[i]] = train_ds['Numbers'].apply(lambda x: x[i])
+                    train_ds[CONCEPT_NAMES[i]] = train_ds['Numbers'].apply(lambda x: float(x.split()[i]))
             if 'N_00' not in val_ds.columns:
                 for i in range(3):
-                    val_ds[CONCEPT_NAMES[i]] = val_ds['Numbers'].apply(lambda x: x[i])
+                    val_ds[CONCEPT_NAMES[i]] = val_ds['Numbers'].apply(lambda x: float(x.split()[i]))
             if 'N_00' not in test_ds.columns:
                 for i in range(3):
-                    test_ds[CONCEPT_NAMES[i]] = test_ds['Numbers'].apply(lambda x: x[i])
+                    test_ds[CONCEPT_NAMES[i]] = test_ds['Numbers'].apply(lambda x: float(x.split()[i]))
 
-            # replace N_0i with numbers in the Question column
+            # Replace N_0i with numbers in the Question column
             train_questions = [replace_N_with_values(q, [row['N_00'], row['N_01'], row['N_02']]) 
                              for idx, row in train_ds.iterrows() for q in [row['Question']]]
             val_questions = [replace_N_with_values(q, [row['N_00'], row['N_01'], row['N_02']]) 
@@ -465,55 +395,52 @@ class MAWPSDataset:
             val_ds = val_ds.assign(Question=val_questions)
             test_ds = test_ds.assign(Question=test_questions)
             
-            cols_to_drop = ['Isconstant', 'Islinear']
-            if 'Numbers' in val_ds.columns:
-                cols_to_drop.append('Numbers')
-            val_ds = val_ds.drop(columns=cols_to_drop)
-            
-            cols_to_drop = ['Isconstant', 'Islinear']
-            if 'Numbers' in test_ds.columns:
-                cols_to_drop.append('Numbers')
-            test_ds = test_ds.drop(columns=cols_to_drop)
+            # training data augmentation
+            train_ds = augment_data(train_ds, augmenting_factor=10, seed=self.shuffle_seed)
+            histogram_of_formulas(train_ds['Equation'], name='train', suffix='post_augmentation')
 
-            formulas_hist_train = histogram_of_formulas(train_ds['Standardized_Equation'], name = 'hist_train')
-            formulas_hist_val = histogram_of_formulas(val_ds['Standardized_Equation'], name = 'hist_val')
-            formulas_hist_test = histogram_of_formulas(test_ds['Standardized_Equation'], name = 'hist_test')
+            # shuffle the datasets
+            train_ds = train_ds.sample(frac=1, random_state=self.shuffle_seed).reset_index(drop=True)
+            val_ds = val_ds.sample(frac=1, random_state=self.shuffle_seed).reset_index(drop=True)
+            test_ds = test_ds.sample(frac=1, random_state=self.shuffle_seed).reset_index(drop=True)
+
+            # Check if the set of equations are the same in all splits
+            train_formulas = set(train_ds['Equation'].unique())
+            val_formulas = set(val_ds['Equation'].unique())
+            test_formulas = set(test_ds['Equation'].unique())
+            unique_formulas = train_formulas.union(val_formulas).union(test_formulas)
+            assert len(train_formulas & val_formulas & test_formulas) == len(unique_formulas), "Formulas differ across splits!"
 
             # save the datasets and equations in pickle format
-            # write formulas in a text file
-            with open(f'{MAWPS_DIR}/formulas.txt', 'w') as f:
+            # write formulas in a text file (seed-specific)
+            with open(f'{MAWPS_DIR}/formulas_seed{self.shuffle_seed}.txt', 'w') as f:
                 for formula in unique_formulas:
                     f.write(f"{formula}\n")
 
-            train_ds.to_pickle(f'{MAWPS_DIR}/mawps_train.pkl')
-            val_ds.to_pickle(f'{MAWPS_DIR}/mawps_val.pkl')
-            test_ds.to_pickle(f'{MAWPS_DIR}/mawps_test.pkl')
+            train_ds.to_pickle(f'{MAWPS_DIR}/mawps_train_seed{self.shuffle_seed}.pkl')
+            val_ds.to_pickle(f'{MAWPS_DIR}/mawps_val_seed{self.shuffle_seed}.pkl')
+            test_ds.to_pickle(f'{MAWPS_DIR}/mawps_test_seed{self.shuffle_seed}.pkl')
             
             # Save as CSV files as well
-            train_ds.to_csv(f'{MAWPS_DIR}/mawps_train.csv', index=False)
-            val_ds.to_csv(f'{MAWPS_DIR}/mawps_val.csv', index=False)
-            test_ds.to_csv(f'{MAWPS_DIR}/mawps_test.csv', index=False)
+            train_ds.to_csv(f'{MAWPS_DIR}/mawps_train_seed{self.shuffle_seed}.csv', index=False)
+            val_ds.to_csv(f'{MAWPS_DIR}/mawps_val_seed{self.shuffle_seed}.csv', index=False)
+            test_ds.to_csv(f'{MAWPS_DIR}/mawps_test_seed{self.shuffle_seed}.csv', index=False)
             
-            # Save samples to text files for each split
-            self._save_samples_to_txt(train_ds, 'train')
-            self._save_samples_to_txt(val_ds, 'val')
-            self._save_samples_to_txt(test_ds, 'test')
-            
-            print(f"Datasets created and saved in {MAWPS_DIR}")
+            print(f"Datasets created and saved in {MAWPS_DIR} for seed {self.shuffle_seed}")
 
         else:
-            print(f"Loading existing datasets from {MAWPS_DIR}")
+            print(f"Loading existing datasets from {MAWPS_DIR} for seed {self.shuffle_seed}")
         
-        # load the datasets
-        train_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, 'mawps_train.pkl')))
-        val_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, 'mawps_val.pkl')))
-        test_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, 'mawps_test.pkl')))
+        # load the datasets (with seed-specific filenames)
+        train_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, f'mawps_train_seed{self.shuffle_seed}.pkl')))
+        val_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, f'mawps_val_seed{self.shuffle_seed}.pkl')))
+        test_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, f'mawps_test_seed{self.shuffle_seed}.pkl')))
 
         # Store BERT configuration for later use (will be used in preprocessing)
         # The actual BERT pretraining and embedding extraction happens in preprocessing.py
         
-        # Use bert-base-uncased as tokenizer for consistency
-        self.tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+        # Use the configured pre-trained transformer as tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(pre_trained_transformer)
         
         tokenized_train = train_dataset.map(
             self.preprocess_function,
@@ -619,7 +546,7 @@ class CustomDataCollator:
         )
 
         input_ids = torch.Tensor([example['input_ids'] for example in batch])
-        #token_type_ids = torch.Tensor([example['token_type_ids'] for example in batch])
+        token_type_ids = torch.Tensor([example['token_type_ids'] for example in batch])
         attention_mask = torch.Tensor([example['attention_mask'] for example in batch])
 
         # Include the raw question text for BERT embedding extraction
@@ -628,7 +555,7 @@ class CustomDataCollator:
         return {
             'x': {
                 'input_ids': input_ids, 
-                #'token_type_ids': token_type_ids, 
+                'token_type_ids': token_type_ids, 
                 'attention_mask': attention_mask
             },
             'c': concepts,
@@ -667,9 +594,9 @@ if __name__ == "__main__":
     print(test_df)
     print(f"\nOriginal size: {len(test_df)} samples")
     
-    # Test with augmenting_factor=2 (generate 2 new questions per sample)
-    print("\nRunning augmentation with augmenting_factor=2...")
-    augmented_df = augment_data(test_df, augmenting_factor=2, seed=42)
+    augmenting_factor = 10
+    print(f"\nRunning augmentation with augmenting_factor={augmenting_factor}...")
+    augmented_df = augment_data(test_df, augmenting_factor=augmenting_factor, seed=42)
     
     print(f"\nAugmented size: {len(augmented_df)} samples")
     print(f"New samples generated: {len(augmented_df) - len(test_df)}")

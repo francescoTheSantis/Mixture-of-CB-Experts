@@ -1,0 +1,22 @@
+defaults:
+  - common
+  - _self_
+
+loader:
+  name: synthetic_motion
+  extract_embeddings: false  # Already have embeddings from TimeSformer
+  n_samples: 30000  # Number of videos to generate
+  acceleration_values: [0.5]  # List of acceleration values (pixels per frame^2)
+  dataset_already_created: False  # Set to true to skip generation if dataset exists
+
+# Synthetic Motion Dataset Configuration
+# This dataset contains synthetic videos of ball motion with pre-extracted TimeSformer embeddings
+# Concepts: [x_0, y_0, x_t, y_t, t] - initial position, final position, and time
+# Target: [v_t] - final velocity
+
+metadata:
+  name: synthetic_motion
+  task: regression
+  lr: 0.001
+  data_type: symbolic_regression # The data type is video but we already pre-extracted embeddings
+  concept_type: continuous
