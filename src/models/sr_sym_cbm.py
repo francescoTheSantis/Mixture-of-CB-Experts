@@ -141,7 +141,7 @@ class SymbolicRegressorCBM(BaseModel):
         c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 
         ## Selector block ##
-        selector_output = self.classifier_selector(latent)
+        selector_output = self.classifier_selector(latent, global_step=self.global_step)
         selector_probs = selector_output['selector_probs'] # [batch_size, memory_size, n_samples]
         selection_dist = selector_output['selection_dist']
 

@@ -7,6 +7,7 @@ debugging/
 figures/
 m_licems.yaml
 output/
+outputs/
 test/
 saved_outputs/
 wandb_entity.txt

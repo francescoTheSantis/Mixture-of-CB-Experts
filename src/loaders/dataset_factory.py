@@ -514,11 +514,15 @@ class DatasetFactory:
         n_samples=300,
         acceleration_values=None,
         dataset_already_created=False,
+        cfg=None,
         **kwargs
     ):
         """Create Synthetic Motion dataset - returns loaders directly (no preprocessing needed)"""
         if acceleration_values is None:
             acceleration_values = [0.5]
+        
+        # Get img_backbone_name from cfg, with fallback to default
+        img_backbone_name = cfg.img_backbone_name if cfg is not None else 'facebook/dinov2-base'
         
         train_loader, val_loader, test_loader = get_synthetic_motion_loaders(
             batch_size=batch_size,
@@ -526,7 +530,8 @@ class DatasetFactory:
             embeddings_file="embeddings.npz",
             n_samples=n_samples,
             acceleration_values=acceleration_values,
-            dataset_already_created=dataset_already_created
+            dataset_already_created=dataset_already_created,
+            img_backbone_name=img_backbone_name
         )
         
         concept_names = synthetic_motion_concept_names

@@ -38,7 +38,8 @@ def check_dataset_exists(dataset_dir):
     return videos_exist, embeddings_exist
 
 
-def ensure_dataset_ready(n_samples=300, acceleration_values=None, dataset_dir=None, force_regenerate=False):
+def ensure_dataset_ready(n_samples=300, acceleration_values=None, dataset_dir=None, 
+                        force_regenerate=False, img_backbone_name="facebook/dinov2-base"):
     """
     Ensure dataset is generated and embeddings are extracted.
     
@@ -47,6 +48,7 @@ def ensure_dataset_ready(n_samples=300, acceleration_values=None, dataset_dir=No
         acceleration_values: List of acceleration values
         dataset_dir: Dataset directory (defaults to DATA_PATH/synthetic_motion)
         force_regenerate: If True, regenerate even if dataset exists
+        img_backbone_name: Name of the image backbone model to use for embeddings
     
     Returns:
         dataset_dir: Path to the dataset directory
@@ -75,13 +77,15 @@ def ensure_dataset_ready(n_samples=300, acceleration_values=None, dataset_dir=No
     
     # Extract embeddings if needed
     if not embeddings_exist or force_regenerate:
-        print("Extracting TimeSformer embeddings from videos...")
+        print(f"Extracting embeddings from videos using {img_backbone_name}...")
         from . import extract_embeddings
         # Temporarily set the dataset directory
         original_dataset_dir = extract_embeddings.DATASET_DIR
         extract_embeddings.DATASET_DIR = str(dataset_dir)
         try:
-            extract_embeddings.extract_embeddings_for_dataset()
+            extract_embeddings.extract_embeddings_for_dataset(
+                img_backbone_name=img_backbone_name
+            )
         finally:
             extract_embeddings.DATASET_DIR = original_dataset_dir
     
@@ -252,7 +256,8 @@ def get_synthetic_motion_loaders(
     embeddings_file="embeddings.npz",
     n_samples=300,
     acceleration_values=None,
-    dataset_already_created=False
+    dataset_already_created=False,
+    img_backbone_name="facebook/dinov2-base"
 ):
     """
     Create dataloaders for the synthetic motion dataset.
@@ -265,6 +270,7 @@ def get_synthetic_motion_loaders(
         n_samples: Number of samples to generate (if not already created)
         acceleration_values: List of acceleration values (if not already created)
         dataset_already_created: If True, skip generation check
+        img_backbone_name: Name of the image backbone model to use for embeddings
     
     Returns:
         tuple: (train_loader, val_loader, test_loader)
@@ -277,7 +283,8 @@ def get_synthetic_motion_loaders(
             n_samples=n_samples,
             acceleration_values=acceleration_values,
             dataset_dir=dataset_dir,
-            force_regenerate=False
+            force_regenerate=False,
+            img_backbone_name=img_backbone_name
         )
     
     train_dataset = SyntheticMotionDataset(split="train", embeddings_file=embeddings_file)

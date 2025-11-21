@@ -9,16 +9,16 @@ hydra:
   sweeper:
     params:
       seed: 1 #, 2, 3
-      dataset: mawps
-      model: sr_sym_cbm
-      memory_size: 10
+      dataset: synthetic_motion #mawps
+      model: sr_sym_cbm #sr_sym_cbm, prior_sym_cbm, kan_sym_cbm
+      memory_size: 4
     
 gpus: [1]
 
 scale_variables: False
 
 max_epochs: 500
-patience: 40
+patience: 50
 
 use_stored_dataset: True
 extract_embeddings: True

@@ -281,13 +281,17 @@ def update_config_from_data(cfg: DictConfig, train_loader, c_names,
     backbone_latent_size = cfg.dataset.latent_size if cfg.extract_embeddings else get_backbone_latent_size(backbone)
 
     with open_dict(cfg):
+        # Extract true equations if available
+        true_equations = cfg.dataset.equations if 'equations' in cfg.dataset and cfg.dataset.equations is not None else None
+        
         cfg.engine.update(
             c_names = c_names,
             y_name = y_names,
             csv_log_dir = csv_log_dir,
             data_type = data_type,
             dataset_name = cfg.dataset.metadata.name,
-            scale_variables = cfg.scale_variables if 'scale_variables' in cfg else False
+            scale_variables = cfg.scale_variables if 'scale_variables' in cfg else False,
+            true_equations = true_equations
         )
 
         hard_concepts = cfg.hard_concepts
@@ -333,7 +337,8 @@ def generate_data_path(cfg):
     # Add backbone name
     dataset_type = get_type_from_name(cfg.dataset.metadata.name)
     
-    if dataset_type == 'image':
+    if dataset_type == 'image' or dataset_type == 'video':
+        # Both image and video datasets use img_backbone_name
         img_backbone_name = cfg.img_backbone_name.replace('/', '_')
         data_path += f"/{img_backbone_name}"
     elif dataset_type == 'text':
@@ -344,32 +349,6 @@ def generate_data_path(cfg):
         latent_dim = cfg.dataset.loader.get('latent_dim', 4)
         noise_std = cfg.dataset.loader.get('noise_std', 0.0)
         data_path += f"/latent{latent_dim}_noise{str(noise_std).replace('.', '')}"
-
-    # Add seed
-    data_path += f"/seed_{cfg.seed}"
-
-    if cfg.dataset.loader.concept_percentage != None:
-        # Add concept percentage if it is not None
-        data_path += f"_{str(cfg.dataset.loader.concept_percentage).replace('.', '')}"
-
-    train_path = f"{data_path}/train.pt"
-    val_path = f"{data_path}/val.pt"
-    test_path = f"{data_path}/test.pt"
-
-    return data_path, train_path, val_path, test_path
-
-def generate_data_path(cfg):
-    data_path = os.path.join(str(CACHE), 
-                             'stored_tensors', 
-                             'embeddings' if cfg.extract_embeddings else 'raw', # whether it contains embeddings or not
-                             cfg.dataset.metadata.name)
-
-    # Add backbone name
-    img_backbone_name = cfg.img_backbone_name.replace('/', '_')
-    text_backbone_name = cfg.text_backbone_name.replace('/', '_')
-
-    data_path += f"/{img_backbone_name}" if get_type_from_name(cfg.dataset.metadata.name) == 'image' \
-                                                    else f"/{text_backbone_name}"
 
     # Add seed
     data_path += f"/seed_{cfg.seed}"

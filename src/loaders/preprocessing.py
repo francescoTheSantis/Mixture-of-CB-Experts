@@ -1,13 +1,17 @@
 import torch
 from torch.utils.data import DataLoader
 from torch import nn
-from transformers import AutoProcessor, AutoModel
+from transformers import AutoProcessor, AutoModel, AutoImageProcessor
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import torch.nn.functional as F
 import pandas as pd
 import os
+import av
+import numpy as np
+from PIL import Image
+from pathlib import Path
 
 class EmbeddingExtractor:
     """
@@ -202,7 +206,7 @@ class TextEmbeddingExtractor:
         self.model = self.model.to(self.device)
         self.model.eval()
         with torch.no_grad():
-            for batch in loader:
+            for batch in tqdm(loader):
                 if self.extract_embeddings:
                     # Move inputs to device
                     input_ids_gpu = batch['x']["input_ids"].to(self.model.device).long()
@@ -281,10 +285,10 @@ class TextEmbeddingExtractor:
     def _create_loader(self, x, c, y, batch_size):
         """Helper function to create a DataLoader from embeddings and labels."""
         if self.extract_embeddings:
-            dataset = [{'x': _x.float(), 'c': _c, 'y': _y} for _x, _c, _y in zip(x, c, y)]
+            dataset = [{'x': _x.float(), 'c': _c, 'y': _y} for _x, _c, _y in tqdm(zip(x, c, y), total=len(x), desc="Creating dataset")]
         else:
             dataset = [{'x': {'input_ids': input_ids.long(), 'attention_mask': attention_mask, 'token_type_ids': token_type_ids}, 'c': _c, 'y': _y} 
-                            for input_ids, attention_mask, token_type_ids, _c, _y in zip(x['input_ids'], x['attention_mask'], x['token_type_ids'], c, y)]
+                            for input_ids, attention_mask, token_type_ids, _c, _y in tqdm(zip(x['input_ids'], x['attention_mask'], x['token_type_ids'], c, y), total=len(x['input_ids']), desc="Creating dataset")]
         return DataLoader(dataset, batch_size=batch_size)
 
     def produce_loaders(self, selected_concepts=None, task_names=None):
@@ -340,3 +344,216 @@ class TextEmbeddingDataset(torch.utils.data.Dataset):
                 "Features and word labels must have the same sequence length"
 
         return features, concept_label, word_label
+
+
+class VideoEmbeddingExtractor:
+    """
+    Extracts video embeddings using frame-by-frame extraction with a pre-trained image backbone.
+    Each video is processed frame by frame, and embeddings are concatenated with zero-padding
+    to match the maximum number of frames across all videos.
+    
+    Args:
+        cfg: Configuration object containing img_backbone_name
+        video_paths: List or dict of video file paths to process
+        annotations: Dict of annotations for each video
+        device (str): Device to run the model on ('cuda' or 'cpu')
+    """
+    def __init__(self, cfg, device='cuda'):
+        self.cfg = cfg
+        self.device = device
+        self.img_backbone_name = cfg.img_backbone_name
+        
+        # Load the backbone model
+        self.model, self.latent_dim, self.processor = self._load_backbone_model()
+        
+    def _load_backbone_model(self):
+        """
+        Load the image backbone model based on the configuration.
+        Returns:
+            model: Loaded backbone model.
+            latent_dim: Dimension of the output embeddings.
+            processor: Image processor (if needed for transformers).
+        """
+        processor = None
+        
+        if 'resnet' in self.img_backbone_name:
+            if self.img_backbone_name == 'resnet18':
+                model = resnet18(pretrained=True)
+            elif self.img_backbone_name == 'resnet34':
+                model = resnet34(pretrained=True)
+            elif self.img_backbone_name == 'resnet50':
+                model = resnet50(pretrained=True)
+            elif self.img_backbone_name == 'resnet101':
+                model = resnet101(pretrained=True)
+            elif self.img_backbone_name == 'resnet152':
+                model = resnet152(pretrained=True)
+            else:
+                raise ValueError(f"ResNet model {self.img_backbone_name} not recognized.")
+            
+            # Remove the final classification layer
+            model = nn.Sequential(*list(model.children())[:-1])
+            latent_dim = model[-2][-1].bn2.num_features
+            
+        elif 'vit' in self.img_backbone_name or 'dino' in self.img_backbone_name:
+            model = AutoModel.from_pretrained(self.img_backbone_name)
+            latent_dim = model.config.hidden_size
+            processor = AutoImageProcessor.from_pretrained(self.img_backbone_name)
+            
+        else:
+            raise ValueError(f"Image backbone {self.img_backbone_name} not recognized.")
+        
+        model = model.to(self.device)
+        model.eval()
+        
+        return model, latent_dim, processor
+    
+    def read_all_frames_from_video(self, video_path):
+        """
+        Read all frames from a video file.
+        Args:
+            video_path (str): Path to the video file.
+        Returns:
+            frames_list (list): List of frames as numpy arrays (H, W, 3).
+        """
+        container = av.open(video_path)
+        frames_list = []
+        for frame in container.decode(video=0):
+            frames_list.append(frame.to_ndarray(format="rgb24"))
+        container.close()
+        return frames_list
+    
+    def extract_frame_embedding(self, frame_np):
+        """
+        Extract embedding from a single frame.
+        Args:
+            frame_np (np.ndarray): Frame as numpy array (H, W, 3).
+        Returns:
+            embedding (np.ndarray): Extracted embedding.
+        """
+        # Convert numpy array to PIL Image
+        frame_pil = Image.fromarray(frame_np)
+        
+        # Preprocess the frame
+        if 'vit' in self.img_backbone_name or 'dino' in self.img_backbone_name:
+            inputs = self.processor(images=frame_pil, return_tensors="pt")
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        else:
+            # For ResNet, we need to convert to tensor and normalize
+            frame_tensor = torch.from_numpy(frame_np).permute(2, 0, 1).float() / 255.0
+            # Resize to 224x224
+            frame_tensor = F.interpolate(frame_tensor.unsqueeze(0), size=(224, 224), mode='bilinear', align_corners=False)
+            # Normalize with ImageNet stats
+            mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+            std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+            frame_tensor = (frame_tensor - mean) / std
+            inputs = frame_tensor.to(self.device)
+        
+        # Extract embedding
+        with torch.no_grad():
+            if 'vit' in self.img_backbone_name or 'dino' in self.img_backbone_name:
+                outputs = self.model(**inputs)
+                # Use CLS token embedding (first token)
+                embedding = outputs.last_hidden_state[:, 0, :].cpu().numpy()
+            else:
+                # ResNet output
+                outputs = self.model(inputs)
+                embedding = outputs.flatten(start_dim=1).cpu().numpy()
+        
+        return embedding.squeeze()
+    
+    def extract_embedding_from_video(self, video_path):
+        """
+        Extract embeddings from all frames in a video file.
+        Args:
+            video_path (str): Path to the video file.
+        Returns:
+            embeddings (list): List of embeddings for each frame.
+            num_frames (int): Number of frames in the video.
+        """
+        frames_list = self.read_all_frames_from_video(video_path)
+        num_frames = len(frames_list)
+        
+        embeddings = []
+        for frame in frames_list:
+            embedding = self.extract_frame_embedding(frame)
+            embeddings.append(embedding)
+        
+        return embeddings, num_frames
+    
+    def extract_embeddings_for_dataset(self, video_paths, output_file, dataset_dir):
+        """
+        Extract embeddings for all videos in the dataset and save them.
+        
+        Args:
+            video_paths (dict): Dictionary mapping sample names to video paths
+            output_file (str): Name of the output file
+            dataset_dir (str or Path): Dataset directory
+        
+        Returns:
+            dict: Metadata about the embeddings
+        """
+        dataset_dir = Path(dataset_dir)
+        
+        print(f"Extracting embeddings using {self.img_backbone_name}...")
+        
+        # First pass: find maximum number of frames
+        print("First pass: determining maximum number of frames...")
+        max_frames = 0
+        frame_counts = {}
+        
+        for sample_name, video_path in tqdm(video_paths.items(), desc="Counting frames"):
+            try:
+                frames_list = self.read_all_frames_from_video(str(video_path))
+                num_frames = len(frames_list)
+                frame_counts[sample_name] = num_frames
+                max_frames = max(max_frames, num_frames)
+            except Exception as e:
+                print(f"\nError reading {sample_name}: {e}")
+                continue
+        
+        print(f"Maximum number of frames: {max_frames}")
+        
+        # Second pass: extract embeddings and pad
+        embeddings = {}
+        
+        print(f"Second pass: extracting embeddings for {len(video_paths)} videos...")
+        
+        for sample_name, video_path in tqdm(video_paths.items(), desc="Extracting embeddings"):
+            try:
+                frame_embeddings, num_frames = self.extract_embedding_from_video(str(video_path))
+                
+                # Convert list of embeddings to numpy array
+                frame_embeddings = np.stack(frame_embeddings)  # Shape: (num_frames, latent_dim)
+                
+                # Pad with zeros if necessary
+                if num_frames < max_frames:
+                    padding = np.zeros((max_frames - num_frames, self.latent_dim), dtype=frame_embeddings.dtype)
+                    frame_embeddings = np.concatenate([frame_embeddings, padding], axis=0)
+                
+                # Flatten to create final embedding: (max_frames * latent_dim,)
+                final_embedding = frame_embeddings.flatten()
+                
+                embeddings[sample_name] = final_embedding
+                
+            except Exception as e:
+                print(f"\nError processing {sample_name}: {e}")
+                continue
+        
+        # Save embeddings
+        output_path = dataset_dir / output_file
+        np.savez(output_path, **embeddings)
+        
+        # Save metadata about the embeddings
+        metadata = {
+            "img_backbone_name": self.img_backbone_name,
+            "latent_dim": int(self.latent_dim),
+            "max_frames": int(max_frames),
+            "embedding_shape": [int(max_frames), int(self.latent_dim)],
+            "flattened_embedding_dim": int(max_frames * self.latent_dim)
+        }
+        
+        print(f"\nEmbeddings saved to {output_path}")
+        print(f"Total embeddings extracted: {len(embeddings)}")
+        print(f"Embedding shape per video: ({max_frames}, {self.latent_dim}) -> flattened to ({max_frames * self.latent_dim},)")
+        
+        return metadata

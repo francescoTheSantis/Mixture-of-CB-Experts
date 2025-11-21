@@ -3,6 +3,7 @@ from omegaconf import DictConfig, open_dict
 from hydra.utils import instantiate
 import torch
 import os
+from tqdm.auto import tqdm
 
 from src.trainer import Trainer
 from src.utilities import set_seed, set_loggers, update_config_from_data, \
@@ -50,9 +51,15 @@ def main(cfg: DictConfig) -> None:
         print('Prepearing dataloaders...')
         os.makedirs(data_path, exist_ok=True)
         loaded_train, loaded_val, loaded_test = loader.load_data(cfg)
-        torch.save(loaded_train, train_path)
-        torch.save(loaded_val, val_path)
-        torch.save(loaded_test, test_path)
+
+        print('Saving preprocessed data...')
+        with tqdm(total=3, desc="Saving datasets") as pbar:
+            torch.save(loaded_train, train_path, pickle_protocol=4)
+            pbar.update(1)
+            torch.save(loaded_val, val_path, pickle_protocol=4)
+            pbar.update(1)
+            torch.save(loaded_test, test_path, pickle_protocol=4)
+            pbar.update(1)
 
     # test embeddings quality
 

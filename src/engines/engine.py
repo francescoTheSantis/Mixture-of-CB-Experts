@@ -26,7 +26,8 @@ class Engine(pl.LightningModule):
                 dataset_name: Optional[str] = None,
                 data_path: Optional[str] = None,
                 scale_variables: bool = True,
-                fine_tuning: bool = False
+                fine_tuning: bool = False,
+                true_equations: Optional[list] = None
                 ):
         super(Engine, self).__init__()
         self.model = model
@@ -45,6 +46,7 @@ class Engine(pl.LightningModule):
         self.model.scale_variables = scale_variables
         self.fine_tuning = fine_tuning
         self.fine_tuning_stage = None  # Will be set to 'pruning' during fine-tuning after pruning
+        self.true_equations = true_equations  # Store true equations if available
 
         # Initialize test predictions tracking
         self.test_predictions = []
@@ -274,6 +276,9 @@ class Engine(pl.LightningModule):
                 'c_true': batch['c'][i].detach().cpu().numpy(),
                 'y_true': batch['y'][i].detach().cpu().numpy(),
             }
+            # Add true equation if available
+            if self.true_equations is not None:
+                sample_data['true_equation'] = self.true_equations[0] if len(self.true_equations) > 0 else "No equation available"
             self.test_predictions.append(sample_data)
 
     def _extract_memory_equations(self):
@@ -391,6 +396,9 @@ class Engine(pl.LightningModule):
                 'sample_idx': pred['sample_idx'],
                 'equation': pred['equation'],
             }
+            # Add true equation if available
+            if 'true_equation' in pred:
+                record['true_equation'] = pred['true_equation']
             
             # Add task predictions and ground truth
             y_true = pred['y_true']

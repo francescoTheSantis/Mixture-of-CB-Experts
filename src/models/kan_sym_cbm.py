@@ -82,9 +82,8 @@ class KANSymbolicCBM(BaseModel):
                 # Approach suggested by the authors of KAN
                 self.widths = [
                     len(self.c_names), 
-                    # half of the neurons for the summation neurons and the pther half for multiplication neurons
-                    [(len(self.c_names)+1)//2, (len(self.c_names)+1)//2],
-                    [(len(self.c_names)+1)//2, (len(self.c_names)+1)//2],
+                    len(self.c_names) + 1,
+                    len(self.c_names) + 1,
                     self.output_size]
             else:
                 # For multi-output tasks, we use a smaller architecture since the number of parameters 
@@ -174,7 +173,7 @@ class KANSymbolicCBM(BaseModel):
         c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 
         ## Selector block ##
-        selector_output = self.classifier_selector(latent)
+        selector_output = self.classifier_selector(latent, global_step=self.global_step)
         selector_probs = selector_output['selector_probs'] # [batch_size, memory_size, n_samples]
         selection_dist = selector_output['selection_dist']
 

@@ -15,15 +15,8 @@ from transformers import AutoTokenizer
 from openai import OpenAI
 from sklearn.model_selection import train_test_split
 
-try:
-    from env import DATA_PATH, OPENAI_API_KEY
-except:
-    import sys
-    from pathlib import Path
-    # Add the project root to path (3 levels up from this file)
-    project_root = Path(__file__).resolve().parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    from env import DATA_PATH, OPENAI_API_KEY
+from env import DATA_PATH, OPENAI_API_KEY
+
 from tqdm import tqdm
 
 
@@ -34,7 +27,16 @@ INPUT_COLUMN = 'Question'
 TASK_NAMES = ['Answer']
 CONCEPT_NAMES = ['N_00', 'N_01', 'N_02']
 
+# Augmentation batch configuration
+QUESTIONS_PER_BATCH = 3  # Number of example questions to show to LLM per batch
+NUM_BATCHES_PER_EQUATION = 2  # Number of batches to process for each equation
+AUGMENTING_FACTOR = 50  # Number of new questions to generate per batch
+NUMERICAL_AUGMENTING_FACTOR = 300  # Number of different numerical combinations per question (for training only)
 
+# Training size after augmentation:
+# if d is the size of the trianing set before augmentation,
+# the size after augmentation will be:
+#   [ d + ( AUGMENTING_FACTOR * NUM_BATCHES_PER_EQUATION ) ] * NUMERICAL_AUGMENTING_FACTOR
 
 def is_linear_formula(formula: str) -> bool:
     try:
@@ -146,21 +148,24 @@ def replace_values(values, answers, formulas, cap=5):
 
     return new_values, new_answers
 
-def augment_data(df, augmenting_factor=10, seed=42):
+def augment_data(df, questions_per_batch=1, num_batches=1, augmenting_factor=1, seed=42):
     """
     Augment dataset using OpenAI GPT-4o to generate similar math problems.
-    For each sample, generates augmenting_factor new questions that use the same equation.
+    Groups questions by equation, then processes batches to reduce API calls.
+    LLM generates questions with N_0i placeholders.
     
     Args:
-        df: DataFrame with columns ['Question', 'Equation', 'Standardized_Equation', 'Answer']
-        augmenting_factor: Number of new questions to generate per original sample
+        df: DataFrame with columns ['Question', 'Equation']
+        questions_per_batch: Number of example questions to show LLM per batch
+        num_batches: Number of batches to process for each equation
+        augmenting_factor: Number of new questions to generate per batch
         seed: Random seed for reproducibility
     
     Returns:
         Augmented DataFrame with original + generated samples
     """
 
-    columns_to_keep = ['Question', 'Equation', 'Answer', 'N_00', 'N_01', 'N_02']
+    columns_to_keep = ['Question', 'Equation']
 
     if augmenting_factor == 0:
         return df[columns_to_keep]
@@ -170,115 +175,104 @@ def augment_data(df, augmenting_factor=10, seed=42):
         return df
     
     client = OpenAI(api_key=OPENAI_API_KEY)
-    new_rows = []
     
-    print(f"Augmenting dataset with {augmenting_factor} new questions per sample...")
-    print(f"Total samples to process: {len(df)}")
-    
-    for idx, row in tqdm(df.iterrows(), total=len(df), desc="Augmenting samples"):
-        
-        original_question = row['Question']
+    # Group questions by equation
+    eq_dict = {}
+    for idx, row in df.iterrows():
         equation = row['Equation']
-        
-        # Calculate range hints for the LLM based on original numbers
-        n0_range = f"{max(0.1, row['N_00'] * 0.5):.1f} to {row['N_00'] * 2:.1f}"
-        n1_range = f"{max(0.1, row['N_01'] * 0.5):.1f} to {row['N_01'] * 2:.1f}"
-        n2_range = f"{max(0.1, row['N_02'] * 0.5):.1f} to {row['N_02'] * 2:.1f}"
-        
-        # Create prompt for GPT-4o
-        prompt = f"""You are a math problem generator. Given an original math problem and its equation, generate {augmenting_factor} DIFFERENT problems that require the SAME equation to solve.
+        question = row['Question']
+        if equation not in eq_dict:
+            eq_dict[equation] = []
+        eq_dict[equation].append(question)
+    
+    print(f"Found {len(eq_dict)} unique equations")
+    print(f"Processing {num_batches} batches per equation with {questions_per_batch} questions per batch")
+    print(f"Generating {augmenting_factor} new questions per batch")
+    
+    new_rows = []
+    total_batches = len(eq_dict) * num_batches
+    
+    with tqdm(total=total_batches, desc="Augmenting batches") as pbar:
+        for equation, questions in eq_dict.items():
+            # Create batches for this equation
+            random.seed(seed)
+            
+            for batch_idx in range(num_batches):
+                # Sample questions for this batch
+                if len(questions) <= questions_per_batch:
+                    batch_questions = questions
+                else:
+                    batch_questions = random.sample(questions, questions_per_batch)
+                
+                # Format example questions
+                examples_str = "\n".join([f"{i+1}. {q}" for i, q in enumerate(batch_questions)])
+                
+                # Create prompt for GPT-4o
+                prompt = f"""You are a math problem generator. Given example math problems and their equation, generate {augmenting_factor} DIFFERENT problems that require the SAME equation to solve.
 
-Original question: "{original_question}"
+Example questions:
+{examples_str}
+
 Equation used: {equation}
-Original numbers: N_00={row['N_00']:.2f}, N_01={row['N_01']:.2f}, N_02={row['N_02']:.2f}
 
 IMPORTANT RULES:
 1. Generate {augmenting_factor} completely NEW and DIFFERENT problems (different contexts, scenarios, objects)
 2. Each problem MUST use exactly the same equation structure: {equation}
-3. The numbers N_00, N_01, N_02 refer to the three numerical values where the index indicates their order of appearance in the question.
-4. Provide 3 positive numbers in SIMILAR RANGES to the original sample:
-   - N_00 should be in range: {n0_range}
-   - N_01 should be in range: {n1_range}
-   - N_02 should be in range: {n2_range}
-5. Numbers MUST be real or integer values (NO NaN, NO infinity, NO null values)
-6. Make problems realistic and contextually diverse (different from the original)
+3. Use PLACEHOLDERS N_00, N_01, N_02 in your questions instead of actual numbers
+4. The placeholders N_00, N_01, N_02 refer to the three numerical values in order of their appearance in the question
+5. Make problems realistic and contextually diverse (different from the examples)
+6. Do NOT include actual numerical values - only use the placeholders N_00, N_01, N_02
 
 Provide your response as a JSON array with {augmenting_factor} objects, each containing:
-- "question": the new problem statement
-- "numbers": array of exactly 3 valid numeric values (real or integer, no NaN)
+- "question": the new problem statement with N_00, N_01, N_02 placeholders
 
 Example format:
 [
   {{
-    "question": "A baker made 24.5 cookies on Monday and 18.3 cookies on Tuesday. If he packages them in boxes of 6.0 cookies each, how many boxes does he need?",
-    "numbers": [24.5, 18.3, 6.0]
+    "question": "A baker made N_00 cookies on Monday and N_01 cookies on Tuesday. If he packages them in boxes of N_02 cookies each, how many boxes does he need?"
   }}
 ]
 
 Provide ONLY the JSON array, no additional text."""
         
-        try:
-            # Call OpenAI API
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that generates math problems in JSON format."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.9,  # Higher temperature for more diversity
-                max_tokens=2000
-            )
-            
-            response_text = response.choices[0].message.content.strip()
-            
-            # Remove markdown code blocks if present
-            if response_text.startswith('```'):
-                response_text = response_text.split('```')[1]
-                if response_text.startswith('json'):
-                    response_text = response_text[4:]
-                response_text = response_text.strip()
-            
-            # Parse JSON response
-            generated_problems = json.loads(response_text)
-            
-            # Process each generated problem
-            for problem in generated_problems:
-                new_question = problem['question']
-                numbers = problem['numbers']
-                
-                if len(numbers) != 3:
-                    print(f"Warning: Skipping problem with {len(numbers)} numbers (expected 3)")
-                    continue
-                
-                # Calculate answer using the equation
-                symbols = [sp.Symbol(f'N_0{j}') for j in range(3)]
-                subs_dict = {s: val for s, val in zip(symbols, numbers)}
-                
                 try:
-                    expr = sp.sympify(equation)
-                    answer = float(expr.evalf(subs=subs_dict))
+                    # Call OpenAI API
+                    response = client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": "You are a helpful assistant that generates math problems in JSON format."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=0.9,  # Higher temperature for more diversity
+                    )
                     
-                    # Create new row
-                    new_row = {
-                        'Question': new_question,
-                        'Equation': equation,
-                        'Answer': answer,
-                        'N_00': numbers[0],
-                        'N_01': numbers[1],
-                        'N_02': numbers[2]
-                    }
-                    new_rows.append(new_row)
+                    response_text = response.choices[0].message.content.strip()
+                    
+                    # Remove markdown code blocks if present
+                    if response_text.startswith('```'):
+                        response_text = response_text.split('```')[1]
+                        if response_text.startswith('json'):
+                            response_text = response_text[4:]
+                        response_text = response_text.strip()
+                    
+                    # Parse JSON response
+                    generated_problems = json.loads(response_text)
+                    
+                    # Process each generated problem
+                    for problem in generated_problems:
+                        new_question = problem['question']
+                        
+                        # Create new row with only question and equation
+                        new_row = {
+                            'Question': new_question,
+                            'Equation': equation
+                        }
+                        new_rows.append(new_row)
                     
                 except Exception as e:
-                    print(f"Error calculating answer for generated problem: {e}")
-                    continue
-            
-            # # Rate limiting: sleep to avoid hitting API limits
-            # time.sleep(0.5)
-            
-        except Exception as e:
-            print(f"Error generating problems for sample {idx}: {e}")
-            continue
+                    print(f"Error generating problems for equation '{equation}', batch {batch_idx}: {e}")
+                
+                pbar.update(1)
     
     # Create DataFrame from new rows
     if new_rows:
@@ -344,60 +338,58 @@ class MAWPSDataset:
             # eliminate constant functions
             ds = ds.filter(lambda example: not example['Isconstant'])
 
+            ############## Automatic Equation filtering ##############
+            # # Keep only formulas with 3 variables
+            # formulas_3_vars = [expr for expr in formulas_hist.keys() if count_vars(expr) == 3]
+
+            # # Eliminate formulas that do not have 3 variables
+            # ds = ds.filter(lambda example: example['Equation'] in formulas_3_vars)
+
+            # # Eliminate formulas that happear less than 30 times
+            # frequent_formulas = {eq for eq, count in formulas_hist.items() if count >= 30}
+            # ds = ds.filter(lambda example: example['Equation'] in frequent_formulas)
+            ############## End of Automatic Equation filtering ##############
+
+            ############## Manual Equation filtering ##############
+            # We eliminated all the linear equations as we want to show how the symbolic version 
+            # of our class of model is capable to obtain good results even on non-linear equations.
+            equations_to_keep = [
+                # "( N_00 + N_01 ) / N_02",
+                # "( N_01 + N_02 ) / N_00",
+                "N_02 * ( N_00 + N_01 )",
+                "N_00 * ( N_01 - N_02 )",
+                # "N_00 + N_02 - N_01",
+                "N_02 * ( N_00 - N_01 )", 
+                # "N_00 + N_01 + N_02",
+                # "N_00 + N_01 - N_02",
+                # "( N_00 - N_01 ) / N_02", 
+                "N_00 * ( N_01 + N_02 )",
+            ]
+            # Convert to pandas for processing
+            ds = ds.to_pandas()
+            ds = ds[ds['Equation'].isin(equations_to_keep)].reset_index(drop=True)
+            ############## End of Manual Equation filtering ##############
+            
             # compute dictionary of ocntaining key=Equation, value=count
-            formulas_hist = histogram_of_formulas(ds['Equation'], name='all', suffix='pre_filtering')
+            histogram_of_formulas(ds['Equation'], name='all', suffix='post_filtering')
 
-            # Keep only formulas with 3 variables
-            formulas_3_vars = [expr for expr in formulas_hist.keys() if count_vars(expr) == 3]
-
-            # Eliminate formulas that do not have 3 variables
-            ds = ds.filter(lambda example: example['Equation'] in formulas_3_vars)
-
-            # Eliminate formulas that happear less than 30 times
-            frequent_formulas = {eq for eq, count in formulas_hist.items() if count >= 30}
-            ds = ds.filter(lambda example: example['Equation'] in frequent_formulas)
-
-            # Divide the dataset into train, val, test splits (70%, 10%, 20%)
-            # Stratify over the Equation
-            ds = ds.to_pandas() 
-            train_ds, test_ds = train_test_split(ds, train_size=0.7, test_size=0.3, stratify=ds['Equation'], shuffle=True)
-            val_ds, test_ds = train_test_split(test_ds, train_size=(1/3), test_size=(2/3), stratify=test_ds['Equation'], shuffle=True)
+            # Keep only Question and Equation columns
+            ds = ds[['Question', 'Equation']]
             
-            # Check if the splits preserve the equation distribution
-            histogram_of_formulas(train_ds['Equation'], name='train', suffix='pre_augmentation')
-            histogram_of_formulas(val_ds['Equation'], name='val', suffix='pre_augmentation')
-            histogram_of_formulas(test_ds['Equation'], name='test', suffix='pre_augmentation')
-
-            # Create concepts columns with values from Numbers (do this before replacing in questions)
-            # Check if N_00, N_01, N_02 already exist (from augmentation) or need to be created from Numbers
-            if 'N_00' not in train_ds.columns:
-                for i in range(3):
-                    train_ds[CONCEPT_NAMES[i]] = train_ds['Numbers'].apply(lambda x: float(x.split()[i]))
-            if 'N_00' not in val_ds.columns:
-                for i in range(3):
-                    val_ds[CONCEPT_NAMES[i]] = val_ds['Numbers'].apply(lambda x: float(x.split()[i]))
-            if 'N_00' not in test_ds.columns:
-                for i in range(3):
-                    test_ds[CONCEPT_NAMES[i]] = test_ds['Numbers'].apply(lambda x: float(x.split()[i]))
-
-            # Replace N_0i with numbers in the Question column
-            train_questions = [replace_N_with_values(q, [row['N_00'], row['N_01'], row['N_02']]) 
-                             for idx, row in train_ds.iterrows() for q in [row['Question']]]
-            val_questions = [replace_N_with_values(q, [row['N_00'], row['N_01'], row['N_02']]) 
-                           for idx, row in val_ds.iterrows() for q in [row['Question']]]
-            test_questions = [replace_N_with_values(q, [row['N_00'], row['N_01'], row['N_02']]) 
-                            for idx, row in test_ds.iterrows() for q in [row['Question']]]
+            # data augmentation
+            ds = augment_data(ds, 
+                questions_per_batch=QUESTIONS_PER_BATCH,
+                num_batches=NUM_BATCHES_PER_EQUATION,
+                augmenting_factor=AUGMENTING_FACTOR,
+                seed=self.shuffle_seed
+            )
             
-            train_ds = train_ds.drop(columns=['Question'])
-            val_ds = val_ds.drop(columns=['Question'])
-            test_ds = test_ds.drop(columns=['Question'])
-            train_ds = train_ds.assign(Question=train_questions)
-            val_ds = val_ds.assign(Question=val_questions)
-            test_ds = test_ds.assign(Question=test_questions)
-            
-            # training data augmentation
-            train_ds = augment_data(train_ds, augmenting_factor=10, seed=self.shuffle_seed)
-            histogram_of_formulas(train_ds['Equation'], name='train', suffix='post_augmentation')
+            ds = self._generate_numbers_and_answers(ds, seed=self.shuffle_seed, numerical_augmentation_factor=NUMERICAL_AUGMENTING_FACTOR)
+
+            # # Divide the dataset into train, val, test splits (80%, 10%, 10%)
+            # # Stratify over the Equation
+            train_ds, test_ds = train_test_split(ds, train_size=0.8, test_size=0.2, stratify=ds['Equation'], shuffle=True, random_state=self.shuffle_seed)
+            val_ds, test_ds = train_test_split(test_ds, train_size=0.5, test_size=0.5, stratify=test_ds['Equation'], shuffle=True, random_state=self.shuffle_seed)
 
             # shuffle the datasets
             train_ds = train_ds.sample(frac=1, random_state=self.shuffle_seed).reset_index(drop=True)
@@ -426,6 +418,16 @@ class MAWPSDataset:
             val_ds.to_csv(f'{MAWPS_DIR}/mawps_val_seed{self.shuffle_seed}.csv', index=False)
             test_ds.to_csv(f'{MAWPS_DIR}/mawps_test_seed{self.shuffle_seed}.csv', index=False)
             
+            # # Check if the splits preserve the equation distribution
+            histogram_of_formulas(train_ds['Equation'], name='train', suffix='post_augmentation')
+            histogram_of_formulas(val_ds['Equation'], name='val', suffix='post_augmentation')
+            histogram_of_formulas(test_ds['Equation'], name='test', suffix='post_augmentation')
+    
+            print(f"Final dataset sizes:")
+            print(f"  Train: {len(train_ds)} samples")
+            print(f"  Val: {len(val_ds)} samples")
+            print(f"  Test: {len(test_ds)} samples")
+
             print(f"Datasets created and saved in {MAWPS_DIR} for seed {self.shuffle_seed}")
 
         else:
@@ -436,9 +438,6 @@ class MAWPSDataset:
         val_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, f'mawps_val_seed{self.shuffle_seed}.pkl')))
         test_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, f'mawps_test_seed{self.shuffle_seed}.pkl')))
 
-        # Store BERT configuration for later use (will be used in preprocessing)
-        # The actual BERT pretraining and embedding extraction happens in preprocessing.py
-        
         # Use the configured pre-trained transformer as tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(pre_trained_transformer)
         
@@ -460,6 +459,69 @@ class MAWPSDataset:
         self.val_dataset = tokenized_val
         self.test_dataset = tokenized_test
 
+    def _generate_numbers_and_answers(self, df, seed=42, min_val=-5.0, max_val=5.0, numerical_augmentation_factor=1):
+        """
+        Generate random numbers for N_00, N_01, N_02 and compute Answer by evaluating the Equation.
+        Also replaces placeholders in Question with the generated numbers.
+        
+        Args:
+            df: DataFrame with columns ['Question', 'Equation']
+            seed: Random seed for reproducibility
+            min_val: Minimum value for generated numbers
+            max_val: Maximum value for generated numbers
+            numerical_augmentation_factor: Number of different numerical combinations to generate per question
+        
+        Returns:
+            DataFrame with N_00, N_01, N_02, Answer columns and updated Question text
+        """
+        random.seed(seed)
+        
+        n00_list, n01_list, n02_list = [], [], []
+        answers = []
+        questions_with_values = []
+        equations_list = []
+        
+        for idx, row in df.iterrows():
+            equation = row['Equation']
+            question = row['Question']
+            
+            # Generate multiple numerical combinations for this question
+            for aug_idx in range(numerical_augmentation_factor):
+                # Generate random numbers in the specified range
+                numbers = [round(random.uniform(min_val, max_val), 2) for _ in range(3)]
+                n00_list.append(numbers[0])
+                n01_list.append(numbers[1])
+                n02_list.append(numbers[2])
+                
+                # Replace placeholders in the question
+                question_with_values = replace_N_with_values(question, numbers)
+                questions_with_values.append(question_with_values)
+                equations_list.append(equation)
+                
+                # Calculate answer using the equation
+                symbols = [sp.Symbol(f'N_0{j}') for j in range(3)]
+                subs_dict = {s: val for s, val in zip(symbols, numbers)}
+                
+                try:
+                    expr = sp.sympify(equation)
+                    answer = float(expr.evalf(subs=subs_dict))
+                    answers.append(answer)
+                except Exception as e:
+                    print(f"Error evaluating equation '{equation}' with values {numbers}: {e}")
+                    answers.append(0.0)  # Default value in case of error
+        
+        # Create new dataframe with all augmented samples
+        df_augmented = pd.DataFrame({
+            'Question': questions_with_values,
+            'Equation': equations_list,
+            'N_00': n00_list,
+            'N_01': n01_list,
+            'N_02': n02_list,
+            'Answer': answers
+        })
+        
+        return df_augmented
+    
     def _save_samples_to_txt(self, df, split_name):
         """
         Save all samples from a split to a text file.
@@ -562,65 +624,6 @@ class CustomDataCollator:
             'y': labels,
             'questions': questions  # Add raw text for BERT preprocessing
         }
-
-
-if __name__ == "__main__":
-    # Test the augment_data function
-    print("Testing augment_data function...")
-    
-    # Create a small test dataframe with a few samples
-    test_data = {
-        'Question': [
-            'At the town carnival Oliver rode the ferris wheel N_00 times and the bumper cars N_01 times . If each ride cost N_02 tickets , how many tickets did he use ?',
-            'In one week , an airplane pilot flew N_00 miles on Tuesday and N_01 miles on Thursday . If the pilot flies the same number of miles N_02 weeks in a row , how many miles does the pilot fly in all ?'
-        ],
-        'Equation': [
-            'N_02 * ( N_00 + N_01 )',
-            'N_02 * ( N_00 + N_01 )'
-        ],
-        'Standardized_Equation': [
-            'z * ( x + y )',
-            'z * ( x + y )'
-        ],
-        'Answer': [45.0, 210.0],
-        'N_00': [3.0, 50.0],
-        'N_01': [6.0, 20.0],
-        'N_02': [5.0, 3.0]
-    }
-    
-    test_df = pd.DataFrame(test_data)
-    
-    print("\nOriginal DataFrame:")
-    print(test_df)
-    print(f"\nOriginal size: {len(test_df)} samples")
-    
-    augmenting_factor = 10
-    print(f"\nRunning augmentation with augmenting_factor={augmenting_factor}...")
-    augmented_df = augment_data(test_df, augmenting_factor=augmenting_factor, seed=42)
-    
-    print(f"\nAugmented size: {len(augmented_df)} samples")
-    print(f"New samples generated: {len(augmented_df) - len(test_df)}")
-    
-    print("\nAugmented DataFrame:")
-    print(augmented_df)
-    
-    # Save results to CSV for inspection
-    output_file = f'{MAWPS_DIR}/test_augmentation.csv'
-    augmented_df.to_csv(output_file, index=False)
-    print(f"\nTest results saved to: {output_file}")
-    
-    # Display a few generated samples
-    print("\n" + "="*80)
-    print("Sample Generated Questions:")
-    print("="*80)
-    new_samples = augmented_df.tail(min(4, len(augmented_df) - len(test_df)))
-    for idx, row in new_samples.iterrows():
-        print(f"\nSample {idx + 1}:")
-        print(f"Question: {row['Question']}")
-        print(f"Numbers: N_00={row['N_00']:.2f}, N_01={row['N_01']:.2f}, N_02={row['N_02']:.2f}")
-        print(f"Equation: {row['Equation']}")
-        print(f"Answer: {row['Answer']:.2f}")
-        print("-" * 80)
 
 
 

@@ -331,6 +331,8 @@ class loader(object):
                 params['cfg'] = cfg
             if self.name == 'mawps':
                 params['cfg'] = cfg
+            if self.name == 'synthetic_motion':
+                params['cfg'] = cfg
         
         # Get datasets from factory
         train_data, val_data, test_data, _ = get_dataset(self.name, **params)
