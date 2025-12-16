@@ -12,7 +12,7 @@ hydra:
   sweeper:
     grid_params:
       seed: 1, 2, 3, 4, 5
-      model: cmr, lin_sym_cbm
+      model: lin_sym_cbm, cmr
       memory_size: 1, 2, 3, 4, 5, 10
 
     list_params:
@@ -28,5 +28,7 @@ hydra:
         - facebook/dinov2-base
         - facebook/dinov2-base
         - google/vit-base-patch32-224-in21k
+
+disjoint_training: False
 
 note: "Memory" 

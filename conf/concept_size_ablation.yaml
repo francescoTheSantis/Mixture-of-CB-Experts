@@ -1,0 +1,32 @@
+defaults:
+  - common
+  - _self_
+  - override hydra/sweeper: list
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+      # This directory can be deleted as it only contains temporary files and the 
+      # preprocessed data will be saved in the cache.
+      dir: concept_size_ablation/${now:%Y-%m-%d_%H-%M-%S} 
+  sweeper:
+    grid_params:
+      seed: 1, 2, 3, 4, 5
+      model: lin_sym_cbm, cmr, dcr
+      # The memory size fixed to 5 in order to have enough expressivity even for small concept sizes.
+      memory_size: 3
+      concept_percentage: 0.2, 0.4, 0.6, 0.8, 1.0
+
+    list_params:
+      dataset: 
+        - cub
+        - awa2
+        - cifar10
+      img_backbone_name: 
+        - facebook/dinov2-base
+        - facebook/dinov2-base
+        - google/vit-base-patch32-224-in21k
+
+disjoint_training: False
+
+note: "concept_size_ablation" 

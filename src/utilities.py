@@ -56,16 +56,17 @@ def set_loggers(cfg):
     # Update the note in the config: if it is None, set it to an empty string
     with open_dict(cfg):
         cfg.update(
-            note = "_" if cfg.note is None else "_"+str(cfg.note)
+            note = "_" if cfg.note is None else str(cfg.note)
         )
-    name = f"{cfg.dataset.metadata.name}.{cfg.model.metadata.name}.{cfg.seed}.{int(time())}"
+    name = f"{cfg.dataset.metadata.name}.{cfg.model.metadata.name}.{str(cfg.memory_size)}.{cfg.seed}.{int(time())}"
     group_format = (
         "{dataset}_"
-        "{model}"
+        "{model}_"
+        "{memory_size}_"
         "{note}"
     )
     # Define the tags for wandb
-    tags = [cfg.dataset.metadata.name, cfg.model.metadata.name, cfg.note]
+    tags = [cfg.dataset.metadata.name, cfg.model.metadata.name, cfg.note, str(cfg.memory_size)]
     # Filter out None values from tags
     tags = [tag for tag in tags if tag is not None]
     # Define the group for wandb
@@ -88,6 +89,7 @@ def parse_hyperparams(cfg: DictConfig):
     hyperparams = {
         "dataset": cfg.dataset.metadata.name,
         "model": cfg.model.metadata.name,
+        "memory_size": cfg.memory_size,
         "seed": cfg.seed,
         "hydra_cfg": OmegaConf.to_container(cfg),
         "note": cfg.note,

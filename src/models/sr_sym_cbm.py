@@ -106,6 +106,12 @@ class SymbolicRegressorCBM(BaseModel):
             activation=nn.Identity(), # we will later apply a sigmoid if the concept is boolean
         )
 
+        if self.task == 'classification':
+            element_wise_loss = "loss(prediction, target) = (1 - prediction * target)^2"
+        else:
+            # Change to: abs(prediction - target) for MAE
+            element_wise_loss = "loss(prediction, target) = (prediction - target)^2" 
+
         # Store PySR parameters
         self.pysr_params = {
             'populations': 31,
@@ -115,8 +121,8 @@ class SymbolicRegressorCBM(BaseModel):
             'binary_operators': binary_operators,
             'unary_operators': unary_operators,
             'extra_sympy_mappings': extra_functions,
-            'elementwise_loss': "loss(prediction, target) = (prediction - target)^2", # change to abs(prediction - target) for MAE
-            # 'timeout_in_seconds': 60 * 3,
+            'elementwise_loss': element_wise_loss, 
+            # 'timeout_in_seconds': 60 * 3, # Limit the search to 3 minutes
             'maxsize': 40,  # Limit the size of the equations.
             'maxdepth': 40,  # Limit the depth of the equations to maxsize so that the most complex expression tree is a chain (easy to compute).
         }

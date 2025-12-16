@@ -28,7 +28,6 @@ hydra:
         - facebook/dinov2-base
         - google/vit-base-patch32-224-in21k
 
-# Those baselines have been proposed following a joint training procedure.
 disjoint_training: False
 
 note: "Memory-less" 
