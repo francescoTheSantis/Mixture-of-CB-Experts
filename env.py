@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 
 PROJECT_NAME = "linear_memory_reasoner" # Name of the project
-HOME = "/home/fdesantis/projects/Linear-Memory-Reasoner" # Path to the project
+HOME = "" # Path to the project
 
 CACHE = Path(
     env.get(
@@ -16,7 +16,10 @@ CACHE = Path(
 ).expanduser()
 CACHE.mkdir(exist_ok=True)
 
-DATA_PATH = "/home/fdesantis/datasets/" # Path to the datasets
+DATA_PATH = "" # Path to the datasets
+
+# OpenAI API key for data augmentation
+OPENAI_API_KEY = ""
 
 env['HYDRA_FULL_ERROR'] = '1'
 

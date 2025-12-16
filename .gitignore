@@ -20,6 +20,9 @@ tabs/
 results/
 stored_output/
 synthetic_motion_dataset/
+archived_outputs/
+archive/
+test_synthetic_motion_embeddings.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

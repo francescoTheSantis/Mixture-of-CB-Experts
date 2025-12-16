@@ -68,6 +68,14 @@ class ConceptEmbeddingModel(BaseModel):
             activation
         )
 
+    def continuous_mix(self, c_emb, c_pred):
+        """
+        Create the concept embedding when the concepts are continuous
+        """
+        # We take only the first embedding produced by the concept embedding layer:
+        c_emb = c_emb[:,:,:self.embedding_size] # (batch_size, num_concepts)
+        c_emb = c_emb * c_pred[:,:,None]  # (batch_size, num_concepts, embedding_size)
+        return c_emb
 
     def forward(self, input):
         x, _, c_true, int_idxs = self.encode(input)
@@ -85,7 +93,12 @@ class ConceptEmbeddingModel(BaseModel):
         # It is necessary to compute again since the embeddings 
         # may have changed due to the interventions
         c_emb = self.bottleneck.linear(x)
-        c_emb = concept_embedding_mixture(c_emb, input_concepts)
+
+        if all(x=='continuous' for x in self.concept_type):
+            # If the concepts are continuous, we perform: c_emb * c_pred
+            c_emb = self.continuous_mix(c_emb, input_concepts)
+        else:
+            c_emb = concept_embedding_mixture(c_emb, input_concepts)
 
         y_hat = self.y_predictor(c_emb.flatten(-2))
         return {

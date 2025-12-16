@@ -115,7 +115,7 @@ class SymbolicRegressorCBM(BaseModel):
             'binary_operators': binary_operators,
             'unary_operators': unary_operators,
             'extra_sympy_mappings': extra_functions,
-            'elementwise_loss': "loss(prediction, target) = (prediction - target)^2",
+            'elementwise_loss': "loss(prediction, target) = (prediction - target)^2", # change to abs(prediction - target) for MAE
             # 'timeout_in_seconds': 60 * 3,
             'maxsize': 40,  # Limit the size of the equations.
             'maxdepth': 40,  # Limit the depth of the equations to maxsize so that the most complex expression tree is a chain (easy to compute).
@@ -174,7 +174,7 @@ class SymbolicRegressorCBM(BaseModel):
         )
 
         for p in self.predictor.parameters():
-            p.requires_grad = False  # Freeze all parameters
+            p.requires_grad = True
         
         self.predictor = self.predictor.to(self.device)
 

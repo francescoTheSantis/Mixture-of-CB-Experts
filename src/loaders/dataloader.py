@@ -248,6 +248,7 @@ class loader(object):
                 params['cfg'] = cfg
             if self.name == 'mawps':
                 params['cfg'] = cfg
+                params['only_metadata'] = True
         
         # Get dataset and metadata from factory
         _, _, _, metadata = get_dataset(self.name, **params)

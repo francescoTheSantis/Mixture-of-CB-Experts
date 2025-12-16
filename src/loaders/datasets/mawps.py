@@ -299,9 +299,6 @@ def count_vars(expr):
     symbols = symbols_in_order(expr)
     return len(symbols)
 
-
-
-
 class MAWPSDataset:
     def __init__(self,
                     already_created: bool = False,
@@ -317,144 +314,146 @@ class MAWPSDataset:
         self.concept_names = CONCEPT_NAMES
         self.device = device
 
-        # Check if dataset files exist for this specific seed
-        train_file = os.path.join(MAWPS_DIR, f'mawps_train_seed{shuffle_seed}.pkl')
-        val_file = os.path.join(MAWPS_DIR, f'mawps_val_seed{shuffle_seed}.pkl')
-        test_file = os.path.join(MAWPS_DIR, f'mawps_test_seed{shuffle_seed}.pkl')
+        # load the dataset
+        ds = load_dataset("mwpt5/MAWPS")
+        ds = ds['train']
+
+        # identify linear formulas
+        ds = ds.add_column('Isconstant', [is_constant_formula(eq) for eq in ds['Equation']])
+        ds = ds.add_column('Islinear', [is_linear_formula(eq) for eq in ds['Equation']])
+
+        # eliminate constant functions
+        ds = ds.filter(lambda example: not example['Isconstant'])
+
+        ############## Automatic Equation filtering ##############
+        # # Keep only formulas with 3 variables
+        # formulas_3_vars = [expr for expr in formulas_hist.keys() if count_vars(expr) == 3]
+
+        # # Eliminate formulas that do not have 3 variables
+        # ds = ds.filter(lambda example: example['Equation'] in formulas_3_vars)
+
+        # # Eliminate formulas that happear less than 30 times
+        # frequent_formulas = {eq for eq, count in formulas_hist.items() if count >= 30}
+        # ds = ds.filter(lambda example: example['Equation'] in frequent_formulas)
+        ############## End of Automatic Equation filtering ##############
+
+        ############## Manual Equation filtering ##############
+        # We eliminated all the linear equations as we want to show how the symbolic version 
+        # of our class of model is capable to obtain good results even on non-linear equations.
+        equations_to_keep = [
+            # "( N_00 + N_01 ) / N_02",
+            # "( N_01 + N_02 ) / N_00",
+            "N_02 * ( N_00 + N_01 )",
+            "N_00 * ( N_01 - N_02 )",
+            # "N_00 + N_02 - N_01",
+            "N_02 * ( N_00 - N_01 )", 
+            # "N_00 + N_01 + N_02",
+            # "N_00 + N_01 - N_02",
+            # "( N_00 - N_01 ) / N_02", 
+            "N_00 * ( N_01 + N_02 )",
+        ]
+
+        # Convert to pandas for processing
+        ds = ds.to_pandas()
+        ds = ds[ds['Equation'].isin(equations_to_keep)].reset_index(drop=True)
+        ############## End of Manual Equation filtering ##############
         
-        files_exist = os.path.exists(train_file) and os.path.exists(val_file) and os.path.exists(test_file)
+        # compute dictionary of ocntaining key=Equation, value=count
+        histogram_of_formulas(ds['Equation'], name='all', suffix='post_filtering')
+
+        # Keep only Question and Equation columns
+        ds = ds[['Question', 'Equation']]
         
-        # Create dataset if files don't exist or if explicitly requested
-        if not files_exist or not already_created:
-
-            # load the dataset
-            ds = load_dataset("mwpt5/MAWPS")
-            ds = ds['train']
-
-            # identify linear formulas
-            ds = ds.add_column('Isconstant', [is_constant_formula(eq) for eq in ds['Equation']])
-            ds = ds.add_column('Islinear', [is_linear_formula(eq) for eq in ds['Equation']])
-
-            # eliminate constant functions
-            ds = ds.filter(lambda example: not example['Isconstant'])
-
-            ############## Automatic Equation filtering ##############
-            # # Keep only formulas with 3 variables
-            # formulas_3_vars = [expr for expr in formulas_hist.keys() if count_vars(expr) == 3]
-
-            # # Eliminate formulas that do not have 3 variables
-            # ds = ds.filter(lambda example: example['Equation'] in formulas_3_vars)
-
-            # # Eliminate formulas that happear less than 30 times
-            # frequent_formulas = {eq for eq, count in formulas_hist.items() if count >= 30}
-            # ds = ds.filter(lambda example: example['Equation'] in frequent_formulas)
-            ############## End of Automatic Equation filtering ##############
-
-            ############## Manual Equation filtering ##############
-            # We eliminated all the linear equations as we want to show how the symbolic version 
-            # of our class of model is capable to obtain good results even on non-linear equations.
-            equations_to_keep = [
-                # "( N_00 + N_01 ) / N_02",
-                # "( N_01 + N_02 ) / N_00",
-                "N_02 * ( N_00 + N_01 )",
-                "N_00 * ( N_01 - N_02 )",
-                # "N_00 + N_02 - N_01",
-                "N_02 * ( N_00 - N_01 )", 
-                # "N_00 + N_01 + N_02",
-                # "N_00 + N_01 - N_02",
-                # "( N_00 - N_01 ) / N_02", 
-                "N_00 * ( N_01 + N_02 )",
-            ]
-            # Convert to pandas for processing
-            ds = ds.to_pandas()
-            ds = ds[ds['Equation'].isin(equations_to_keep)].reset_index(drop=True)
-            ############## End of Manual Equation filtering ##############
-            
-            # compute dictionary of ocntaining key=Equation, value=count
-            histogram_of_formulas(ds['Equation'], name='all', suffix='post_filtering')
-
-            # Keep only Question and Equation columns
-            ds = ds[['Question', 'Equation']]
-            
-            # data augmentation
-            ds = augment_data(ds, 
-                questions_per_batch=QUESTIONS_PER_BATCH,
-                num_batches=NUM_BATCHES_PER_EQUATION,
-                augmenting_factor=AUGMENTING_FACTOR,
-                seed=self.shuffle_seed
-            )
-            
-            ds = self._generate_numbers_and_answers(ds, seed=self.shuffle_seed, numerical_augmentation_factor=NUMERICAL_AUGMENTING_FACTOR)
-
-            # # Divide the dataset into train, val, test splits (80%, 10%, 10%)
-            # # Stratify over the Equation
-            train_ds, test_ds = train_test_split(ds, train_size=0.8, test_size=0.2, stratify=ds['Equation'], shuffle=True, random_state=self.shuffle_seed)
-            val_ds, test_ds = train_test_split(test_ds, train_size=0.5, test_size=0.5, stratify=test_ds['Equation'], shuffle=True, random_state=self.shuffle_seed)
-
-            # shuffle the datasets
-            train_ds = train_ds.sample(frac=1, random_state=self.shuffle_seed).reset_index(drop=True)
-            val_ds = val_ds.sample(frac=1, random_state=self.shuffle_seed).reset_index(drop=True)
-            test_ds = test_ds.sample(frac=1, random_state=self.shuffle_seed).reset_index(drop=True)
-
-            # Check if the set of equations are the same in all splits
-            train_formulas = set(train_ds['Equation'].unique())
-            val_formulas = set(val_ds['Equation'].unique())
-            test_formulas = set(test_ds['Equation'].unique())
-            unique_formulas = train_formulas.union(val_formulas).union(test_formulas)
-            assert len(train_formulas & val_formulas & test_formulas) == len(unique_formulas), "Formulas differ across splits!"
-
-            # save the datasets and equations in pickle format
-            # write formulas in a text file (seed-specific)
-            with open(f'{MAWPS_DIR}/formulas_seed{self.shuffle_seed}.txt', 'w') as f:
-                for formula in unique_formulas:
-                    f.write(f"{formula}\n")
-
-            train_ds.to_pickle(f'{MAWPS_DIR}/mawps_train_seed{self.shuffle_seed}.pkl')
-            val_ds.to_pickle(f'{MAWPS_DIR}/mawps_val_seed{self.shuffle_seed}.pkl')
-            test_ds.to_pickle(f'{MAWPS_DIR}/mawps_test_seed{self.shuffle_seed}.pkl')
-            
-            # Save as CSV files as well
-            train_ds.to_csv(f'{MAWPS_DIR}/mawps_train_seed{self.shuffle_seed}.csv', index=False)
-            val_ds.to_csv(f'{MAWPS_DIR}/mawps_val_seed{self.shuffle_seed}.csv', index=False)
-            test_ds.to_csv(f'{MAWPS_DIR}/mawps_test_seed{self.shuffle_seed}.csv', index=False)
-            
-            # # Check if the splits preserve the equation distribution
-            histogram_of_formulas(train_ds['Equation'], name='train', suffix='post_augmentation')
-            histogram_of_formulas(val_ds['Equation'], name='val', suffix='post_augmentation')
-            histogram_of_formulas(test_ds['Equation'], name='test', suffix='post_augmentation')
-    
-            print(f"Final dataset sizes:")
-            print(f"  Train: {len(train_ds)} samples")
-            print(f"  Val: {len(val_ds)} samples")
-            print(f"  Test: {len(test_ds)} samples")
-
-            print(f"Datasets created and saved in {MAWPS_DIR} for seed {self.shuffle_seed}")
-
-        else:
-            print(f"Loading existing datasets from {MAWPS_DIR} for seed {self.shuffle_seed}")
+        # data augmentation
+        ds = augment_data(ds, 
+            questions_per_batch=QUESTIONS_PER_BATCH,
+            num_batches=NUM_BATCHES_PER_EQUATION,
+            augmenting_factor=AUGMENTING_FACTOR,
+            seed=self.shuffle_seed
+        )
         
+        ds = self._generate_numbers_and_answers(ds, seed=self.shuffle_seed, numerical_augmentation_factor=NUMERICAL_AUGMENTING_FACTOR)
+
+        # # Divide the dataset into train, val, test splits (80%, 10%, 10%)
+        # # Stratify over the Equation
+        train_ds, test_ds = train_test_split(ds, train_size=0.8, test_size=0.2, stratify=ds['Equation'], shuffle=True, random_state=self.shuffle_seed)
+        val_ds, test_ds = train_test_split(test_ds, train_size=0.5, test_size=0.5, stratify=test_ds['Equation'], shuffle=True, random_state=self.shuffle_seed)
+
+        # # shuffle the datasets
+        # train_ds = train_ds.sample(frac=1, random_state=self.shuffle_seed).reset_index(drop=True)
+        # val_ds = val_ds.sample(frac=1, random_state=self.shuffle_seed).reset_index(drop=True)
+        # test_ds = test_ds.sample(frac=1, random_state=self.shuffle_seed).reset_index(drop=True)
+
+        # Check if the set of equations are the same in all splits
+        train_formulas = set(train_ds['Equation'].unique())
+        val_formulas = set(val_ds['Equation'].unique())
+        test_formulas = set(test_ds['Equation'].unique())
+        unique_formulas = train_formulas.union(val_formulas).union(test_formulas)
+        assert len(train_formulas & val_formulas & test_formulas) == len(unique_formulas), "Formulas differ across splits!"
+
+        # save the datasets and equations in pickle format
+        # write formulas in a text file (seed-specific)
+        with open(f'{MAWPS_DIR}/formulas_seed.txt', 'w') as f:
+            for formula in unique_formulas:
+                f.write(f"{formula}\n")
+
+        # train_ds.to_pickle(f'{MAWPS_DIR}/mawps_train_seed{self.shuffle_seed}.pkl')
+        # val_ds.to_pickle(f'{MAWPS_DIR}/mawps_val_seed{self.shuffle_seed}.pkl')
+        # test_ds.to_pickle(f'{MAWPS_DIR}/mawps_test_seed{self.shuffle_seed}.pkl')
+        
+        # Save as CSV files as well
+        # train_ds.to_csv(f'{MAWPS_DIR}/mawps_train_seed{self.shuffle_seed}.csv', index=False)
+        # val_ds.to_csv(f'{MAWPS_DIR}/mawps_val_seed{self.shuffle_seed}.csv', index=False)
+        # test_ds.to_csv(f'{MAWPS_DIR}/mawps_test_seed{self.shuffle_seed}.csv', index=False)
+        
+        # # Check if the splits preserve the equation distribution
+        histogram_of_formulas(train_ds['Equation'], name='train', suffix='post_augmentation')
+        histogram_of_formulas(val_ds['Equation'], name='val', suffix='post_augmentation')
+        histogram_of_formulas(test_ds['Equation'], name='test', suffix='post_augmentation')
+
+        print(f"Final dataset sizes:")
+        print(f"  Train: {len(train_ds)} samples")
+        print(f"  Val: {len(val_ds)} samples")
+        print(f"  Test: {len(test_ds)} samples")
+
+        print(f"Datasets created and saved in {MAWPS_DIR} for seed {self.shuffle_seed}")
+
         # load the datasets (with seed-specific filenames)
-        train_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, f'mawps_train_seed{self.shuffle_seed}.pkl')))
-        val_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, f'mawps_val_seed{self.shuffle_seed}.pkl')))
-        test_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, f'mawps_test_seed{self.shuffle_seed}.pkl')))
+        # Use preserve_index=False to ensure clean conversion without index issues
+        # train_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, f'mawps_train_seed{self.shuffle_seed}.pkl')), preserve_index=False)
+        # val_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, f'mawps_val_seed{self.shuffle_seed}.pkl')), preserve_index=False)
+        # test_dataset = Dataset.from_pandas(pd.read_pickle(os.path.join(MAWPS_DIR, f'mawps_test_seed{self.shuffle_seed}.pkl')), preserve_index=False)
 
         # Use the configured pre-trained transformer as tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(pre_trained_transformer)
-        
-        tokenized_train = train_dataset.map(
+
+        # Convert pandas DataFrames back to HuggingFace Datasets
+        train_ds = Dataset.from_pandas(train_ds, preserve_index=False)
+        val_ds = Dataset.from_pandas(val_ds, preserve_index=False)
+        test_ds = Dataset.from_pandas(test_ds, preserve_index=False)
+
+        # Shuffle the datasets
+        train_ds = train_ds.shuffle(seed=self.shuffle_seed)
+        val_ds = val_ds.shuffle(seed=self.shuffle_seed)
+        test_ds = test_ds.shuffle(seed=self.shuffle_seed)
+
+        # Use num_proc=1 to ensure deterministic processing order
+        # Use load_from_cache_file=False to avoid stale cache issues
+        tokenized_train = train_ds.map(
             self.preprocess_function,
-            batched=True
+            batched=True,
         )
 
-        tokenized_val = val_dataset.map(
+        tokenized_val = val_ds.map(
             self.preprocess_function,
-            batched=True
+            batched=True,
         )
 
-        tokenized_test = test_dataset.map(
+        tokenized_test = test_ds.map(
             self.preprocess_function,
-            batched=True
+            batched=True,
         )  
+
         self.train_dataset = tokenized_train
         self.val_dataset = tokenized_val
         self.test_dataset = tokenized_test
@@ -566,11 +565,17 @@ class MAWPSDataset:
 
     def collator(self):
         data_collator = CustomDataCollator()
+        
+        # Create a generator with a fixed seed for reproducible shuffling
+        generator = torch.Generator()
+        generator.manual_seed(self.shuffle_seed)
+        
         loaded_train = DataLoader(
             self.train_dataset, 
             collate_fn=data_collator, 
             batch_size=self.batch_size, 
-            shuffle=True
+            shuffle=True,
+            generator=generator
             )
 
         loaded_val = DataLoader(

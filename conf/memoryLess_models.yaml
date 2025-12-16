@@ -1,0 +1,34 @@
+defaults:
+  - common
+  - _self_
+  - override hydra/sweeper: list
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+      # This directory can be deleted as it only contains temporary files and the 
+      # preprocessed data will be saved in the cache.
+      dir: memory_less/${now:%Y-%m-%d_%H-%M-%S} 
+  sweeper:
+    grid_params:
+      seed: 1, 2, 3, 4, 5
+      model: blackbox, cem, dcr, licem
+
+    list_params:
+      dataset: 
+        - cub
+        - cub_incomplete
+        - awa2
+        - awa2_incomplete
+        - cifar10
+      img_backbone_name: 
+        - facebook/dinov2-base
+        - facebook/dinov2-base
+        - facebook/dinov2-base
+        - facebook/dinov2-base
+        - google/vit-base-patch32-224-in21k
+
+# Those baselines have been proposed following a joint training procedure.
+disjoint_training: False
+
+note: "Memory-less" 

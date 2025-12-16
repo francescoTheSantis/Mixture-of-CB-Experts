@@ -423,7 +423,7 @@ class DatasetFactory:
         )
     
     @staticmethod
-    def create_mawps_dataset(cfg, batch_size, seed, **kwargs):
+    def create_mawps_dataset(cfg, batch_size, seed, only_metadata=False, **kwargs):
         """Create MAWPS dataset - returns loaders directly"""
         # Determine device from config
         if hasattr(cfg, 'gpus') and cfg.gpus and len(cfg.gpus) > 0:
@@ -431,6 +431,14 @@ class DatasetFactory:
         else:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
         
+        concept_names = mawps_concept_names
+        task_names = mawps_task_names
+
+        if only_metadata:
+            concept_names = mawps_concept_names
+            task_names = mawps_task_names
+            return None, None, None, DatasetMetadata(concept_names, task_names, None)
+
         loader = MAWPSDataset(
             cfg.dataset.loader.dataset_already_created,
             batch_size=batch_size,
@@ -439,9 +447,6 @@ class DatasetFactory:
             pre_trained_transformer=cfg.text_backbone_name
         )
         loaded_train, loaded_val, loaded_test = loader.collator()
-        
-        concept_names = mawps_concept_names
-        task_names = mawps_task_names
         
         return loaded_train, loaded_val, loaded_test, DatasetMetadata(
             concept_names, task_names, None
@@ -514,6 +519,7 @@ class DatasetFactory:
         n_samples=300,
         acceleration_values=None,
         dataset_already_created=False,
+        only_metadata=False,
         cfg=None,
         **kwargs
     ):
@@ -521,6 +527,12 @@ class DatasetFactory:
         if acceleration_values is None:
             acceleration_values = [0.5]
         
+        concept_names = synthetic_motion_concept_names
+        task_names = synthetic_motion_task_names
+        
+        if only_metadata:
+            return None, None, None, DatasetMetadata(concept_names, task_names, None)
+
         # Get img_backbone_name from cfg, with fallback to default
         img_backbone_name = cfg.img_backbone_name if cfg is not None else 'facebook/dinov2-base'
         
@@ -533,9 +545,6 @@ class DatasetFactory:
             dataset_already_created=dataset_already_created,
             img_backbone_name=img_backbone_name
         )
-        
-        concept_names = synthetic_motion_concept_names
-        task_names = synthetic_motion_task_names
         
         return train_loader, val_loader, test_loader, DatasetMetadata(
             concept_names, task_names, None

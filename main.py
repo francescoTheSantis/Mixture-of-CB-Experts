@@ -42,9 +42,13 @@ def main(cfg: DictConfig) -> None:
                                   and os.path.exists(test_path)\
                                   and cfg.use_stored_dataset:
         print('Loading pre-processed data...')
-        loaded_train = torch.load(train_path)
-        loaded_val = torch.load(val_path)
-        loaded_test = torch.load(test_path)
+        with tqdm(total=3, desc="Loading datasets") as pbar:
+            loaded_train = torch.load(train_path)
+            pbar.update(1)
+            loaded_val = torch.load(val_path)
+            pbar.update(1)
+            loaded_test = torch.load(test_path)
+            pbar.update(1)
 
     # Otherwise, preprocess the data and then store the results
     else:
@@ -54,14 +58,12 @@ def main(cfg: DictConfig) -> None:
 
         print('Saving preprocessed data...')
         with tqdm(total=3, desc="Saving datasets") as pbar:
-            torch.save(loaded_train, train_path, pickle_protocol=4)
+            torch.save(loaded_train, train_path)
             pbar.update(1)
-            torch.save(loaded_val, val_path, pickle_protocol=4)
+            torch.save(loaded_val, val_path)
+            pbar.update(1) 
+            torch.save(loaded_test, test_path)
             pbar.update(1)
-            torch.save(loaded_test, test_path, pickle_protocol=4)
-            pbar.update(1)
-
-    # test embeddings quality
 
     # If the config is meant to just generate and store the dataset, exit here
     if cfg.only_store_dataset:

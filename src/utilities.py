@@ -47,9 +47,9 @@ def is_valid_experiment(cfg: DictConfig):
     """ 
     Check if the experiment is valid based on the dataset and model combination.
     """
-    if cfg.dataset.metadata.name in ['cebab', 'mnist_arithmetic', 'dsprites_simple', 'dsprites_hard'] and cfg.model.metadata.name in ['cem', 'licem', 'dcr', 'cmr']:
+    if cfg.dataset.metadata.task == 'regression' and cfg.model.metadata.name in ['dcr', 'cmr']:
         raise ValueError(f"The experiment is not valid. Please check the configuration.\n\
-                         The combination of {cfg.dataset.metadata.name}, {cfg.model.metadata.name} cannot be executed.")
+                         {cfg.model.metadata.name} cannot be applied to regression tasks.")
 
 def set_loggers(cfg):
     """ Set the loggers for the experiment """

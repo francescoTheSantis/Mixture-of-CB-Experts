@@ -156,7 +156,10 @@ for i, combination in enumerate(all_combinations, 1):
     overrides = [f"{name}={value}" for name, value in zip(param_names, combination)]
     
     # Create a unique subdirectory for this experiment (without = signs to avoid parsing issues)
-    exp_name = "_".join([f"{name}_{value}" for name, value in zip(param_names, combination)])
+    # Exclude img_backbone_name and text_backbone_name from the experiment directory name
+    filtered_params = [(name, value) for name, value in zip(param_names, combination) 
+                       if name not in ['img_backbone_name', 'text_backbone_name']]
+    exp_name = "_".join([f"{name}_{value}" for name, value in filtered_params])
     exp_output_dir = os.path.join(output_dir, exp_name)
     
     # Build all overrides including hydra output directory

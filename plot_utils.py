@@ -97,13 +97,14 @@ regression_datasets = [
 ######### Data Extraction ###############
 #########################################
 
-def get_exp_from_path(path):
+def get_exp_from_path(paths):
     # Collect all the experiments in the given paths
     exps_path = []
     lmr_paths = []
-    experiment_dir = os.listdir(path)
-    for exp in experiment_dir:
-        exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
+    for path in paths:
+        experiment_dir = os.listdir(path)
+        for exp in experiment_dir:
+            exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
 
 
     performance = pd.DataFrame()
@@ -159,16 +160,17 @@ def get_exp_from_path(path):
 
     return performance, lmr_paths
 
-def get_intervention_from_path(path, filtered_exps=None):
+def get_intervention_from_path(paths, filtered_exps=None):
     performance = pd.DataFrame()
 
     # Collect all the experiments in the given paths
     exps_path = []
     lmr_paths = []
-    experiment_dir = os.listdir(path)
-    for exp in experiment_dir:
-        exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
-
+    
+    for path in paths:
+        experiment_dir = os.listdir(path)
+        for exp in experiment_dir:
+            exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
 
     for exp in exps_path:
         conf_file = os.path.join(exp, '.hydra/config.yaml')
@@ -907,7 +909,7 @@ def plot_memory_ablation(performance, model_styles, title_font, label_font, tick
         fig.legend(handles=custom_handles, loc='lower center', ncol=len(custom_handles), fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.15), columnspacing=1.0, handletextpad=0.5)
 
     plt.tight_layout()
-    plt.savefig('figs/memory_ablation.pdf')
+    plt.savefig(os.path.join(os.environ.get("RESULT_FIGS"), 'memory_ablation.pdf'))
 
     plt.show()
 
@@ -976,7 +978,7 @@ def plot_concept_size_ablation(
 
     # Save the figure
     plt.tight_layout()
-    plt.savefig(f'figs/concept_size_ablation.pdf', bbox_inches='tight')
+    plt.savefig(os.path.join(os.environ.get("RESULT_FIGS"), 'concept_size_ablation.pdf'), bbox_inches='tight')
 
 
 
@@ -1077,7 +1079,7 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
     performance = compute_avg_and_uncertainty(performance, custom_order)
 
     # save the performance as csv
-    performance.to_csv('tabs/memory_ablation_performance.csv', index=False)
+    performance.to_csv(os.path.join(os.environ.get("TABLE_PATH"), 'memory_ablation_performance.csv'), index=False)
 
     # Define operational complexity for each model
     oc = { 
@@ -1314,7 +1316,8 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         fig.legend(handles=custom_handles, loc='lower center', ncol=len(custom_handles), fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.15), columnspacing=1.0, handletextpad=0.5)
 
     plt.tight_layout()
-    plt.savefig('figs/pareto_front.pdf')
+    
+    plt.savefig(os.path.join(os.environ.get("RESULT_FIGS"), 'pareto_front.pdf'))
 
 
 def plot_intervention_memory_pareto_results(df, 
@@ -1604,8 +1607,8 @@ def plot_intervention_memory_pareto_results(df,
     plt.tight_layout()
     str_store = str(p_int).replace('.', '')
     suffix = 'relative_accuracy_difference' if relative_accuracy else 'absolute_accuracy'
-    os.makedirs(f'figs/intervention_memory_pareto/{suffix}', exist_ok=True)
-    plt.savefig(f'figs/intervention_memory_pareto/{suffix}/interventions_pint_{str_store}.pdf')
+    os.makedirs(os.path.join(os.environ.get("RESULT_FIGS"), f'intervention_memory_pareto/{suffix}'), exist_ok=True)
+    plt.savefig(os.path.join(os.environ.get("RESULT_FIGS"), f'intervention_memory_pareto/{suffix}/interventions_pint_{str_store}.pdf'))
     plt.show()
 
 
@@ -1775,7 +1778,7 @@ def show_symbolic_regression_results(
     create_latex_tables_from_csv(f'{table_dir}/sr_ablation_performance.csv', output_dir=table_dir)
 
 
-def compute_ted_metrics_for_sr_ablation(path):
+def compute_ted_metrics_for_sr_ablation(paths):
     """
     Compute Tree Edit Distance (TED) metrics for symbolic regression ablation experiments.
     
@@ -1826,9 +1829,10 @@ def compute_ted_metrics_for_sr_ablation(path):
     
     # Collect all experiment paths
     exps_path = []
-    experiment_dir = os.listdir(path)
-    for exp in experiment_dir:
-        exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
+    for path in paths:
+        experiment_dir = os.listdir(path)
+        for exp in experiment_dir:
+            exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
     
     results = []
     
@@ -2007,7 +2011,7 @@ def compute_ted_metrics_for_sr_ablation(path):
     return results_df
 
 
-def compute_equation_complexity_for_sr_ablation(path):
+def compute_equation_complexity_for_sr_ablation(paths):
     """
     Compute complexity (visitation length) of learned equations for symbolic regression ablation.
     
@@ -2030,9 +2034,10 @@ def compute_equation_complexity_for_sr_ablation(path):
     
     # Collect all experiment paths
     exps_path = []
-    experiment_dir = os.listdir(path)
-    for exp in experiment_dir:
-        exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
+    for path in paths:
+        experiment_dir = os.listdir(path)
+        for exp in experiment_dir:
+            exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
     
     results = []
     
@@ -2122,7 +2127,7 @@ def compute_equation_complexity_for_sr_ablation(path):
     return summary_df
 
 
-def compare_equations_with_prior(path, selected_seed=None):
+def compare_equations_with_prior(paths, selected_seed=None):
     """
     Compare equations learned by different models with the prior model's equations.
     
@@ -2140,9 +2145,10 @@ def compare_equations_with_prior(path, selected_seed=None):
     
     # Collect all experiment paths
     exps_path = []
-    experiment_dir = os.listdir(path)
-    for exp in experiment_dir:
-        exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
+    for path in paths:
+        experiment_dir = os.listdir(path)
+        for exp in experiment_dir:
+            exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
     
     # Group experiments by (dataset, seed)
     exp_groups = {}

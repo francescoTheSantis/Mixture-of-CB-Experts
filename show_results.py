@@ -21,16 +21,16 @@ custom_order = [
     'awa2_incomplete',
     'cub_incomplete',
     'cifar10',
-    # 'feynman_I_6_2',
-    # 'feynman_I_9_18',
+    'feynman_I_6_2',
+    'feynman_I_9_18',
     'feynman_I_12_1',
-    # 'feynman_I_13_4',
+    'feynman_I_13_4',
     'feynman_I_14_3',
     'feynman_I_15_10',
     'dsprites_simple',
+    'pendulum',
     'dsprites_complex',
     'mnist_arithmetic',
-    'pendulum',
     'mawps',
 ]
 
@@ -70,15 +70,18 @@ fixed_memory={
                 'dsprites_simple': 1, 
                 'mnist_arithmetic': 4,
                 'dsprites_complex': 3,
-                'pendulum': 1
+                'pendulum': 1,
+                'mawps': 4,
             }
 
 def main():
 
     result_figs = "results/figs"
+    os.environ["RESULT_FIGS"] = result_figs
     os.makedirs(result_figs, exist_ok=True)
 
     table_path = "results/tabs"
+    os.environ["TABLE_PATH"] = table_path
     os.makedirs(table_path, exist_ok=True)
 
     #######################################################################
@@ -89,10 +92,12 @@ def main():
     # 2. plot the intervention curves
     # 3. compute the similarity between the learned expressions and the ground truth ones
 
-    path = "output/sr_ablation"
+    paths = [
+        "output/sr_ablation"
+    ]
  
     try:
-        performance, _ = get_exp_from_path(path)
+        performance, _ = get_exp_from_path(paths)
         # Filter the performance dataframe to keep only the models in model_styles 
         # and datasets in custom_order.
         performance = performance[performance['model'].isin(model_styles.keys()) & \
@@ -101,7 +106,7 @@ def main():
         show_symbolic_regression_results(performance, custom_order, table_path)
 
         # Now plot intervention results with noise=0.0
-        performance = get_intervention_from_path(path, filtered_exps=None)
+        performance = get_intervention_from_path(paths, filtered_exps=None)
 
         # Filter the performance dataframe to keep only the models in model_styles 
         # and datasets in custom_order.
@@ -123,7 +128,7 @@ def main():
 
         # Compute equation complexity metrics
         print("\nComputing equation complexity metrics...")
-        complexity_results = compute_equation_complexity_for_sr_ablation(path)
+        complexity_results = compute_equation_complexity_for_sr_ablation(paths)
         complexity_csv_path = os.path.join(table_path, 'sr_ablation', 'complexity_metrics.csv')
         complexity_results.to_csv(complexity_csv_path, index=False)
         print(f"Complexity metrics saved to {complexity_csv_path}")
@@ -131,7 +136,7 @@ def main():
 
         # Compare equations with prior model
         print("\nComparing learned equations with prior model...")
-        equation_comparison = compare_equations_with_prior(path)
+        equation_comparison = compare_equations_with_prior(paths)
         equation_comparison_csv_path = os.path.join(table_path, 'sr_ablation', 'equation_comparison.csv')
         equation_comparison.to_csv(equation_comparison_csv_path, index=False)
         print(f"Equation comparison saved to {equation_comparison_csv_path}")
@@ -140,7 +145,7 @@ def main():
     
         # Compute Tree Edit Distance (TED) metrics
         print("\nComputing Tree Edit Distance (TED) metrics...")
-        ted_results = compute_ted_metrics_for_sr_ablation(path)
+        ted_results = compute_ted_metrics_for_sr_ablation(paths)
         ted_csv_path = os.path.join(table_path, 'sr_ablation', 'ted_metrics.csv')
         ted_results.to_csv(ted_csv_path, index=False)
         print(f"TED metrics saved to {ted_csv_path}")
@@ -168,9 +173,9 @@ def main():
     ######### Visualize performance results ##########
     ##################################################
 
-    # NOTE: for those experiments we show both accuracy and intervention results.
     paths = [
-        "",
+        "output/memoryLess_models",
+        "output/memory_models"
     ]
 
     try:
