@@ -21,7 +21,7 @@ batch_size: 512
 scale_variables: False
 
 ## Shared Concept-based model parameters
-task_penalty: 1.0
+task_penalty: 0.1
 concept_penalty: 1.0
 int_prob: 0.25
 hard_concepts: False
@@ -32,7 +32,7 @@ disjoint_training: True
 embedding_size: 16
 
 ## Shared Concept Memory model parameters
-memory_size: 10
+memory_size: 1
 selector_model: mlp # linear, mlp
 
 ## Pre-trained backbones

@@ -1,0 +1,18 @@
+defaults:
+  - common
+  - _self_
+  
+hydra:
+  mode: MULTIRUN
+  sweep:
+      dir: output/memory_less_reg/${now:%Y-%m-%d_%H-%M-%S}
+  sweeper:
+    params:
+      model: lin_sym_cbm, sr_sym_cbm #, kan_sym_cbm, prior_sym_cbm, sr_sym_cbm
+      memory_size: 1, 2, 3, 4, 5, 10
+      dataset: dsprites_simple, pendulum, dsprites_complex, mnist_arithmetic
+      seed: 1, 2, 3, 4, 5
+
+gpus: [0]
+
+note: "Memory-reg" 

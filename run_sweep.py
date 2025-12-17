@@ -144,6 +144,35 @@ for list_combo in list_combinations:
 # Combined parameter names
 param_names = list_param_names + grid_param_names
 
+# Sort experiments by priority: seed, memory_size, dataset, model
+# Define the desired parameter order
+PARAM_ORDER = ['seed', 'memory_size', 'dataset', 'model']
+
+# Create a sorting key function
+def get_sort_key(combination):
+    """Generate sort key based on parameter priority order."""
+    key = []
+    param_dict = dict(zip(param_names, combination))
+    
+    for priority_param in PARAM_ORDER:
+        if priority_param in param_dict:
+            value = param_dict[priority_param]
+            # Convert to string for consistent sorting
+            key.append(str(value))
+        else:
+            # If parameter not present, use empty string (sorts first)
+            key.append('')
+    
+    # Add remaining parameters not in priority list to maintain deterministic order
+    for param_name in param_names:
+        if param_name not in PARAM_ORDER:
+            key.append(str(param_dict[param_name]))
+    
+    return tuple(key)
+
+# Sort all combinations according to the priority order
+all_combinations.sort(key=get_sort_key)
+
 print(f"Running {len(all_combinations)} experiments in separate processes...")
 print(f"Output directory: {output_dir}")
 print("=" * 80)

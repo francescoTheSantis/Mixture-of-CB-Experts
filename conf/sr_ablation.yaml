@@ -9,18 +9,16 @@ hydra:
       dir: output/sr_ablation/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     grid_params:
+      model: lin_sym_cbm, kan_sym_cbm, prior_sym_cbm, blackbox, cem, licem, sr_sym_cbm
       seed: 1, 2, 3, 4, 5
-      model: lin_sym_cbm, kan_sym_cbm, prior_sym_cbm, blackbox, cem, licem #, sr_sym_cbm
     
     # The additional list sweeper is used to pair each dataset with its specific number of mechanisms. 
     list_params:
       dataset: feynman_I_12_1, feynman_I_14_3, feynman_I_15_10, dsprites_simple, pendulum, dsprites_complex, mnist_arithmetic #, mawps
       memory_size: 1, 1, 1, 1, 1, 3, 4 #, 4
       
-gpus: [1]
+gpus: [0]
 
 wandb:
   entity: null
   project: null
-
-note: test

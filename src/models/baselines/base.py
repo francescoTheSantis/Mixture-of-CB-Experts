@@ -167,6 +167,10 @@ class BaseModel(nn.Module):
             # integer_mask = torch.tensor([c_type == 'integer' for c_type in self.concept_type], device=c_hat.device)
             # integer_mask = integer_mask & ~int_idxs
             # c_hat = torch.where(integer_mask, c_hat.round(), c_hat) if integer_mask.any() else c_hat
+
+            # Continuous concepts
+            # This concept manipulation strategy can be applied only on discrete concepts. 
+            # Therefore, continuous concepts are left unchanged
         return c_hat
 
     def _apply_concept_activation(self, c_hat, int_idxs):
@@ -239,7 +243,7 @@ class BaseModel(nn.Module):
         # normalize over the number of concepts to avoid high concept loss
         concept_loss /= c.shape[1]
 
-        # combine the two losses by considering the task & concept penalty regularization
+        # Combine the two losses by considering the task & concept penalty regularization
         loss = self.concept_penalty * concept_loss + self.task_penalty * task_loss
         return loss
 

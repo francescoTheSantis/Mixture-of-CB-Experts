@@ -8,11 +8,12 @@ hydra:
   sweep:
       # This directory can be deleted as it only contains temporary files and the 
       # preprocessed data will be saved in the cache.
-      dir: memory_less/${now:%Y-%m-%d_%H-%M-%S} 
+      dir: memory_cls/${now:%Y-%m-%d_%H-%M-%S} 
   sweeper:
     grid_params:
+      model: lin_sym_cbm, cmr
+      memory_size: 1, 2, 3, 4, 5, 10
       seed: 1, 2, 3, 4, 5
-      model: blackbox, cem, dcr, licem
 
     list_params:
       dataset: 
@@ -30,4 +31,4 @@ hydra:
 
 disjoint_training: False
 
-note: "Memory-less" 
+note: "Memory" 

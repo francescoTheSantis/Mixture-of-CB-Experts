@@ -122,6 +122,7 @@ class SymbolicRegressorCBM(BaseModel):
             'unary_operators': unary_operators,
             'extra_sympy_mappings': extra_functions,
             'elementwise_loss': element_wise_loss, 
+            'early_stop_condition': 1e-6, # Stop the search if this value of the loss is reached
             # 'timeout_in_seconds': 60 * 3, # Limit the search to 3 minutes
             'maxsize': 40,  # Limit the size of the equations.
             'maxdepth': 40,  # Limit the depth of the equations to maxsize so that the most complex expression tree is a chain (easy to compute).

@@ -30,8 +30,8 @@ CONCEPT_NAMES = ['N_00', 'N_01', 'N_02']
 # Augmentation batch configuration
 QUESTIONS_PER_BATCH = 3  # Number of example questions to show to LLM per batch
 NUM_BATCHES_PER_EQUATION = 2  # Number of batches to process for each equation
-AUGMENTING_FACTOR = 50  # Number of new questions to generate per batch
-NUMERICAL_AUGMENTING_FACTOR = 300  # Number of different numerical combinations per question (for training only)
+AUGMENTING_FACTOR = 10  # Number of new questions to generate per batch
+NUMERICAL_AUGMENTING_FACTOR = 350  # Number of different numerical combinations per question (for training only)
 
 # Training size after augmentation:
 # if d is the size of the trianing set before augmentation,
@@ -343,14 +343,14 @@ class MAWPSDataset:
         equations_to_keep = [
             # "( N_00 + N_01 ) / N_02",
             # "( N_01 + N_02 ) / N_00",
-            "N_02 * ( N_00 + N_01 )",
-            "N_00 * ( N_01 - N_02 )",
+            "N_02 * ( N_00 + N_01 )", # <-----
+            "N_00 * ( N_01 - N_02 )", # <-----
             # "N_00 + N_02 - N_01",
-            "N_02 * ( N_00 - N_01 )", 
+            "N_02 * ( N_00 - N_01 )", # <-----
             # "N_00 + N_01 + N_02",
             # "N_00 + N_01 - N_02",
             # "( N_00 - N_01 ) / N_02", 
-            "N_00 * ( N_01 + N_02 )",
+            "N_00 * ( N_01 + N_02 )", # <-----
         ]
 
         # Convert to pandas for processing
@@ -436,6 +436,11 @@ class MAWPSDataset:
         train_ds = train_ds.shuffle(seed=self.shuffle_seed)
         val_ds = val_ds.shuffle(seed=self.shuffle_seed)
         test_ds = test_ds.shuffle(seed=self.shuffle_seed)
+
+        # Save the dataset as csv files
+        train_ds.to_csv(f'{MAWPS_DIR}/mawps_train_seed{self.shuffle_seed}.csv', index=False)
+        val_ds.to_csv(f'{MAWPS_DIR}/mawps_val_seed{self.shuffle_seed}.csv', index=False)
+        test_ds.to_csv(f'{MAWPS_DIR}/mawps_test_seed{self.shuffle_seed}.csv', index=False)
 
         # Use num_proc=1 to ensure deterministic processing order
         # Use load_from_cache_file=False to avoid stale cache issues

@@ -16,9 +16,9 @@ plt.style.use(['science', 'ieee', 'no-latex'])
 # Define the custom order
 # If the experiment you run does not contain a dataset, just remove it from the list.
 custom_order = [
-    'cub', 
     'awa2',
     'awa2_incomplete',
+    'cub', 
     'cub_incomplete',
     'cifar10',
     'feynman_I_6_2',
@@ -174,8 +174,10 @@ def main():
     ##################################################
 
     paths = [
-        "output/memoryLess_models",
-        "output/memory_models"
+        "output/memory_less_cls",
+        "output/memory_cls",
+        "output/memory_reg",
+        "output/memory_less_reg"
     ]
 
     try:
