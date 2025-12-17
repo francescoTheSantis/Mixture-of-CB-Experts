@@ -46,7 +46,6 @@ class SymbolicRegressorCBM(BaseModel):
                  c_groups=None,
                  hard_concepts=False,
                  encoder=None,
-                 mc_approx=1,
                  selector_model='linear',
                  backbone_latent_size=None,
                  concept_type='binary',
@@ -88,7 +87,6 @@ class SymbolicRegressorCBM(BaseModel):
         self.show_explanations = False
         self.equations_for_explanations_ready = False
         self.device = device
-        self.mc_approx = mc_approx
         self.memory_size = memory_size
 
         # Instantiate the selector
@@ -140,10 +138,10 @@ class SymbolicRegressorCBM(BaseModel):
     ###### Forward and loss methods ######
     def forward(self, input, store_for_finetuning=False):
 
-        latent, x_concepts, c_true, int_idxs = self.encode(input)
+        latent, c_true, int_idxs = self.encode(input)
 
         ## Concept encoder and concept processing block ##
-        c_hat, _ = self.bottleneck(x_concepts)
+        c_hat, _ = self.bottleneck(latent)
 
         c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 
@@ -161,7 +159,9 @@ class SymbolicRegressorCBM(BaseModel):
         return {
             'y_hat': predictor_output['y_hat'],
             'c_hat': c_hat,
+            'eq_outputs': predictor_output['eq_outputs'],
             'explanations': predictor_output['explanations'],
+            'selection_probs': selector_probs,
             'selection_dist': selection_dist,
             'sampled_memory_idxs': selector_probs
         }
@@ -181,13 +181,9 @@ class SymbolicRegressorCBM(BaseModel):
         )
 
         for p in self.predictor.parameters():
-            p.requires_grad = True
+            p.requires_grad = False
         
         self.predictor = self.predictor.to(self.device)
-
-    def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):
-        loss = self.concept_based_loss(y_hat, y, c_hat, c)
-        return loss
     
     def get_symbolic_equivalent(self, log_dir=None):
         """
@@ -246,3 +242,40 @@ class SymbolicRegressorCBM(BaseModel):
             with open(no_equations_file, "w") as f:
                 f.write("No symbolic equations available in memory yet.\n")
                 f.write("The predictor may be a BlackBoxPredictor or not yet trained.\n")
+
+    def filter_output_for_loss(self, y_hat, c_hat=None, selection_probs=None, eq_outputs=None, *args, **kwargs):
+        output_for_loss = {
+            'y_hat': y_hat,
+            'c_hat': c_hat,
+            'selection_probs': selection_probs,
+            'eq_outputs': eq_outputs
+        }
+        return output_for_loss
+
+    def loss(self, y_hat, y, c_hat=None, c=None, selection_probs=None, eq_outputs=None, *args, **kwargs):
+
+        # Update type and shape of y and y_hat before task loss computation
+        y, y_hat = self._task_loss_variable_check(y, y_hat)
+
+        task_loss = 0
+        for i in range(self.memory_size):
+            loss_i = self.task_loss_form(eq_outputs[:,i,0], y) * selection_probs[:,i,0]
+            task_loss += loss_i
+        task_loss = task_loss.mean()
+
+        # concept loss
+        concept_loss = 0
+        for i in range(c.shape[1]):
+            c_i_loss_form = self.concept_loss_form[i]
+            if isinstance(c_i_loss_form, nn.BCELoss) or isinstance(c_i_loss_form, nn.MSELoss):
+                concept_loss += c_i_loss_form(c_hat[:,i], c[:,i])
+            elif isinstance(c_i_loss_form, nn.CrossEntropyLoss):
+                concept_loss = c_i_loss_form(c_hat, c.argmax(-1))
+            else:
+                raise NotImplementedError(f"{c_i_loss_form} not supported")
+        # normalize over the number of concepts to avoid high concept loss
+        concept_loss /= c.shape[1]
+
+        # Combine the two losses by considering the task & concept penalty regularization
+        loss = self.concept_penalty * concept_loss + self.task_penalty * task_loss
+        return loss

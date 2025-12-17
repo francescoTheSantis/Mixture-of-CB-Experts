@@ -216,9 +216,13 @@ class Trainer:
 
                         stored_targets.append(y_one_hot.detach().cpu())
 
-                    # If the training is disjoint, use the true concepts for SR algorithm, otherwise use the predicted concepts.
-                    concepts_for_sr_algorithm = c if self.cfg.disjoint_training else output['c_hat']
-                    stored_concepts.append(concepts_for_sr_algorithm.detach().cpu())
+                    # # If the training is disjoint, use the true concepts for SR algorithm, otherwise use the predicted concepts.
+                    # concepts_for_sr_algorithm = c if self.cfg.disjoint_training else output['c_hat']
+                    # stored_concepts.append(concepts_for_sr_algorithm.detach().cpu())
+
+                    # Always use true concepts for SR algorithm
+                    stored_concepts.append(c.detach().cpu())
+
                     stored_selector_probs.append(output['sampled_memory_idxs'].detach().cpu())
 
                     # Clear GPU memory

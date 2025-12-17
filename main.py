@@ -143,6 +143,13 @@ def main(cfg: DictConfig) -> None:
     # Close the wandb logger if it is used
     if wandb_logger is not None:
         wandb_logger.experiment.finish()
+    
+    # Clean up GPU memory
+    del model, trainer
+    del loaded_train, loaded_val, loaded_test
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
 
 if __name__ == "__main__":
     main()

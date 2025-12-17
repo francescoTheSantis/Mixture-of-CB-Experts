@@ -81,6 +81,10 @@ class BlackBox(BaseModel):
                                       f"'regression', and 'generation'.")
         # cross entropy
         loss = self.task_loss_form(y_hat.squeeze(), y)
+
+        # Reduce by using mean
+        loss = loss.mean()
+        
         return loss
     
     def get_symbolic_equivalent(self, log_dir=None):

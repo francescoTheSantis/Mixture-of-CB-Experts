@@ -30,8 +30,8 @@ CONCEPT_NAMES = ['N_00', 'N_01', 'N_02']
 # Augmentation batch configuration
 QUESTIONS_PER_BATCH = 3  # Number of example questions to show to LLM per batch
 NUM_BATCHES_PER_EQUATION = 2  # Number of batches to process for each equation
-AUGMENTING_FACTOR = 10  # Number of new questions to generate per batch
-NUMERICAL_AUGMENTING_FACTOR = 350  # Number of different numerical combinations per question (for training only)
+AUGMENTING_FACTOR = 0  # Number of new questions to generate per batch
+NUMERICAL_AUGMENTING_FACTOR = 500  # Number of different numerical combinations per question (for training only)
 
 # Training size after augmentation:
 # if d is the size of the trianing set before augmentation,
@@ -618,22 +618,28 @@ class CustomDataCollator:
         )
 
         input_ids = torch.Tensor([example['input_ids'] for example in batch])
-        token_type_ids = torch.Tensor([example['token_type_ids'] for example in batch])
         attention_mask = torch.Tensor([example['attention_mask'] for example in batch])
 
         # Include the raw question text for BERT embedding extraction
         questions = [example.get('Question', '') for example in batch]
 
-        return {
+        # Build the result dict
+        result = {
             'x': {
                 'input_ids': input_ids, 
-                'token_type_ids': token_type_ids, 
                 'attention_mask': attention_mask
             },
             'c': concepts,
             'y': labels,
             'questions': questions  # Add raw text for BERT preprocessing
         }
+        
+        # Add token_type_ids only if present (T5 models don't use them)
+        if 'token_type_ids' in batch[0]:
+            token_type_ids = torch.Tensor([example['token_type_ids'] for example in batch])
+            result['x']['token_type_ids'] = token_type_ids
+        
+        return result
 
 
 

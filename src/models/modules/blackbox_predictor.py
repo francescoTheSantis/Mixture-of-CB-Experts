@@ -55,7 +55,9 @@ class BlackBoxPredictor(nn.Module):
         # Stack the outputs along the class dimension
         eq_outputs = torch.stack(eq_outputs, dim=1) # shape: (bsz, memory_size, n_targets)
 
-        y_hat = torch.einsum('bms,bmt->bts', prob_per_classifier, eq_outputs)
+        # take the eq_output associated to the highest value
+        max_indices = torch.argmax(prob_per_classifier, dim=1)
+        y_hat = eq_outputs[torch.arange(bsz), max_indices.squeeze(), :].unsqueeze(-1)
 
         # Get the explanations (the selected equations)
         if self.training:
@@ -66,4 +68,5 @@ class BlackBoxPredictor(nn.Module):
         return {
             'y_hat': y_hat,
             'explanations': explanations,
+            'eq_outputs': eq_outputs
         }

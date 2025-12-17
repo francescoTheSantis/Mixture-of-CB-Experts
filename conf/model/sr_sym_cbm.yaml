@@ -9,7 +9,6 @@ params:
   int_prob: ${int_prob}
   memory_size: ${memory_size}
   embedding_size: ${embedding_size}
-  mc_approx: 1
 
 metadata:
   name: sr_symbolic_cbm

@@ -147,8 +147,10 @@ class Engine(pl.LightningModule):
         model_output = self.forward(batch_scaled)
 
         # Compute loss
-        y_hat_loss, c_hat_loss = self.model.filter_output_for_loss(**model_output)
-        loss = self.model.loss(y_hat_loss, batch_scaled['y'], c_hat_loss, batch_scaled['c'])
+        output_for_loss = self.model.filter_output_for_loss(**model_output)
+        output_for_loss['y'] = batch_scaled['y']
+        output_for_loss['c'] = batch_scaled['c']
+        loss = self.model.loss(**output_for_loss)
 
         return loss, model_output
 

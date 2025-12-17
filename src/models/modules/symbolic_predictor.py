@@ -376,12 +376,14 @@ class SymbolicPredictor(nn.Module):
             memory_outputs.append(set_output)
         
         # Stack all set outputs
-        # Shape: (batch, memory_size, task_size)
-        eq_outputs = torch.stack(memory_outputs, dim=1)
+        eq_outputs = torch.stack(memory_outputs, dim=1) # shape: (bsz, memory_size, n_targets)
         
-        # Aggregate using probability distribution
-        # y_hat shape: (batch, task_size, n_samples)
-        y_hat = torch.einsum('bms,bmt->bts', prob_per_classifier, eq_outputs)
+        # Stack the outputs along the class dimension
+
+        # take the eq_output associated to the highest value
+        max_indices = torch.argmax(prob_per_classifier, dim=1)
+        y_hat = eq_outputs[torch.arange(batch_size), max_indices.squeeze(), :].unsqueeze(-1)
+
         
         # Get explanations
         if self.training:
@@ -391,7 +393,8 @@ class SymbolicPredictor(nn.Module):
         
         return {
             'y_hat': y_hat,
-            'explanations': explanations
+            'explanations': explanations,
+            'eq_outputs': eq_outputs
         }
     
     def _get_explanations(self, prob_per_classifier, y_hat):

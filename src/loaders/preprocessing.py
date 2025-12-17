@@ -187,7 +187,23 @@ class TextEmbeddingExtractor:
         self.task_names = task_names
 
         self.model_name = cfg.text_backbone_name
-        self.model = AutoModel.from_pretrained(self.model_name, torch_dtype=torch.bfloat16, use_safetensors=True)
+        
+        # Check if the model is a T5-based model (including Flan-T5)
+        self.is_t5_model = 't5' in self.model_name.lower()
+        
+        if self.is_t5_model:
+            # Load T5 encoder-decoder model for Flan-T5
+            from transformers import T5EncoderModel
+            try:
+                # Try to load encoder-only version if available
+                self.model = T5EncoderModel.from_pretrained(self.model_name, torch_dtype=torch.bfloat16)
+            except:
+                # Fall back to full T5 model and use only encoder
+                self.model = T5ForConditionalGeneration.from_pretrained(self.model_name, torch_dtype=torch.bfloat16)
+                self.use_full_t5 = True
+        else:
+            self.model = AutoModel.from_pretrained(self.model_name, torch_dtype=torch.bfloat16, use_safetensors=True)
+            self.use_full_t5 = False
 
     #Mean Pooling - Take attention mask into account for correct averaging
     def _mean_pooling(self, model_output, attention_mask):
@@ -212,31 +228,50 @@ class TextEmbeddingExtractor:
                     input_ids_gpu = batch['x']["input_ids"].to(self.model.device).long()
                     attention_mask_gpu = batch['x']["attention_mask"].to(self.model.device).long()
 
-                    token_type_ids_gpu = batch['x']["token_type_ids"].to(self.model.device).long()
-                    outputs = self.model(
-                        input_ids=input_ids_gpu,
-                        token_type_ids=token_type_ids_gpu,
-                        attention_mask=attention_mask_gpu
-                    )
-                    
-                    if 'sentence-transformers' in self.model_name:
-                        # NOTE: we decided to not use the [CLS] token representation for sentence-transformers
-                        # but the concatenaion of the whole embeddings.
-
-                        # emb = outputs.last_hidden_state  # shape: (B, L, D)
-                        # Use the [CLS] token representation. This is useful to reduce the overall number of
-                        # parameters of the model while preserving expressivity in the embeddings.
-                        # emb = emb[:, 0, :]  # shape: (B, D)
-
-                        # Extract the last hidden state
-                        emb = outputs.last_hidden_state  # shape: (B, L, D)
-                        # Flatten the embeddings
-                        emb = emb.flatten(1).float()
-                    else:
-                        # Perform pooling
+                    if self.is_t5_model:
+                        # T5 models don't use token_type_ids
+                        if hasattr(self, 'use_full_t5') and self.use_full_t5:
+                            # Use encoder from full T5 model
+                            outputs = self.model.encoder(
+                                input_ids=input_ids_gpu,
+                                attention_mask=attention_mask_gpu
+                            )
+                        else:
+                            # Use T5EncoderModel
+                            outputs = self.model(
+                                input_ids=input_ids_gpu,
+                                attention_mask=attention_mask_gpu
+                            )
+                        # Extract encoder embeddings and apply mean pooling
                         emb = self._mean_pooling(outputs, attention_mask_gpu)
                         # Normalize embeddings
                         emb = F.normalize(emb, p=2, dim=1)
+                    else:
+                        token_type_ids_gpu = batch['x']["token_type_ids"].to(self.model.device).long()
+                        outputs = self.model(
+                            input_ids=input_ids_gpu,
+                            token_type_ids=token_type_ids_gpu,
+                            attention_mask=attention_mask_gpu
+                        )
+                        
+                        if 'sentence-transformers' in self.model_name:
+                            # NOTE: we decided to not use the [CLS] token representation for sentence-transformers
+                            # but the concatenaion of the whole embeddings.
+
+                            # emb = outputs.last_hidden_state  # shape: (B, L, D)
+                            # Use the [CLS] token representation. This is useful to reduce the overall number of
+                            # parameters of the model while preserving expressivity in the embeddings.
+                            # emb = emb[:, 0, :]  # shape: (B, D)
+
+                            # Extract the last hidden state
+                            emb = outputs.last_hidden_state  # shape: (B, L, D)
+                            # Flatten the embeddings
+                            emb = emb.flatten(1).float()
+                        else:
+                            # Perform pooling
+                            emb = self._mean_pooling(outputs, attention_mask_gpu)
+                            # Normalize embeddings
+                            emb = F.normalize(emb, p=2, dim=1)
                     
                     # Move to CPU immediately to free GPU memory for next batch
                     embeddings.append(emb.cpu())
@@ -287,8 +322,13 @@ class TextEmbeddingExtractor:
         if self.extract_embeddings:
             dataset = [{'x': _x.float(), 'c': _c, 'y': _y} for _x, _c, _y in tqdm(zip(x, c, y), total=len(x), desc="Creating dataset")]
         else:
-            dataset = [{'x': {'input_ids': input_ids.long(), 'attention_mask': attention_mask, 'token_type_ids': token_type_ids}, 'c': _c, 'y': _y} 
-                            for input_ids, attention_mask, token_type_ids, _c, _y in tqdm(zip(x['input_ids'], x['attention_mask'], x['token_type_ids'], c, y), total=len(x['input_ids']), desc="Creating dataset")]
+            # Check if token_type_ids is present (T5 models don't have it)
+            if 'token_type_ids' in x:
+                dataset = [{'x': {'input_ids': input_ids.long(), 'attention_mask': attention_mask, 'token_type_ids': token_type_ids}, 'c': _c, 'y': _y} 
+                                for input_ids, attention_mask, token_type_ids, _c, _y in tqdm(zip(x['input_ids'], x['attention_mask'], x['token_type_ids'], c, y), total=len(x['input_ids']), desc="Creating dataset")]
+            else:
+                dataset = [{'x': {'input_ids': input_ids.long(), 'attention_mask': attention_mask}, 'c': _c, 'y': _y} 
+                                for input_ids, attention_mask, _c, _y in tqdm(zip(x['input_ids'], x['attention_mask'], c, y), total=len(x['input_ids']), desc="Creating dataset")]
         return DataLoader(dataset, batch_size=batch_size)
 
     def produce_loaders(self, selected_concepts=None, task_names=None):

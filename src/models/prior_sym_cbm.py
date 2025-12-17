@@ -125,10 +125,10 @@ class PriorSymbolicCBM(BaseModel):
     ###### Forward and loss methods ######
     def forward(self, input):
 
-        latent, x_concepts, c_true, int_idxs = self.encode(input)
+        latent, c_true, int_idxs = self.encode(input)
 
         ## Concept encoder and concept processing block ##
-        c_hat, _ = self.bottleneck(x_concepts)
+        c_hat, _ = self.bottleneck(latent)
 
         c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
 

@@ -9,13 +9,14 @@ hydra:
   sweeper:
     params:
       seed: 1 #, 2, 3
-      dataset: awa2_incomplete # synthetic_motion 
+      dataset: mawps # synthetic_motion 
       model: sr_sym_cbm # sr_sym_cbm, prior_sym_cbm, kan_sym_cbm
-      memory_size: 2
+      memory_size: 4
     
-gpus: [0]
+gpus: [1]
 
 scale_variables: False
+disjoint_training: False
 
 max_epochs: 500
 patience: 50
@@ -26,5 +27,3 @@ extract_embeddings: True
 wandb:
   entity: null
   project: null
-
-note: test

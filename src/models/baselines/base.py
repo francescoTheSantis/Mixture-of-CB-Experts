@@ -52,17 +52,15 @@ class BaseModel(nn.Module):
 
         if task == 'classification':
             if output_size > 1:
-                self.task_loss_form = nn.CrossEntropyLoss()
+                self.task_loss_form = nn.CrossEntropyLoss(reduction='none')
             else:
-                self.task_loss_form = nn.BCEWithLogitsLoss()
+                self.task_loss_form = nn.BCEWithLogitsLoss(reduction='none')
         elif task == 'regression':
-            self.task_loss_form = nn.MSELoss()
-        elif task == 'generation':
-            self.task_loss_form = nn.CrossEntropyLoss()
+            self.task_loss_form = nn.MSELoss(reduction='none')
         else:
             raise NotImplementedError(f"Task {task} is not implemented. "
-                                      f"Supported tasks are 'classification', "
-                                      f"'regression', and 'generation'.")
+                                      f"Supported tasks are 'classification' and "
+                                      f"'regression'.")
 
         # The concept loss form is a list of losses. 
         # Each loss in the list is specifically selected according to the concept type.
@@ -88,17 +86,16 @@ class BaseModel(nn.Module):
         # Pass the input through the encoder
         h = self.encoder(x)
 
-        # encode the concepts using the concept encoder
-        if self.disjoint_training:
-            h_concepts = self.concept_encoder(x)
-        else:
-            h_concepts = h
+        # # encode the concepts using the concept encoder
+        # if self.disjoint_training:
+        #     h_concepts = self.concept_encoder(x)
+        # else:
+        #     h_concepts = h
         
         # If noise is provided, create a convex combination of the input and noise
         if self.noise!=None:
             eps = torch.randn_like(h)
             h = eps * self.noise + h * (1-self.noise)
-            h_concepts = eps * self.noise + h_concepts * (1-self.noise)
             del eps
             
         if self.test_interventions or self.training:
@@ -114,7 +111,7 @@ class BaseModel(nn.Module):
         # Maintain the same 2d format even if only one concept is provided
         int_idxs = int_idxs.unsqueeze(-1) if int_idxs.ndim == 1 else int_idxs
 
-        return h, h_concepts, c_true, int_idxs
+        return h, c_true, int_idxs
     
     def _logic_model_checker(self):
         """
@@ -173,6 +170,13 @@ class BaseModel(nn.Module):
             # Therefore, continuous concepts are left unchanged
         return c_hat
 
+    def _intervene(self, c_hat, c_true, int_idxs):
+        """
+        Apply interventions: when the entry in int_idxs is 1, replace c_hat with c_true
+        """
+        input_concepts = torch.where(int_idxs == 1, c_true, c_hat)
+        return input_concepts
+    
     def _apply_concept_activation(self, c_hat, int_idxs):
         """
         Apply the correct activation function to the concepts:
@@ -204,14 +208,14 @@ class BaseModel(nn.Module):
         c_hat = self._apply_concept_activation(c_hat, int_idxs)
 
         # intervene
-        c_hat = self._intervene(c_hat, c_true, int_idxs)
+        input_concepts = self._intervene(c_hat, c_true, int_idxs)
 
         # Check whether disjoint training is enabled
         if self.disjoint_training and self.phase in ['train', 'val']:
             input_concepts = c_true
         else:
             # switch to hard concepts if the corresponding variable is true
-            input_concepts = self._handle_hard_concepts(c_hat, int_idxs)
+            input_concepts = self._handle_hard_concepts(input_concepts, int_idxs)
 
         return c_hat, input_concepts
 
@@ -243,6 +247,10 @@ class BaseModel(nn.Module):
         # normalize over the number of concepts to avoid high concept loss
         concept_loss /= c.shape[1]
 
+        # Reduce by using mean
+        task_loss = task_loss.mean()
+        concept_loss = concept_loss.mean()
+
         # Combine the two losses by considering the task & concept penalty regularization
         loss = self.concept_penalty * concept_loss + self.task_penalty * task_loss
         return loss
@@ -258,19 +266,16 @@ class BaseModel(nn.Module):
 
         return (torch.rand(bsz, 1, device=labels.device) < self.int_prob).expand(bsz, n_concepts).int()
 
-    def _intervene(self, c_hat, c_true, int_idxs):
-        """
-        Apply interventions: when the entry in int_idxs is 1, replace c_hat with c_true
-        """
-        c_hat = torch.where(int_idxs == 1, c_true, c_hat)
-        return c_hat
-
     def filter_output_for_loss(self, y_hat, c_hat=None, *args, **kwargs):
         """
         Filter the output of the model for loss computation.
         This method can be overridden in subclasses to customize the output filtering.
         """
-        return y_hat, c_hat
+        output_for_loss = {
+            'y_hat': y_hat,
+            'c_hat': c_hat,
+        }
+        return output_for_loss
 
     def filter_output_for_metrics(self, y_hat, c_hat=None, *args, **kwargs):
         """
@@ -322,43 +327,3 @@ class BaseModel(nn.Module):
         raise NotImplementedError(
             f"{self.__class__.__name__} must implement get_symbolic_equivalent() method"
         )
-
-    # def get_intervened_concepts_predictions(self, labels, groups=None):
-    #     '''
-    #     Function to generate a mask for the intervention process.
-    #     The mask is generated based on the probability of intervention.
-    #     '''
-    #     with torch.no_grad():
-    #         if groups is not None:
-    #             # Create the final mask directly without intermediate tensors
-    #             mask = torch.zeros_like(labels, dtype=torch.int32, device=labels.device)
-    #             batch_size = labels.shape[0]
-
-    #             # Process each group independently to avoid large intermediate tensors
-    #             for group_name, group_indices in groups.items():
-    #                 # Generate random values only for this group
-    #                 random_val = torch.rand(batch_size, device=labels.device, dtype=torch.float32)
-    #                 group_mask = (random_val < self.int_prob).int()
-                    
-    #                 # Apply mask directly to the group indices
-    #                 mask[:, group_indices] = group_mask.unsqueeze(1)
-                    
-    #                 # Clean up immediately
-    #                 del random_val, group_mask
-                
-    #             # Force GPU cache cleanup
-    #             if labels.device.type == 'cuda':
-    #                 torch.cuda.empty_cache()
-                
-    #             return mask
-    #         else:
-    #             # Generate mask directly for non-grouped case
-    #             random_values = torch.rand_like(labels, dtype=torch.float32)
-    #             mask = (random_values < self.int_prob).int()
-                
-    #             # Clean up
-    #             del random_values
-    #             if labels.device.type == 'cuda':
-    #                 torch.cuda.empty_cache()
-                
-    #             return mask
