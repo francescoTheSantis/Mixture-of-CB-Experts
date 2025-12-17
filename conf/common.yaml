@@ -37,9 +37,9 @@ selector_model: mlp # linear, mlp
 
 ## Pre-trained backbones
 # Examples of pre-trained image backbones: resnet18, resnet34, ..., google/vit-base-patch32-224-in21k, facebook/dinov2-base
-# Example of pre-trained text backbones: bert-base-uncased, ..., sentence-transformers/all-MiniLM-L6-v2
+# Example of pre-trained text backbones: bert-base-uncased, ..., sentence-transformers/all-MiniLM-L6-v2, google/flan-t5-large
 img_backbone_name: facebook/dinov2-base
-text_backbone_name: sentence-transformers/all-MiniLM-L6-v2
+text_backbone_name: google/flan-t5-large
 
 # Parameter that controls the % of selected groups. Valid only for cub dataset. 
 # Variations of this parameter will have no effect on other concepts. 
