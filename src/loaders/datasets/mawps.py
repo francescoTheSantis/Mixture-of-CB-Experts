@@ -28,6 +28,7 @@ TASK_NAMES = ['Answer']
 CONCEPT_NAMES = ['N_00', 'N_01', 'N_02']
 
 # Augmentation batch configuration
+BALANCE_DATASET = False  # Whether to balance the dataset by generating new questions for underrepresented equations
 QUESTIONS_PER_BATCH = 3  # Number of example questions to show to LLM per batch
 NUM_BATCHES_PER_EQUATION = 2  # Number of batches to process for each equation
 AUGMENTING_FACTOR = 0  # Number of new questions to generate per batch
@@ -148,27 +149,28 @@ def replace_values(values, answers, formulas, cap=5):
 
     return new_values, new_answers
 
-def augment_data(df, questions_per_batch=1, num_batches=1, augmenting_factor=1, seed=42):
+def augment_data(df, questions_per_batch=1, num_batches=1, seed=42):
     """
-    Augment dataset using OpenAI GPT-4o to generate similar math problems.
-    Groups questions by equation, then processes batches to reduce API calls.
+    Augment dataset using OpenAI GPT-4o to balance equation distribution.
+    Counts frequency of each equation and generates additional questions for 
+    underrepresented equations to match the most frequent one.
     LLM generates questions with N_0i placeholders.
     
     Args:
         df: DataFrame with columns ['Question', 'Equation']
         questions_per_batch: Number of example questions to show LLM per batch
-        num_batches: Number of batches to process for each equation
-        augmenting_factor: Number of new questions to generate per batch
+        num_batches: Not used in balancing mode - kept for compatibility
         seed: Random seed for reproducibility
+        balance: If False, returns original data without balancing.
     
     Returns:
-        Augmented DataFrame with original + generated samples
+        Augmented DataFrame with balanced equation distribution
     """
 
     columns_to_keep = ['Question', 'Equation']
-
-    if augmenting_factor == 0:
-        return df[columns_to_keep]
+    
+    # Internal batch size for API calls
+    GENERATION_BATCH_SIZE = 20
 
     if not OPENAI_API_KEY:
         print("Warning: OPENAI_API_KEY not set. Skipping augmentation.")
@@ -185,19 +187,36 @@ def augment_data(df, questions_per_batch=1, num_batches=1, augmenting_factor=1, 
             eq_dict[equation] = []
         eq_dict[equation].append(question)
     
+    # Count frequency of each equation
+    eq_frequencies = {eq: len(questions) for eq, questions in eq_dict.items()}
+    max_frequency = max(eq_frequencies.values())
+    
     print(f"Found {len(eq_dict)} unique equations")
-    print(f"Processing {num_batches} batches per equation with {questions_per_batch} questions per batch")
-    print(f"Generating {augmenting_factor} new questions per batch")
+    print(f"Equation frequencies: {eq_frequencies}")
+    print(f"Maximum frequency: {max_frequency}")
+    print(f"Balancing dataset to {max_frequency} samples per equation")
     
     new_rows = []
-    total_batches = len(eq_dict) * num_batches
+    total_to_generate = sum(max(0, max_frequency - freq) for freq in eq_frequencies.values())
     
-    with tqdm(total=total_batches, desc="Augmenting batches") as pbar:
+    with tqdm(total=total_to_generate, desc="Generating questions for balancing") as pbar:
         for equation, questions in eq_dict.items():
-            # Create batches for this equation
+            current_count = len(questions)
+            needed = max_frequency - current_count
+            
+            if needed <= 0:
+                continue  # This equation already has max frequency
+            
+            print(f"\nEquation '{equation}': has {current_count}, needs {needed} more")
+            
+            # Generate questions in batches
+            remaining = needed
             random.seed(seed)
             
-            for batch_idx in range(num_batches):
+            while remaining > 0:
+                # Determine batch size for this API call
+                batch_size = min(remaining, GENERATION_BATCH_SIZE)
+                
                 # Sample questions for this batch
                 if len(questions) <= questions_per_batch:
                     batch_questions = questions
@@ -208,7 +227,7 @@ def augment_data(df, questions_per_batch=1, num_batches=1, augmenting_factor=1, 
                 examples_str = "\n".join([f"{i+1}. {q}" for i, q in enumerate(batch_questions)])
                 
                 # Create prompt for GPT-4o
-                prompt = f"""You are a math problem generator. Given example math problems and their equation, generate {augmenting_factor} DIFFERENT problems that require the SAME equation to solve.
+                prompt = f"""You are a math problem generator. Given example math problems and their equation, generate {batch_size} DIFFERENT problems that require the SAME equation to solve.
 
 Example questions:
 {examples_str}
@@ -216,14 +235,14 @@ Example questions:
 Equation used: {equation}
 
 IMPORTANT RULES:
-1. Generate {augmenting_factor} completely NEW and DIFFERENT problems (different contexts, scenarios, objects)
+1. Generate {batch_size} completely NEW and DIFFERENT problems (different contexts, scenarios, objects)
 2. Each problem MUST use exactly the same equation structure: {equation}
 3. Use PLACEHOLDERS N_00, N_01, N_02 in your questions instead of actual numbers
 4. The placeholders N_00, N_01, N_02 refer to the three numerical values in order of their appearance in the question
 5. Make problems realistic and contextually diverse (different from the examples)
 6. Do NOT include actual numerical values - only use the placeholders N_00, N_01, N_02
 
-Provide your response as a JSON array with {augmenting_factor} objects, each containing:
+Provide your response as a JSON array with {batch_size} objects, each containing:
 - "question": the new problem statement with N_00, N_01, N_02 placeholders
 
 Example format:
@@ -268,20 +287,33 @@ Provide ONLY the JSON array, no additional text."""
                             'Equation': equation
                         }
                         new_rows.append(new_row)
+                        pbar.update(1)
+                    
+                    remaining -= len(generated_problems)
                     
                 except Exception as e:
-                    print(f"Error generating problems for equation '{equation}', batch {batch_idx}: {e}")
-                
-                pbar.update(1)
+                    print(f"Error generating problems for equation '{equation}': {e}")
+                    # Continue to next batch
+                    remaining -= batch_size
     
     # Create DataFrame from new rows
     if new_rows:
         augmented_df = pd.DataFrame(new_rows)
         # Concatenate with original
         df = pd.concat([df[columns_to_keep], augmented_df[columns_to_keep]], ignore_index=True)
-        print(f"Successfully generated {len(new_rows)} new samples")
+        print(f"\nSuccessfully generated {len(new_rows)} new samples")
+        
+        # Print final distribution
+        final_eq_dict = {}
+        for idx, row in df.iterrows():
+            eq = row['Equation']
+            if eq not in final_eq_dict:
+                final_eq_dict[eq] = 0
+            final_eq_dict[eq] += 1
+        print(f"Final equation distribution: {final_eq_dict}")
     else:
         print("No new samples were generated")
+    
     return df
     
 
@@ -365,14 +397,21 @@ class MAWPSDataset:
         ds = ds[['Question', 'Equation']]
         
         # data augmentation
-        ds = augment_data(ds, 
-            questions_per_batch=QUESTIONS_PER_BATCH,
-            num_batches=NUM_BATCHES_PER_EQUATION,
-            augmenting_factor=AUGMENTING_FACTOR,
-            seed=self.shuffle_seed
-        )
+        if BALANCE_DATASET:
+            print("Augmenting dataset to balance equation distribution...")
+            ds = augment_data(ds, 
+                questions_per_batch=QUESTIONS_PER_BATCH,
+                num_batches=NUM_BATCHES_PER_EQUATION,
+                seed=self.shuffle_seed
+            )
         
-        ds = self._generate_numbers_and_answers(ds, seed=self.shuffle_seed, numerical_augmentation_factor=NUMERICAL_AUGMENTING_FACTOR)
+        ds = self._generate_numbers_and_answers(
+            ds, 
+            seed=self.shuffle_seed, 
+            min_val=-4.0,
+            max_val=4.0,
+            numerical_augmentation_factor=NUMERICAL_AUGMENTING_FACTOR
+        )
 
         # # Divide the dataset into train, val, test splits (80%, 10%, 10%)
         # # Stratify over the Equation
@@ -393,9 +432,9 @@ class MAWPSDataset:
 
         # save the datasets and equations in pickle format
         # write formulas in a text file (seed-specific)
-        with open(f'{MAWPS_DIR}/formulas_seed.txt', 'w') as f:
-            for formula in unique_formulas:
-                f.write(f"{formula}\n")
+        # with open(f'{MAWPS_DIR}/formulas_seed.txt', 'w') as f:
+        #     for formula in unique_formulas:
+        #         f.write(f"{formula}\n")
 
         # train_ds.to_pickle(f'{MAWPS_DIR}/mawps_train_seed{self.shuffle_seed}.pkl')
         # val_ds.to_pickle(f'{MAWPS_DIR}/mawps_val_seed{self.shuffle_seed}.pkl')
@@ -405,18 +444,13 @@ class MAWPSDataset:
         # train_ds.to_csv(f'{MAWPS_DIR}/mawps_train_seed{self.shuffle_seed}.csv', index=False)
         # val_ds.to_csv(f'{MAWPS_DIR}/mawps_val_seed{self.shuffle_seed}.csv', index=False)
         # test_ds.to_csv(f'{MAWPS_DIR}/mawps_test_seed{self.shuffle_seed}.csv', index=False)
-        
-        # # Check if the splits preserve the equation distribution
-        histogram_of_formulas(train_ds['Equation'], name='train', suffix='post_augmentation')
-        histogram_of_formulas(val_ds['Equation'], name='val', suffix='post_augmentation')
-        histogram_of_formulas(test_ds['Equation'], name='test', suffix='post_augmentation')
 
-        print(f"Final dataset sizes:")
-        print(f"  Train: {len(train_ds)} samples")
-        print(f"  Val: {len(val_ds)} samples")
-        print(f"  Test: {len(test_ds)} samples")
+        # print(f"Final dataset sizes:")
+        # print(f"  Train: {len(train_ds)} samples")
+        # print(f"  Val: {len(val_ds)} samples")
+        # print(f"  Test: {len(test_ds)} samples")
 
-        print(f"Datasets created and saved in {MAWPS_DIR} for seed {self.shuffle_seed}")
+        # print(f"Datasets created and saved in {MAWPS_DIR} for seed {self.shuffle_seed}")
 
         # load the datasets (with seed-specific filenames)
         # Use preserve_index=False to ensure clean conversion without index issues
@@ -426,6 +460,11 @@ class MAWPSDataset:
 
         # Use the configured pre-trained transformer as tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(pre_trained_transformer)
+
+        # Check if the splits preserve the equation distribution
+        histogram_of_formulas(train_ds['Equation'], name='train', suffix='post_augmentation')
+        histogram_of_formulas(val_ds['Equation'], name='val', suffix='post_augmentation')
+        histogram_of_formulas(test_ds['Equation'], name='test', suffix='post_augmentation')
 
         # Convert pandas DataFrames back to HuggingFace Datasets
         train_ds = Dataset.from_pandas(train_ds, preserve_index=False)
@@ -437,10 +476,10 @@ class MAWPSDataset:
         val_ds = val_ds.shuffle(seed=self.shuffle_seed)
         test_ds = test_ds.shuffle(seed=self.shuffle_seed)
 
-        # Save the dataset as csv files
-        train_ds.to_csv(f'{MAWPS_DIR}/mawps_train_seed{self.shuffle_seed}.csv', index=False)
-        val_ds.to_csv(f'{MAWPS_DIR}/mawps_val_seed{self.shuffle_seed}.csv', index=False)
-        test_ds.to_csv(f'{MAWPS_DIR}/mawps_test_seed{self.shuffle_seed}.csv', index=False)
+        # # Save the dataset as csv files
+        # train_ds.to_csv(f'{MAWPS_DIR}/mawps_train_seed{self.shuffle_seed}.csv', index=False)
+        # val_ds.to_csv(f'{MAWPS_DIR}/mawps_val_seed{self.shuffle_seed}.csv', index=False)
+        # test_ds.to_csv(f'{MAWPS_DIR}/mawps_test_seed{self.shuffle_seed}.csv', index=False)
 
         # Use num_proc=1 to ensure deterministic processing order
         # Use load_from_cache_file=False to avoid stale cache issues
@@ -463,7 +502,7 @@ class MAWPSDataset:
         self.val_dataset = tokenized_val
         self.test_dataset = tokenized_test
 
-    def _generate_numbers_and_answers(self, df, seed=42, min_val=-5.0, max_val=5.0, numerical_augmentation_factor=1):
+    def _generate_numbers_and_answers(self, df, seed=42, min_val=-1.0, max_val=1.0, numerical_augmentation_factor=1):
         """
         Generate random numbers for N_00, N_01, N_02 and compute Answer by evaluating the Equation.
         Also replaces placeholders in Question with the generated numbers.
@@ -480,6 +519,45 @@ class MAWPSDataset:
         """
         random.seed(seed)
         
+        def get_denominator_variables(equation):
+            """
+            Identify which variables (N_00, N_01, N_02) appear in denominators.
+            Returns a set of variable names that are used as denominators.
+            """
+            try:
+                expr = sp.sympify(equation)
+                denominators = set()
+                
+                # Walk through the expression tree to find divisions
+                for arg in sp.preorder_traversal(expr):
+                    if isinstance(arg, sp.Mul):
+                        # Check for terms with negative powers (denominators)
+                        for factor in arg.args:
+                            if isinstance(factor, sp.Pow) and factor.exp.is_negative:
+                                # Extract variables from this factor
+                                for sym in factor.free_symbols:
+                                    denominators.add(str(sym))
+                    elif isinstance(arg, sp.Pow) and arg.exp.is_negative:
+                        # Direct negative power
+                        for sym in arg.free_symbols:
+                            denominators.add(str(sym))
+                
+                return denominators
+            except Exception as e:
+                print(f"Error parsing equation '{equation}': {e}")
+                return set()
+        
+        def generate_safe_number(min_val, max_val, is_denominator):
+            """
+            Generate a random number. If it's for a denominator, ensure it's not in [-0.5, 0.5].
+            """
+            value = round(random.uniform(min_val, max_val), 2)
+            if is_denominator:
+                # Regenerate until we get a value outside [-0.1, 0.1]
+                while -0.1 <= value <= 0.1:
+                    value = round(random.uniform(min_val, max_val), 2)
+            return value
+        
         n00_list, n01_list, n02_list = [], [], []
         answers = []
         questions_with_values = []
@@ -489,10 +567,17 @@ class MAWPSDataset:
             equation = row['Equation']
             question = row['Question']
             
+            # Identify which variables are in denominators
+            denominator_vars = get_denominator_variables(equation)
+            
             # Generate multiple numerical combinations for this question
             for aug_idx in range(numerical_augmentation_factor):
-                # Generate random numbers in the specified range
-                numbers = [round(random.uniform(min_val, max_val), 2) for _ in range(3)]
+                # Generate random numbers, avoiding small values for denominators
+                numbers = [
+                    generate_safe_number(min_val, max_val, 'N_00' in denominator_vars),
+                    generate_safe_number(min_val, max_val, 'N_01' in denominator_vars),
+                    generate_safe_number(min_val, max_val, 'N_02' in denominator_vars)
+                ]
                 n00_list.append(numbers[0])
                 n01_list.append(numbers[1])
                 n02_list.append(numbers[2])
