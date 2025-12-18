@@ -11,9 +11,7 @@ params:
   embedding_size: ${embedding_size}
   mc_approx: 1
   weight_reg: 1e-5
-  embedding_memory: True
   bias: local
-  select_equation: True
 
 metadata:
   name: linear_symbolic_cbm

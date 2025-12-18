@@ -26,7 +26,6 @@ class LinearSymbolicCBM(BaseModel):
                  weight_reg=0,
                  encoder=None,
                  mc_approx=1,
-                 embedding_memory=True,
                  selector_model='linear',
                  concept_loss_form=nn.BCELoss(),
                  backbone_latent_size=None,
@@ -35,7 +34,6 @@ class LinearSymbolicCBM(BaseModel):
                  bias=None,
                  disjoint_training=False,
                  concept_penalty=1.0,
-                 select_equation=True,
                  **kwargs
                  ):
 
@@ -63,10 +61,8 @@ class LinearSymbolicCBM(BaseModel):
         self.has_concepts = True
         self.y_names = list(y_names)
         self.weight_reg = weight_reg
-        self.select_equation = select_equation # Select a single linear equation or a matrix of weights
 
         self.mc_approx = mc_approx
-        self.embedding_memory = embedding_memory
         self.memory_size = memory_size
         self.selector_model = selector_model
         self.decay_rate = decay_rate

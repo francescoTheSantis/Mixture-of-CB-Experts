@@ -226,7 +226,8 @@ class Engine(pl.LightningModule):
         self.update_and_log_metrics('test', y_hat_metrics, batch['y'], c_hat_metrics, batch['c'])
 
         # Collect per-sample predictions for analysis
-        if self.model_name in ['KANSymbolicCBM', 'LinearSymbolicCBM', 'PriorSymbolicCBM', 'SymbolicRegressorCBM']:
+        if self.model_name in ['KANSymbolicCBM', 'LinearSymbolicCBM', 'PriorSymbolicCBM', 'SymbolicRegressorCBM', \
+                               'BlackBox', 'ConceptEmbeddingModel', 'LinearConceptEmbeddingModel', 'DeepConceptReasoner', 'ConceptMemoryReasoner']:
             self._collect_test_sample_data(batch, batch_idx, model_output, y_hat_metrics, c_hat_metrics)
 
         return loss 
@@ -259,27 +260,96 @@ class Engine(pl.LightningModule):
             # Shape: (batch_size, memory_size)
             selected_memory = torch.argmax(model_output['selection_dist'], dim=1)
         else:
-            # No memory selection available (shouldn't happen for the 4 target models)
+            # No memory selection available (for BlackBox and ConceptEmbeddingModel)
             selected_memory = torch.zeros(batch_size, dtype=torch.long)
         
-        # Extract equations once for this batch
-        equations_per_slot = self._extract_memory_equations()
+        # Extract equations for this batch
+        if self.model_name == 'LinearConceptEmbeddingModel':
+            # For LinearConceptEmbeddingModel, equations are per-sample (not per-memory-slot)
+            equations_per_sample = self._extract_per_sample_equations(model_output, batch_size)
+        elif self.model_name in ['DeepConceptReasoner', 'ConceptMemoryReasoner']:
+            # For DeepConceptReasoner and ConceptMemoryReasoner, equations are per-sample boolean rules
+            with torch.no_grad():
+                equations_per_sample = self.model.get_local_explanations(batch['x'])
+        else:
+            # For other models, equations are per-memory-slot
+            equations_per_slot = self._extract_memory_equations()
         
         # Store data for each sample in the batch
         for i in range(batch_size):
-            memory_idx = selected_memory[i].item()
+            prediction = y_hat_metrics[i].detach().cpu().numpy()
+            
+            # Get equation based on model type
+            if self.model_name in ['LinearConceptEmbeddingModel']:
+                # Per-sample equations (already formatted)
+                equation = equations_per_sample[i]
+            elif self.model_name in ['DeepConceptReasoner', 'ConceptMemoryReasoner']:
+                # Per-sample boolean rule explanations
+                equation = list(equations_per_sample[i].values())[0]
+            else:
+                memory_idx = selected_memory[i].item()
+                if len(self.y_name) > 1:
+                    equation = equations_per_slot.get(memory_idx, "No equation available").split(';')[prediction].split(':', 1)[1].strip()
+                else:
+                    equation = equations_per_slot.get(memory_idx, "No equation available").split(':', 1)[1].strip()
+
+            c_pred = c_hat_metrics[i].detach().cpu().numpy() if c_hat_metrics is not None else None
+
             sample_data = {
                 'sample_idx': batch_idx * batch_size + i,
-                'equation': equations_per_slot.get(memory_idx, "No equation available"),
-                'c_pred': c_hat_metrics[i].detach().cpu().numpy(),
-                'y_pred': y_hat_metrics[i].detach().cpu().numpy(),
+                'equation': equation,
+                'c_pred': c_pred,
+                'y_pred': prediction,
                 'c_true': batch['c'][i].detach().cpu().numpy(),
                 'y_true': batch['y'][i].detach().cpu().numpy(),
             }
-            # Add true equation if available
-            if self.true_equations is not None:
-                sample_data['true_equation'] = self.true_equations[0] if len(self.true_equations) > 0 else "No equation available"
+            
             self.test_predictions.append(sample_data)
+
+    def _extract_per_sample_equations(self, model_output, batch_size):
+        """
+        Extract equation strings for each sample (used by LinearConceptEmbeddingModel).
+        Returns a list of equation strings, one per sample.
+        """
+        equations = []
+        
+        # Extract weights and bias from model output
+        # weights shape: (batch_size, 1, n_concepts, n_outputs)
+        weights = model_output['weights'].detach().cpu().numpy()
+        
+        # y_bias shape: (batch_size, 1, n_outputs) if present, else None
+        y_bias = model_output.get('y_bias', None)
+        if y_bias is not None:
+            y_bias = y_bias.detach().cpu().numpy()
+        
+        # Build equation for each sample
+        for sample_idx in range(batch_size):
+            eq_strs = []
+            n_outputs = weights.shape[-1]
+            n_concepts = weights.shape[-2]
+            
+            for out_idx in range(n_outputs):
+                terms = []
+                # Add weighted concept terms
+                for c_idx in range(n_concepts):
+                    weight = weights[sample_idx, 0, c_idx, out_idx]
+                    if abs(weight) > 1e-6:  # Only include non-zero terms
+                        c_name = self.c_names[c_idx]
+                        terms.append(f"{weight:.4f}*{c_name}")
+                
+                # Add bias if present
+                if y_bias is not None:
+                    bias_value = y_bias[sample_idx, 0, out_idx]
+                    terms.append(f"{bias_value:.4f}")
+                
+                # Build equation string
+                y_name = self.y_name[out_idx] if len(self.y_name) > 1 else self.y_name[0]
+                eq_str = f"{y_name}: " + " + ".join(terms) if terms else f"{y_name}: 0"
+                eq_strs.append(eq_str)
+            
+            equations.append("; ".join(eq_strs))
+        
+        return equations
 
     def _extract_memory_equations(self):
         """
@@ -338,7 +408,7 @@ class Engine(pl.LightningModule):
                             bias_value = self.model.linear_memory_predictor.bias_params[out_idx].item()
                             terms.append(f"{bias_value:.4f}")
                         
-                        eq_str = f"{y_name} = " + " + ".join(terms) if terms else f"{y_name} = 0"
+                        eq_str = f"{y_name}: " + " + ".join(terms) if terms else f"{y_name}: 0"
                         eq_strs.append(eq_str)
                     
                     equations[mem_idx] = "; ".join(eq_strs)
@@ -372,6 +442,34 @@ class Engine(pl.LightningModule):
                 # BlackBoxPredictor or not yet trained
                 for mem_idx in range(getattr(self.model, 'memory_size', 1)):
                     equations[mem_idx] = "No symbolic equations (BlackBoxPredictor)"
+        
+        elif model_name == 'BlackBox':
+            # Extract equation from predictor using get_symbolic_equivalent
+            try:
+                eq_result = self.model.get_symbolic_equivalent(return_equations=True)
+                # For multi-output, eq_result is a list of equations
+                if isinstance(eq_result, list):
+                    eq_strs = [f"{self.y_name[i]}: {str(eq)}" for i, eq in enumerate(eq_result)]
+                    equations[0] = "; ".join(eq_strs)
+                else:
+                    # Single output
+                    equations[0] = f"{self.y_name[0] if isinstance(self.y_name, list) else self.y_name}: {str(eq_result)}"
+            except Exception as e:
+                equations[0] = f"Error extracting equation: {str(e)}"
+        
+        elif model_name == 'ConceptEmbeddingModel':
+            # Extract equation from y_predictor using get_symbolic_equivalent
+            try:
+                eq_result = self.model.get_symbolic_equivalent(return_equations=True)
+                # For multi-output, eq_result is a list of equations
+                if isinstance(eq_result, list):
+                    eq_strs = [f"{self.y_name[i]}: {str(eq)}" for i, eq in enumerate(eq_result)]
+                    equations[0] = "; ".join(eq_strs)
+                else:
+                    # Single output
+                    equations[0] = f"{self.y_name[0] if isinstance(self.y_name, list) else self.y_name}: {str(eq_result)}"
+            except Exception as e:
+                equations[0] = f"Error extracting equation: {str(e)}"
         
         else:
             # Other models - no memory-based equations
@@ -421,7 +519,10 @@ class Engine(pl.LightningModule):
             
             for c_idx, c_name in enumerate(self.c_names):
                 record[f'c_true_{c_name}'] = float(c_true[c_idx]) if c_true.ndim > 0 else float(c_true)
-                record[f'c_pred_{c_name}'] = float(c_pred[c_idx]) if c_pred.ndim > 0 else float(c_pred)
+                if c_pred is not None:
+                    record[f'c_pred_{c_name}'] = float(c_pred[c_idx]) if c_pred.ndim > 0 else float(c_pred)
+                else:
+                    record[f'c_pred_{c_name}'] = None
             
             records.append(record)
         

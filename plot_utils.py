@@ -2017,20 +2017,20 @@ def compute_equation_complexity_for_sr_ablation(paths):
     
     This function:
     - Lists all experiment directories
-    - For each experiment, loads learned equations from the model's memory slots
-    - Computes complexity (visitation length) for each equation
-    - Averages complexity across all equations in the memory (if memory_size > 1)
+    - For each experiment, loads equations from test_predictions_per_sample.csv
+    - Computes complexity (visitation length) for each equation (one per sample)
+    - Averages complexity across all samples
     - Groups by (dataset, model, seed) and then averages across seeds
     - Returns a CSV with dataset, model, and averaged complexity metrics
     
     Args:
-        path: Path to the sr_ablation output directory
+        paths: List of paths to the output directories
         
     Returns:
         pd.DataFrame with columns: dataset, model, mean_complexity, std_complexity, n_seeds
     """
-    import dill
     from src.utils.complexity import compute_complexity
+    from sympy import sympify
     
     # Collect all experiment paths
     exps_path = []
@@ -2043,6 +2043,7 @@ def compute_equation_complexity_for_sr_ablation(paths):
     
     # Process each experiment
     for exp_path in tqdm(exps_path, desc="Processing experiments for complexity"):
+        
         try:
             # Load config to get dataset info, model, seed
             config_file = os.path.join(exp_path, '.hydra/config.yaml')
@@ -2056,47 +2057,43 @@ def compute_equation_complexity_for_sr_ablation(paths):
             model_name = config['model']['metadata']['name']
             seed = config['seed']
             
-            # Find all memory slots
-            memory_slots_dir = os.path.join(exp_path, 'logs/experiment_metrics/equations/memory_slots')
-            if not os.path.exists(memory_slots_dir):
-                # Skip models without memory slots (e.g., blackbox)
+            # Read test_predictions_per_sample.csv
+            predictions_file = os.path.join(exp_path, 'logs/experiment_metrics/test_predictions_per_sample.csv')
+            if not os.path.exists(predictions_file):
+                # Skip experiments without predictions file
                 continue
             
-            memory_slots = [d for d in os.listdir(memory_slots_dir) if d.startswith('memory_slot_')]
+            df = pd.read_csv(predictions_file)
             
-            # Load all learned equations from memory slots
-            learned_equations = []
-            for mem_slot in memory_slots:
-                mem_slot_dir = os.path.join(memory_slots_dir, mem_slot)
-                eq_files = [f for f in os.listdir(mem_slot_dir) if f.startswith('equation_') and f.endswith('.pkl')]
-                
-                for eq_file in eq_files:
-                    eq_path = os.path.join(mem_slot_dir, eq_file)
-                    try:
-                        with open(eq_path, 'rb') as f:
-                            eq = dill.load(f)
-                        learned_equations.append(eq)
-                    except Exception as e:
-                        print(f"Error loading equation from {eq_path}: {e}")
-                        continue
-            
-            if not learned_equations:
+            # Check if 'equation' column exists
+            if 'equation' not in df.columns:
+                print(f"Warning: 'equation' column not found in {predictions_file}")
                 continue
             
-            # Compute complexity for each equation
+            # Compute complexity for each equation in the dataset
             complexities = []
-            for eq in learned_equations:
+            for idx, row in df.iterrows():
+                equation_str = row['equation']
+                
+                # Skip NaN or empty equations
+                if pd.isna(equation_str) or equation_str == '':
+                    continue
+                
                 try:
-                    complexity = compute_complexity(eq, metric='visitation_length')
+                    # Convert string to sympy expression
+                    equation = sympify(equation_str)
+                    
+                    # Compute complexity
+                    complexity = compute_complexity(equation, metric='visitation_length')
                     complexities.append(complexity)
                 except Exception as e:
-                    print(f"Error computing complexity: {e}")
+                    print(f"Error processing equation '{equation_str}': {e}")
                     continue
             
             if not complexities:
                 continue
             
-            # Average complexity across all equations in memory
+            # Average complexity across all samples
             avg_complexity = np.mean(complexities)
             
             results.append({

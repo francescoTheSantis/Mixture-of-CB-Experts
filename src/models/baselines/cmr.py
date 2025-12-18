@@ -161,7 +161,9 @@ class ConceptMemoryReasoner(BaseModel):
 
         return {
             'y_hat': y_hat,
-            'c_hat': c_hat
+            'c_hat': c_hat,
+            'concept_weights': concept_weights,
+            'prob_per_classifier': prob_per_classifier,
         }
 
     def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):
@@ -247,3 +249,46 @@ class ConceptMemoryReasoner(BaseModel):
         # (all concepts are relevant and negated) 
         equation = boolean_and_expression(len(self.c_names))
         store_eq(equation, log_dir)
+
+    def get_local_explanations(self, x, multi_label=False, **kwargs):
+        latent = self.encoder(x)
+        c_emb, c_dict = self.bottleneck(latent)
+        c_pred = c_dict["c_int"]
+        classifier_selector_logits = self.classifier_selector(latent)
+        prob_per_classifier = torch.softmax(classifier_selector_logits, dim=-1)
+        concept_weights = (
+            self.memory_decoder(self.concept_memory.weight)
+            .softmax(dim=-1)
+            .unsqueeze(dim=0)
+        )
+        y_per_classifier = CF.logic_rule_eval(concept_weights, F.sigmoid(c_pred))
+        rule_probs = prob_per_classifier * y_per_classifier
+        rule_preds = rule_probs.argmax(
+            dim=-1
+        )  # = CF.most_likely_expl(rule_probs, multi_label)
+        global_explanations = CF.logic_rule_explanations(
+            concept_weights,
+            {
+                1: self.c_names,
+                2: self.y_names,
+            },
+        )
+        local_expl = []
+        y_pred = rule_probs.sum(dim=-1)
+        for i in range(x.shape[0]):
+            sample_expl = {}
+            for j in range(len(self.y_names)):
+                # a task is predicted if it is the most likely task or is
+                # a multi-label task with probability higher than 0.5 or is
+                # a binary task with probability higher than 0.5
+                predicted_task = (
+                    (j == y_pred[i].argmax())
+                    or (multi_label and y_pred[i, j] > 0.5)
+                    or (not self._multi_class and y_pred[i, j] > 0.5)
+                )
+                if predicted_task:
+                    task_rules = global_explanations[0][self.y_names[j]]
+                    predicted_rule = task_rules[f"Rule {rule_preds[i, j]}"]
+                    sample_expl.update({self.y_names[j]: predicted_rule})
+            local_expl.append(sample_expl)
+        return local_expl

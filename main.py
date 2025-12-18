@@ -77,7 +77,7 @@ def main(cfg: DictConfig) -> None:
     cfg = update_config_from_data(cfg, loaded_train, c_names, y_names, c_groups, csv_logger.log_dir)
 
     # Check whether it is a valid combination of dataset and model.
-    # Some models (e.g., dcr) cannot be executed on some datasets (e.g., mnist_arithmetic).
+    # Some models (e.g., dcr) cannot be executed on regression datasets.
     is_valid_experiment(cfg)    
 
     ###### Instantiate the model ######

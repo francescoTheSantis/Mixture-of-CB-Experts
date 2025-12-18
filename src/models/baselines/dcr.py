@@ -55,6 +55,7 @@ class DeepConceptReasoner(BaseModel):
         self.logic_reasoning = True
         self.n_roles = 3
         self.memory_names = ['Positive', 'Negative', 'Irrelevant']
+        self.y_names = list(y_names)
         
         self.embedding_size = embedding_size
         self.task_penalty = task_penalty * 3 # BCE gives lower loss values
@@ -111,7 +112,8 @@ class DeepConceptReasoner(BaseModel):
         y_hat = y_hat[:, :, 0]
         return {
             'y_hat': y_hat,
-            'c_hat': c_hat
+            'c_hat': c_hat,
+            'c_weights': c_weights,
         }
 
     def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):
@@ -127,3 +129,48 @@ class DeepConceptReasoner(BaseModel):
         # (all concepts are relevant and negated) 
         equation = boolean_and_expression(len(self.c_names))
         store_eq(equation, log_dir)
+
+    def get_local_explanations(self, x, multi_label=False, **kwargs):
+        assert (
+            not multi_label or self._multi_class
+        ), "Multi-label explanations are supported only for multi-class tasks"
+        latent = self.encoder(x)
+        c_emb, c_dict = self.bottleneck(latent)
+        c_pred = c_dict["c_int"]
+        c_weights = self.concept_importance_predictor(c_emb)
+        c_weights = c_weights.unsqueeze(dim=1)  # add memory dimension
+        relevance = CF.soft_select(
+            c_weights[:, :, :, :, -2:-1],
+            self.temperature,
+            -3,
+        )
+        polarity = c_weights[:, :, :, :, :-1].softmax(-1)
+        c_weights = torch.cat([polarity, 1 - relevance], dim=-1)
+        explanations = CF.logic_rule_explanations(
+            c_weights,
+            {
+                1: self.c_names,
+                2: self.y_names,
+            },
+        )
+        
+        y_pred = CF.logic_rule_eval(c_weights, F.sigmoid(c_pred), semantic=self.semantic)[:, :, 0]
+
+        local_explanations = []
+        for i in range(x.shape[0]):
+            sample_expl = {}
+            for j in range(len(self.y_names)):
+                # a task is predicted if it is the most likely task or is
+                # a multi-label task with probability higher than 0.5 or is
+                # a binary task with probability higher than 0.5
+                if len(self.y_names) > 1:  
+                    predicted_task = j == y_pred[i].argmax()
+                else:  # binary
+                    predicted_task = y_pred[i, j] > 0.5
+
+                if predicted_task:
+                    task_rules = explanations[i][self.y_names[j]]
+                    predicted_rule = task_rules[f"Rule {0}"]
+                    sample_expl.update({self.y_names[j]: predicted_rule})
+            local_explanations.append(sample_expl)
+        return local_explanations

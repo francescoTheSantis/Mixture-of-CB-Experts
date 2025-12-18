@@ -140,6 +140,7 @@ class LinearConceptEmbeddingModel(BaseModel):
             'y_hat': y_hat[:, :, 0],
             'c_hat': c_hat,
             'weights': c_weights,
+            'y_bias': y_bias,
         }
 
     def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):
