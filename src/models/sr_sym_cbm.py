@@ -123,8 +123,10 @@ class SymbolicRegressorCBM(BaseModel):
             # For the classification task we use only basic operators since 
             # the there are only binary concepts and the target is binary as well.
             self.pysr_params['binary_operators'] = ['*', '+', '-']
-            element_wise_loss = "loss(prediction, target) = abs(prediction - target)"
+            element_wise_loss = "loss(prediction, target) = (1 - prediction * target)^2"
             self.pysr_params['elementwise_loss'] = element_wise_loss
+            self.pysr_params['model_selection'] = 'accuracy' # Select the equation with highest accuracy
+            # self.pysr_params['turbo'] = True
         else:
             self.pysr_params['binary_operators'] = binary_operators
             self.pysr_params['unary_operators'] = unary_operators
@@ -164,8 +166,7 @@ class SymbolicRegressorCBM(BaseModel):
 
         return {
             'y_hat': predictor_output['y_hat'],
-            'c_hat': c_hat,
-            'explanations': predictor_output['explanations'],
+            'c_hat': c_hat,            
             'selection_dist': selection_dist,
             'sampled_memory_idxs': selector_probs
         }

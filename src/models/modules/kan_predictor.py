@@ -166,15 +166,8 @@ class KANPredictor(nn.Module):
         # and eq_outputs has shape (bsz, memory_size, n_outputs)
         y_hat = torch.einsum('bmys,bmy->bys', prob_per_classifier, eq_outputs)
 
-        # Get the explanations (the selected equations)
-        if self.training:
-            explanations = [None] * bsz
-        else:
-            explanations = self._get_explanations(prob_per_classifier, y_hat)
-
         return {
             'y_hat': y_hat,
-            'explanations': explanations,
         }
 
     def regularization_term(self):

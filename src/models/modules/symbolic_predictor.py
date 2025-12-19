@@ -385,15 +385,8 @@ class SymbolicPredictor(nn.Module):
         # y_hat shape: (batch, n_outputs, n_samples)
         y_hat = torch.einsum('bmys,bmy->bys', prob_per_classifier, eq_outputs)
         
-        # Get explanations
-        if self.training:
-            explanations = None
-        else:
-            explanations = self._get_explanations(prob_per_classifier, y_hat)
-        
         return {
             'y_hat': y_hat,
-            'explanations': explanations
         }
     
     def _get_explanations(self, prob_per_classifier, y_hat):

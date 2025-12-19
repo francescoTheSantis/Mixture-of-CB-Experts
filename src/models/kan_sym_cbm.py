@@ -184,7 +184,6 @@ class KANSymbolicCBM(BaseModel):
         return {
             'y_hat': predictor_output['y_hat'],
             'c_hat': c_hat,
-            'explanations': predictor_output['explanations'],
             'selection_dist': selection_dist
         }
 
