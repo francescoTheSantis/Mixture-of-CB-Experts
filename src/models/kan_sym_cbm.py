@@ -102,6 +102,7 @@ class KANSymbolicCBM(BaseModel):
         self.classifier_selector = SelectorModel(
             input_size=self.backbone_latent_size,
             output_size=self.memory_size,
+            n_outputs=self.output_size,
             model_type=selector_model,
             activation=activation,
             decay_rate=decay_rate,
@@ -184,8 +185,7 @@ class KANSymbolicCBM(BaseModel):
             'y_hat': predictor_output['y_hat'],
             'c_hat': c_hat,
             'explanations': predictor_output['explanations'],
-            'selection_dist': selection_dist,
-            'sampled_memory_idxs': selector_probs
+            'selection_dist': selection_dist
         }
 
     def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):

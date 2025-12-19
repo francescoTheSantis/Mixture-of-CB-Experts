@@ -128,7 +128,7 @@ def main():
 
         # Compute equation complexity metrics
         print("\nComputing equation complexity metrics...")
-        complexity_results = compute_equation_complexity_for_sr_ablation(paths)
+        complexity_results = compute_equation_complexity_for_sr_ablation(paths, n_samples=1)
         complexity_csv_path = os.path.join(table_path, 'sr_ablation', 'complexity_metrics.csv')
         complexity_results.to_csv(complexity_csv_path, index=False)
         print(f"Complexity metrics saved to {complexity_csv_path}")
@@ -174,10 +174,10 @@ def main():
     ##################################################
 
     paths = [
-        "output/memory_less_cls",
+        # "output/memory_less_cls",
         "output/memory_cls",
         "output/memory_reg",
-        "output/memory_less_reg"
+        # "output/memory_less_reg"
     ]
 
     try:

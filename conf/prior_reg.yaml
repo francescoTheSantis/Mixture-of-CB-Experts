@@ -5,11 +5,10 @@ defaults:
 hydra:
   mode: MULTIRUN
   sweep:
-      dir: output/memory_reg/${now:%Y-%m-%d_%H-%M-%S}
+      dir: output/prior_reg/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      model: lin_sym_cbm, sr_sym_cbm
-      memory_size: 1, 2, 3, 4, 5, 10
+      model: prior_sym_cbm
       dataset: dsprites_simple, pendulum, dsprites_complex, mnist_arithmetic, mawps
       seed: 1, 2, 3, 4, 5
 

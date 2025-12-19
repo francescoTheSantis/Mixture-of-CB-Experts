@@ -101,6 +101,7 @@ class PriorSymbolicCBM(BaseModel):
         self.classifier_selector = SelectorModel(
             input_size=self.backbone_latent_size,
             output_size=self.memory_size,
+            n_outputs=self.output_size,
             model_type=selector_model,
             activation=activation,
             decay_rate=decay_rate,

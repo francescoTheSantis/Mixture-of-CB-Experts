@@ -3,6 +3,7 @@
 defaults:
   - common
   - _self_
+  - override hydra/sweeper: list
 
 hydra:
   mode: MULTIRUN
@@ -11,26 +12,40 @@ hydra:
       # preprocessed data will be saved in the cache.
       dir: preprocess/${now:%Y-%m-%d_%H-%M-%S} 
   sweeper:
-    params:
+    grid_params:
       seed: 1, 2, 3, 4, 5
-      dataset: 
-        # - cub
-        # - cub_incomplete
-        # - awa2
-        # - awa2_incomplete
-        - cifar10
-        # - dsprites_simple
-        # - pendulum
-        # - feynman_I_12_1
-        # - feynman_I_14_3
-        # - feynman_I_15_10
-        # - mnist_arithmetic
-        # - dsprites_complex
-        # - mawps
-        # - synthetic_motion
-       
-      img_backbone_name: google/vit-base-patch32-224-in21k
 
+    list_params:
+      dataset: 
+        - cub
+        - cub_incomplete
+        - awa2
+        - awa2_incomplete
+        - cifar10
+        - cifar100
+        - dsprites_simple
+        - pendulum
+        - feynman_I_12_1
+        - feynman_I_14_3
+        - feynman_I_15_10
+        - mnist_arithmetic
+        - dsprites_complex
+        - mawps
+      img_backbone_name: 
+        - facebook/dinov2-base
+        - facebook/dinov2-base
+        - facebook/dinov2-base
+        - facebook/dinov2-base
+        - google/vit-base-patch32-224-in21k
+        - google/vit-base-patch32-224-in21k
+        - facebook/dinov2-base
+        - facebook/dinov2-base
+        - facebook/dinov2-base
+        - facebook/dinov2-base
+        - facebook/dinov2-base
+        - facebook/dinov2-base
+        - facebook/dinov2-base
+        - facebook/dinov2-base
 
 use_stored_dataset: False # Set this parameter to False to preprocess the dataset from scratch.
 extract_embeddings: True # Set this variable to true to preprocess the data using a pre-trained model.

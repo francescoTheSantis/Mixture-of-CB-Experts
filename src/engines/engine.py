@@ -251,14 +251,13 @@ class Engine(pl.LightningModule):
         batch_size = batch['y'].shape[0]
         
         # Get the selected memory slot index for each sample
-        if 'sampled_memory_idxs' in model_output:
-            # Shape: (batch_size, memory_size, n_samples)
-            memory_probs = model_output['sampled_memory_idxs']
-            # Get the index of selected memory slot (argmax across memory dimension)
-            selected_memory = torch.argmax(memory_probs[:, :, 0], dim=1)
-        elif 'selection_dist' in model_output:
-            # Shape: (batch_size, memory_size)
-            selected_memory = torch.argmax(model_output['selection_dist'], dim=1)
+        if 'selection_dist' in model_output:
+            # With independent outputs: Shape is (batch_size, n_outputs, memory_size)
+            selection_dist = model_output['selection_dist']
+            # Independent outputs: get argmax for each output
+            # Shape: (batch_size, n_outputs)
+            selected_memory = torch.argmax(selection_dist, dim=1)
+
         else:
             # No memory selection available (for BlackBox and ConceptEmbeddingModel)
             selected_memory = torch.zeros(batch_size, dtype=torch.long)
@@ -278,6 +277,10 @@ class Engine(pl.LightningModule):
         # Store data for each sample in the batch
         for i in range(batch_size):
             prediction = y_hat_metrics[i].detach().cpu().numpy()
+            y_true = batch['y'][i].detach().cpu().numpy()
+            
+            # Determine if this is a single-output or multi-output task
+            is_multi_output = y_true.ndim > 0 and len(y_true) > 1
             
             # Get equation based on model type
             if self.model_name in ['LinearConceptEmbeddingModel']:
@@ -287,11 +290,65 @@ class Engine(pl.LightningModule):
                 # Per-sample boolean rule explanations
                 equation = list(equations_per_sample[i].values())[0]
             else:
-                memory_idx = selected_memory[i].item()
-                if len(self.y_name) > 1:
-                    equation = equations_per_slot.get(memory_idx, "No equation available").split(';')[prediction].split(':', 1)[1].strip()
+                # Memory-based models with independent selection per output
+                if is_multi_output:
+                    # Multi-output task: store equations for all outputs
+                    eq_parts = []
+                    for out_idx, y_name in enumerate(self.y_name):
+                        memory_idx = selected_memory[i, out_idx].item()
+                        # Extract the equation for this output from the selected memory slot
+                        slot_equations = equations_per_slot.get(memory_idx, "No equation available")
+                        if ';' in slot_equations:
+                            # Multi-output format: "y0: eq0; y1: eq1; ..."
+                            eqs = slot_equations.split(';')
+                            # Find the equation for this output
+                            for eq in eqs:
+                                if eq.strip().startswith(f"{y_name}:"):
+                                    # Remove the "y_name:" prefix
+                                    eq_only = eq.strip().split(':', 1)[1].strip()
+                                    eq_parts.append(eq_only)
+                                    break
+                            else:
+                                eq_parts.append("N/A")
+                        else:
+                            # Single output format - remove prefix if present
+                            if ':' in slot_equations:
+                                eq_parts.append(slot_equations.split(':', 1)[1].strip())
+                            else:
+                                eq_parts.append(slot_equations)
+                    equation = "; ".join(eq_parts)
                 else:
-                    equation = equations_per_slot.get(memory_idx, "No equation available").split(':', 1)[1].strip()
+                    # Single-output task: store only the equation for the predicted class
+                    if self.model.task == 'classification':
+                        # For classification, prediction is the predicted class index
+                        pred_class_idx = int(prediction) if prediction.ndim == 0 else int(prediction[0])
+                    else:
+                        # For regression, we have a single output
+                        pred_class_idx = 0
+                    
+                    y_name = self.y_name[pred_class_idx] if len(self.y_name) > 1 else self.y_name[0]
+                    # Greater than two since we handle binary classification as single-output
+                    memory_idx = selected_memory[i, pred_class_idx].item() if (len(self.y_name) > 1 and self.model.task == 'classification') else selected_memory[i].item()
+                    
+                    # Extract the equation for the predicted class from the selected memory slot
+                    slot_equations = equations_per_slot.get(memory_idx, "No equation available")
+                    if ';' in slot_equations:
+                        # Multi-class format: "class0: eq0; class1: eq1; ..."
+                        eqs = slot_equations.split(';')
+                        # Find the equation for the predicted class
+                        for eq in eqs:
+                            if eq.strip().startswith(f"{y_name}:"):
+                                # Remove the "y_name:" prefix
+                                equation = eq.strip().split(':', 1)[1].strip()
+                                break
+                        else:
+                            equation = "N/A"
+                    else:
+                        # Single class format - remove prefix if present
+                        if ':' in slot_equations:
+                            equation = slot_equations.split(':', 1)[1].strip()
+                        else:
+                            equation = slot_equations
 
             c_pred = c_hat_metrics[i].detach().cpu().numpy() if c_hat_metrics is not None else None
 
@@ -505,13 +562,32 @@ class Engine(pl.LightningModule):
             # Handle both single and multi-output tasks
             if y_true.ndim == 0 or (y_true.ndim == 1 and len(y_true) == 1):
                 # Single output
-                record['y_true'] = float(y_true) if y_true.ndim == 0 else float(y_true[0])
-                record['y_pred'] = float(y_pred) if y_pred.ndim == 0 else float(y_pred[0])
+                y_true_val = float(y_true) if y_true.ndim == 0 else float(y_true[0])
+                y_pred_val = float(y_pred) if y_pred.ndim == 0 else float(y_pred[0])
+                
+                record['y_true'] = y_true_val
+                record['y_pred'] = y_pred_val
+                
+                # Add task names for classification
+                if self.model.task == 'classification':
+                    pred_class_idx = int(y_pred_val)
+                    true_class_idx = int(y_true_val)
+                    record['y_pred_task_name'] = self.class_names[pred_class_idx] if pred_class_idx < len(self.class_names) else f"class_{pred_class_idx}"
+                    record['y_true_task_name'] = self.class_names[true_class_idx] if true_class_idx < len(self.class_names) else f"class_{true_class_idx}"
+                else:
+                    # For regression, use the single task name
+                    task_name = self.class_names[0] if len(self.class_names) == 1 else "output"
+                    record['y_pred_task_name'] = task_name
+                    record['y_true_task_name'] = task_name
             else:
                 # Multi-output
                 for task_idx, task_name in enumerate(self.class_names):
                     record[f'y_true_{task_name}'] = float(y_true[task_idx])
                     record[f'y_pred_{task_name}'] = float(y_pred[task_idx])
+                
+                # For multi-output, store all task names (not applicable for single prediction/true value)
+                record['y_pred_task_name'] = "; ".join(self.class_names)
+                record['y_true_task_name'] = "; ".join(self.class_names)
             
             # Add concept columns
             c_true = pred['c_true']

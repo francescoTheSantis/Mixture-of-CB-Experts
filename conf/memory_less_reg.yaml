@@ -8,10 +8,8 @@ hydra:
       dir: output/memory_less_reg/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      model: blackbox, cem, licem #, sr_sym_cbm
-      dataset: dsprites_simple, pendulum, dsprites_complex, mnist_arithmetic
+      model: blackbox, cem, licem
+      dataset: dsprites_simple, pendulum, dsprites_complex, mnist_arithmetic, mawps
       seed: 1, 2, 3, 4, 5
-
-gpus: [0]
 
 note: "Memory-less-reg" 

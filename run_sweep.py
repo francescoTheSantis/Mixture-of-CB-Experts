@@ -107,9 +107,17 @@ if LIST_PARAMS:
 print(f"Detected config groups: {CONFIG_GROUPS}")
 print()
 
-# Prepare output directory path with timestamp (don't create it yet)
-timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-output_dir = f"output/{CONFIG_NAME}/{timestamp}"
+# Get output directory from config file
+if 'hydra' in config and 'sweep' in config['hydra'] and 'dir' in config['hydra']['sweep']:
+    output_dir = config['hydra']['sweep']['dir']
+    # Replace ${now:%Y-%m-%d_%H-%M-%S} with actual timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    output_dir = output_dir.replace("${now:%Y-%m-%d_%H-%M-%S}", timestamp)
+else:
+    # Fallback to default if not specified
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    output_dir = f"output/{CONFIG_NAME}/{timestamp}"
+    print(f"Warning: No hydra.sweep.dir found in config, using default: {output_dir}")
 
 # Generate all combinations of parameters
 all_combinations = []

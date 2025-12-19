@@ -203,18 +203,18 @@ class Trainer:
                     if self.cfg.dataset.metadata.task == 'regression':
                         stored_targets.append(y.detach().cpu())
                     else:
-                        # stored_targets.append(output['y_hat'].detach().cpu())
+                        stored_targets.append(output['y_hat'].detach().cpu())
                         
-                        # For classification, store the true labels as targets
-                        # The true labels need to be reshaped to (bsz, n_classes) one-hot encoding
-                        n_classes = output['y_hat'].shape[1]
-                        y_one_hot = torch.zeros(y.size(0), n_classes)
-                        y_one_hot.scatter_(1, y.to('cpu').view(-1, 1).long(), 1)
+                        # # For classification, store the true labels as targets
+                        # # The true labels need to be reshaped to (bsz, n_classes) one-hot encoding
+                        # n_classes = output['y_hat'].shape[1]
+                        # y_one_hot = torch.zeros(y.size(0), n_classes)
+                        # y_one_hot.scatter_(1, y.to('cpu').view(-1, 1).long(), 1)
 
-                        # From [0,1] to [-1,1]
-                        y_one_hot = y_one_hot * 2 - 1
+                        # # From [0,1] to [-1,1]
+                        # y_one_hot = y_one_hot * 2 - 1
 
-                        stored_targets.append(y_one_hot.detach().cpu())
+                        # stored_targets.append(y_one_hot.detach().cpu())
 
                     # If the training is disjoint, use the true concepts for SR algorithm, otherwise use the predicted concepts.
                     concepts_for_sr_algorithm = c if self.cfg.disjoint_training else output['c_hat']

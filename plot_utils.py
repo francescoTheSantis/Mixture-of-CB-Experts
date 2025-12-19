@@ -2011,13 +2011,14 @@ def compute_ted_metrics_for_sr_ablation(paths):
     return results_df
 
 
-def compute_equation_complexity_for_sr_ablation(paths):
+def compute_equation_complexity_for_sr_ablation(paths, n_samples=None, random_seed=None):
     """
     Compute complexity (visitation length) of learned equations for symbolic regression ablation.
     
     This function:
     - Lists all experiment directories
     - For each experiment, loads equations from test_predictions_per_sample.csv
+    - Optionally samples random rows from the dataframe
     - Computes complexity (visitation length) for each equation (one per sample)
     - Averages complexity across all samples
     - Groups by (dataset, model, seed) and then averages across seeds
@@ -2025,6 +2026,9 @@ def compute_equation_complexity_for_sr_ablation(paths):
     
     Args:
         paths: List of paths to the output directories
+        n_samples: Optional number of random samples to use for complexity computation.
+                   If None, all rows are used. If provided, randomly samples n_samples rows.
+        random_seed: Optional random seed for reproducible sampling
         
     Returns:
         pd.DataFrame with columns: dataset, model, mean_complexity, std_complexity, n_seeds
@@ -2070,6 +2074,10 @@ def compute_equation_complexity_for_sr_ablation(paths):
                 print(f"Warning: 'equation' column not found in {predictions_file}")
                 continue
             
+            # Sample random rows if n_samples is specified
+            if n_samples is not None and n_samples < len(df):
+                df = df.sample(n=n_samples, random_state=random_seed)
+            
             # Compute complexity for each equation in the dataset
             complexities = []
             for idx, row in df.iterrows():
@@ -2079,17 +2087,13 @@ def compute_equation_complexity_for_sr_ablation(paths):
                 if pd.isna(equation_str) or equation_str == '':
                     continue
                 
-                try:
-                    # Convert string to sympy expression
-                    equation = sympify(equation_str)
-                    
-                    # Compute complexity
-                    complexity = compute_complexity(equation, metric='visitation_length')
-                    complexities.append(complexity)
-                except Exception as e:
-                    print(f"Error processing equation '{equation_str}': {e}")
-                    continue
-            
+                # Convert string to sympy expression
+                equation = sympify(equation_str)
+                
+                # Compute complexity
+                complexity = compute_complexity(equation, metric='visitation_length')
+                complexities.append(complexity)
+
             if not complexities:
                 continue
             

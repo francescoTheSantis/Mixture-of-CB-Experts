@@ -22,11 +22,13 @@ hydra:
         - awa2
         - awa2_incomplete
         - cifar10
+        - cifar100
       img_backbone_name: 
         - facebook/dinov2-base
         - facebook/dinov2-base
         - facebook/dinov2-base
         - facebook/dinov2-base
+        - google/vit-base-patch32-224-in21k
         - google/vit-base-patch32-224-in21k
 
 disjoint_training: False

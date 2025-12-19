@@ -9,18 +9,20 @@ hydra:
   sweeper:
     params:
       seed: 1
-      dataset: cub_incomplete # synthetic_motion 
-      model: cmr # sr_sym_cbm, prior_sym_cbm, kan_sym_cbm
-      memory_size: 2
+      dataset: xor # synthetic_motion 
+      model: sr_sym_cbm # sr_sym_cbm, prior_sym_cbm, kan_sym_cbm
+      memory_size: 1
     
 gpus: [0]
 
 scale_variables: False
 
+img_backbone_name: resnet18
+
 # NOTE: check this variable before running experiments 
 disjoint_training: False
 
-max_epochs: 500
+max_epochs: 100
 patience: 50
 
 use_stored_dataset: True

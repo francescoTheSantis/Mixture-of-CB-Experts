@@ -26,6 +26,7 @@ except ModuleNotFoundError:
     from expression_tree import sympy_to_tree
     from tree_visualizer import visualize_tree
 
+HOME = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def linear_classifier_expression(n_vars: int, include_bias: bool = True) -> sp.Expr:
     """
@@ -394,6 +395,7 @@ if __name__ == "__main__":
     
     # Create output directory for visualizations
     output_dir = "results/figs/expression_graphs"
+    output_dir = os.path.join(HOME, output_dir)
     os.makedirs(output_dir, exist_ok=True)
     
     # Example usage and testing

@@ -127,7 +127,7 @@ class DatasetFactory:
         
         # Metadata
         concept_names = dataset.concept_attr_names
-        task_names = [name]
+        task_names = ['class0', 'class1']
         
         return train_dataset, val_dataset, test_dataset, DatasetMetadata(
             concept_names, task_names, None

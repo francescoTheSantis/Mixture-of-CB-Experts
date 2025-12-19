@@ -119,14 +119,17 @@ class LinearPredictor(nn.Module):
         """
         Select the linear classifier from the memory based on the probabilities
         computed by the classifier selector.
+        With independent outputs, prob_per_classifier has shape (batch_size, output_size, memory_size, n_samples)
+        and y_per_classifier has shape (batch_size, output_size, memory_size).
         The output dimension is (batch_size, output_size, n_samples).
         """
-        return torch.einsum('bms,btm->bts', prob_per_classifier, y_per_classifier)
+        return torch.einsum('bmys,bym->bys', prob_per_classifier, y_per_classifier)
     
     def get_weights_for_explanation(self, memory, selection):
         """
         Get the classifier's weights selection according to the distribution probabilities.
-        The output dimension is (batch_size, output_size, n_concepts, n_samples).
+        With independent outputs, selection has shape (batch_size, output_size, memory_size, n_samples).
+        The output dimension is (batch_size, output_size, n_parameters, n_samples).
         """
-        return torch.einsum('bmct,bms->btcs', memory, selection)
+        return torch.einsum('bmcy,bmys->bycs', memory, selection)
         

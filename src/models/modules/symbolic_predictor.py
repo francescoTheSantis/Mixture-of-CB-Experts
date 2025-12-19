@@ -380,8 +380,10 @@ class SymbolicPredictor(nn.Module):
         eq_outputs = torch.stack(memory_outputs, dim=1)
         
         # Aggregate using probability distribution
-        # y_hat shape: (batch, task_size, n_samples)
-        y_hat = torch.einsum('bms,bmt->bts', prob_per_classifier, eq_outputs)
+        # With independent outputs, prob_per_classifier has shape (batch, n_outputs, memory_size, n_samples)
+        # and eq_outputs has shape (batch, memory_size, n_outputs)
+        # y_hat shape: (batch, n_outputs, n_samples)
+        y_hat = torch.einsum('bmys,bmy->bys', prob_per_classifier, eq_outputs)
         
         # Get explanations
         if self.training:

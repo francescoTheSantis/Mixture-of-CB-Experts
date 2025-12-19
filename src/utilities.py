@@ -529,53 +529,47 @@ def symbolic_regression(
     # Structure: {memory_idx: {output_name: sympy_equation}}
     all_equations = {i: {} for i in range(memory_size)}
     
-    # For each memory slot
-    for memory_idx in range(memory_size):
-        # Get samples where this memory slot was selected
-        # We take the most common selection across n_samples
-        #memory_mask = (stored_selector_probs.mode(dim=1).values == memory_idx).numpy()
-        memory_mask  = (stored_selector_probs.argmax(dim=1).flatten()==memory_idx).numpy()
-        n_samples_for_memory = memory_mask.sum()
+    # With independent outputs, stored_selector_probs has shape (batch, memory_size, n_outputs, n_samples)
+    # We need to process each output independently
+    for output_idx in range(output_size):
+        output_name = y_names[output_idx] if output_idx < len(y_names) else f"y_{output_idx}"
         
-        # Filter concepts and targets for this memory slot
-        X_memory = stored_concepts[memory_mask]  # [n_samples_memory, n_concepts]
-        y_memory = stored_targets[memory_mask]    # [n_samples_memory, n_outputs]
-        
-        # Skip if no samples for this memory slot
-        if n_samples_for_memory == 0:
-            print(f"Memory slot {memory_idx} has no samples. Skipping.")
-            for output_idx in range(output_size):
-                output_name = y_names[output_idx] if output_idx < len(y_names) else f"y_{output_idx}"
+        # For each memory slot, collect samples where this memory was selected for this output
+        for memory_idx in range(memory_size):
+            # Get samples where this memory slot was selected for this specific output
+            # stored_selector_probs shape: (batch, memory_size, n_outputs, n_samples)
+            # Get argmax along memory dimension (dim=2) for this output
+            output_selector_probs = stored_selector_probs[:, :, output_idx, :]  # (batch, memory_size, n_samples)
+            memory_mask = (output_selector_probs.argmax(dim=1).flatten() == memory_idx).numpy()
+            n_samples_for_memory = memory_mask.sum()
+            
+            # Filter concepts and targets for this memory slot and output
+            X_memory = stored_concepts[memory_mask]  # [n_samples_memory, n_concepts]
+            y_target = stored_targets[memory_mask, output_idx]  # [n_samples_memory]
+            
+            # Skip if no samples for this memory slot
+            if n_samples_for_memory == 0:
+                print(f"Memory slot {memory_idx}, output '{output_name}' has no samples. Using zero equation.")
                 all_equations[memory_idx][output_name] = sp.sympify("0")
-            continue
-        
-        # Note: you are running with more than 10,000 datapoints. 
-        # You should consider turning on batching (`options.batching`), and also if you need that many datapoints. 
-        # Unless you have a large amount of noise (in which case you should smooth your dataset first), 
-        # generally < 10,000 datapoints is enough to find a functional form.
-        # Given the message returned by PySR, we can subsample if needed.
-        subsample_size = 10000
-        if n_samples_for_memory > subsample_size:
-            print(f"Subsampling to {subsample_size} for PySR.")
-            indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
-            X_memory = X_memory[indices]
-            y_memory = y_memory[indices]
-
-        # For each output
-        for output_idx in range(output_size):
-            output_name = y_names[output_idx] if output_idx < len(y_names) else f"y_{output_idx}"
-                            
-            y_target = y_memory[:, output_idx]
+                continue
+            
+            # Subsample if needed
+            subsample_size = 10000
+            if n_samples_for_memory > subsample_size:
+                print(f"Subsampling to {subsample_size} for PySR (memory {memory_idx}, output '{output_name}').")
+                indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
+                X_memory = X_memory[indices]
+                y_target = y_target[indices]
             
             # Validate data: check for NaN and Inf values
             if np.isnan(X_memory).sum()>0 or np.isinf(X_memory).sum()>0:
-                print(f"WARNING: X_memory contains NaN or Inf values for memory {memory_idx}. Cleaning data.")
+                print(f"WARNING: X_memory contains NaN or Inf values for memory {memory_idx}, output '{output_name}'. Cleaning data.")
                 valid_mask = ~(np.isnan(X_memory).any(axis=1) | np.isinf(X_memory).any(axis=1))
                 X_memory = X_memory[valid_mask]
                 y_target = y_target[valid_mask]
             
             if np.isnan(y_target).sum()>0 or np.isinf(y_target).sum()>0:
-                print(f"WARNING: y_target contains NaN or Inf values for memory {memory_idx}, output {output_name}. Cleaning data.")
+                print(f"WARNING: y_target contains NaN or Inf values for memory {memory_idx}, output '{output_name}'. Cleaning data.")
                 valid_mask = ~(np.isnan(y_target) | np.isinf(y_target))
                 X_memory_clean = X_memory[valid_mask]
                 y_target = y_target[valid_mask]
@@ -618,7 +612,7 @@ def symbolic_regression(
                 del model
                 
             except Exception as e:
-                print(f"  ✗ ERROR fitting PySR for memory {memory_idx}, output {output_name}:")
+                print(f"  ✗ ERROR fitting PySR for memory {memory_idx}, output '{output_name}':")
                 print(f"    {type(e).__name__}: {str(e)}")
                 print(f"    Using fallback constant equation (mean value)")
                 if len(y_target) == 0:

@@ -162,7 +162,9 @@ class KANPredictor(nn.Module):
         # Stack the outputs along the class dimension
         eq_outputs = torch.stack(eq_outputs, dim=1) # shape: (bsz, memory_size, n_targets)
 
-        y_hat = torch.einsum('bms,bmt->bts', prob_per_classifier, eq_outputs)
+        # With independent outputs, prob_per_classifier has shape (bsz, n_outputs, memory_size, n_samples)
+        # and eq_outputs has shape (bsz, memory_size, n_outputs)
+        y_hat = torch.einsum('bmys,bmy->bys', prob_per_classifier, eq_outputs)
 
         # Get the explanations (the selected equations)
         if self.training:

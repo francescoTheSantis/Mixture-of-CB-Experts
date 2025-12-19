@@ -80,6 +80,7 @@ class LinearSymbolicCBM(BaseModel):
 
         # The selector generates logits that define a probability distribution 
         # over the linear equations stored in memory.
+        # With independent outputs, we generate separate distributions for each output.
         selector_input_size = backbone_latent_size
         selector_output_size = memory_size
         
@@ -87,6 +88,7 @@ class LinearSymbolicCBM(BaseModel):
         self.classifier_selector = SelectorModel(
             input_size=selector_input_size,
             output_size=selector_output_size,
+            n_outputs=len(y_names),
             model_type=self.selector_model,
             activation=activation,
             decay_rate=self.decay_rate,

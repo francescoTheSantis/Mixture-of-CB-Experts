@@ -95,6 +95,7 @@ class SymbolicRegressorCBM(BaseModel):
         self.classifier_selector = SelectorModel(
             input_size=self.backbone_latent_size,
             output_size=self.memory_size,
+            n_outputs=self.output_size,
             model_type=selector_model,
             activation=activation,
             decay_rate=decay_rate,
@@ -106,27 +107,30 @@ class SymbolicRegressorCBM(BaseModel):
             activation=nn.Identity(), # we will later apply a sigmoid if the concept is boolean
         )
 
-        if self.task == 'classification':
-            element_wise_loss = "loss(prediction, target) = (1 - prediction * target)^2"
-        else:
-            # Change to: abs(prediction - target) for MAE
-            element_wise_loss = "loss(prediction, target) = (prediction - target)^2" 
-
         # Store PySR parameters
         self.pysr_params = {
             'populations': 31,
             'population_size': 50,
             'niterations': 100,
             'ncycles_per_iteration': 380, 
-            'binary_operators': binary_operators,
-            'unary_operators': unary_operators,
-            'extra_sympy_mappings': extra_functions,
-            'elementwise_loss': element_wise_loss, 
             'early_stop_condition': 1e-6, # Stop the search if this value of the loss is reached
-            # 'timeout_in_seconds': 60 * 3, # Limit the search to 3 minutes
-            'maxsize': 40,  # Limit the size of the equations.
             'maxdepth': 40,  # Limit the depth of the equations to maxsize so that the most complex expression tree is a chain (easy to compute).
+            'maxsize': 40,   
+            # 'timeout_in_seconds': 2, # Limit the search time
         }
+
+        if self.task == 'classification':
+            # For the classification task we use only basic operators since 
+            # the there are only binary concepts and the target is binary as well.
+            self.pysr_params['binary_operators'] = ['*', '+', '-']
+            element_wise_loss = "loss(prediction, target) = abs(prediction - target)"
+            self.pysr_params['elementwise_loss'] = element_wise_loss
+        else:
+            self.pysr_params['binary_operators'] = binary_operators
+            self.pysr_params['unary_operators'] = unary_operators
+            self.pysr_params['extra_sympy_mappings'] = extra_functions
+            element_wise_loss = "loss(prediction, target) = (prediction - target)^2"
+            self.pysr_params['elementwise_loss'] = element_wise_loss
 
         # Instantiate the predictor
         self.predictor = BlackBoxPredictor(
