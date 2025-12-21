@@ -1,8 +1,3 @@
-Here is an updated version of your README with a **very short explanation** of why the environment must be created in two steps.
-I kept it minimal and non-technical, as you requested, but accurate:
-
----
-
 # Linear-Memory-Reasoner
 
 A framework for training and evaluating concept-based reasoning models with linear memory complexity.

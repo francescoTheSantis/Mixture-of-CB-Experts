@@ -11,6 +11,9 @@ from plot_utils import *
 warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
+result_figs = "results/figs"
+table_path = "results/tabs"
+
 ######### Dataset and model styles #########
 
 # Define the custom order
@@ -21,6 +24,7 @@ custom_order = [
     'cub', 
     'cub_incomplete',
     'cifar10',
+    'cifar100',
     'feynman_I_6_2',
     'feynman_I_9_18',
     'feynman_I_12_1',
@@ -33,6 +37,23 @@ custom_order = [
     'mnist_arithmetic',
     'mawps',
 ]
+
+# Regression datasets
+# NOTE: keep in mind to update this list if you add new regression datasets
+regression_datasets = [
+    'feynman_I_6_2',
+    'feynman_I_9_18',
+    'feynman_I_12_1',
+    'feynman_I_13_4',
+    'feynman_I_14_3',
+    'feynman_I_15_10',
+    'mnist_arithmetic', 
+    'dsprites_simple', 
+    'dsprites_complex', 
+    'pendulum', 
+    'mawps'
+]
+
 
 # Define a dictionary to associate marker, name, and color to each model.
 # If the experiment you run does not contain a model, just remove it from the dictionary.
@@ -77,11 +98,11 @@ fixed_memory={
 def main():
 
     result_figs = "results/figs"
-    os.environ["RESULT_FIGS"] = result_figs
+    # os.environ["RESULT_FIGS"] = result_figs
     os.makedirs(result_figs, exist_ok=True)
 
     table_path = "results/tabs"
-    os.environ["TABLE_PATH"] = table_path
+    # os.environ["TABLE_PATH"] = table_path
     os.makedirs(table_path, exist_ok=True)
 
     #######################################################################
@@ -93,7 +114,8 @@ def main():
     # 3. compute the similarity between the learned expressions and the ground truth ones
 
     paths = [
-        "output/sr_ablation"
+        # "output/sr_ablation",
+        # "output/prior_reg",
     ]
  
     try:
@@ -174,10 +196,10 @@ def main():
     ##################################################
 
     paths = [
-        # "output/memory_less_cls",
+        "output/memory_less_cls",
         "output/memory_cls",
         "output/memory_reg",
-        # "output/memory_less_reg"
+        "output/memory_less_reg"
     ]
 
     try:
@@ -238,7 +260,7 @@ def main():
                                         legend_font=legend_font,
                                         custom_order=custom_order,
                                         model_styles=model_styles,
-                                        n_mechanisms=fixed_memory
+                                        n_mechanisms=fixed_memory,
                                     )
         
         plot_intervention_memory_pareto_results(performance, 
@@ -250,7 +272,7 @@ def main():
                                     legend_font=legend_font,
                                     custom_order=custom_order,
                                     model_styles=model_styles,
-                                    n_mechanisms=fixed_memory
+                                    n_mechanisms=fixed_memory,
         )
 
         performance = get_intervention_from_path(paths, filtered_exps=filtered_exps)
@@ -263,75 +285,34 @@ def main():
         ########## Intervention plots ##########
         noises = list(performance['noise'].unique())
         for noise in noises:
-            plot_intervention_results(performance, 
-                                        metric='accuracy', 
-                                        unique_noises=[noise], 
-                                        title_font=title_font, 
-                                        label_font=label_font, 
-                                        tick_font=tick_font, 
-                                        legend_font=legend_font,
-                                        custom_order=custom_order,
-                                        model_styles=model_styles,
-                                        relative_accuracy=False)
+            plot_intervention_results(
+                performance, 
+                metric='accuracy', 
+                unique_noises=[noise], 
+                title_font=title_font, 
+                label_font=label_font, 
+                tick_font=tick_font, 
+                legend_font=legend_font,
+                custom_order=custom_order,
+                model_styles=model_styles,
+                relative_accuracy=False,
+            )
             
-            plot_intervention_results(performance, 
-                                        metric='accuracy', 
-                                        unique_noises=[noise], 
-                                        title_font=title_font, 
-                                        label_font=label_font, 
-                                        tick_font=tick_font, 
-                                        legend_font=legend_font,
-                                        custom_order=custom_order,
-                                        model_styles=model_styles,
-                                        relative_accuracy=True)
+            plot_intervention_results(
+                performance, 
+                metric='accuracy', 
+                unique_noises=[noise], 
+                title_font=title_font, 
+                label_font=label_font, 
+                tick_font=tick_font, 
+                legend_font=legend_font,
+                custom_order=custom_order,
+                model_styles=model_styles,
+                relative_accuracy=True,
+            )
             
     except Exception as e:
         print(f"Error occurred while getting intervention results from path: {e}")
-
-
-    ########################################################################
-    ###### Visualize training/test distribution over licem's weights #######
-    ########################################################################
-
-    try:
-
-        # LICEM weights path
-        weights_path = ""
-        # Store the training weights
-        train_w = torch.load(weights_path+'/learned_linear_coefficients_train.pt').squeeze(1)
-        #iterate over all the test weights and store them in a list
-        test_weights = {}
-        for file in os.listdir(weights_path):
-            if file.startswith('learned_linear_coefficients_test'):
-                key = file.replace('learned_linear_coefficients_test_', '').replace('.pt', '')
-                test_weights[key] = torch.load(os.path.join(weights_path, file)).squeeze(1)
-
-        # read the c_names and y_names
-        with open(weights_path+'/c_names.txt', 'r') as f:
-            c_names = [line.strip() for line in f.readlines()]
-        with open(weights_path+'/y_names.txt', 'r') as f:
-            y_names = [line.strip() for line in f.readlines()]
-
-        # M-CBM-lin weights path
-        weights_path = ""
-        # Store the training weights
-        test_w_lcmr = torch.load(weights_path+'/pred_CBMs.pt').squeeze(1)
-
-        plot_licem_weights_distribution(
-            train_w, 
-            test_weights, 
-            test_w_lcmr,
-            result_figs, 
-            c_names, 
-            y_names,
-            title_font,
-            label_font,
-            tick_font,
-            legend_font
-        )
-
-    except Exception as e:
-        print(f"Error occurred while plotting LICEM weights distribution: {e}")
 
 if __name__ == "__main__":
     main()

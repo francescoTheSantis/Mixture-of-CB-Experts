@@ -107,32 +107,46 @@ class SymbolicRegressorCBM(BaseModel):
             activation=nn.Identity(), # we will later apply a sigmoid if the concept is boolean
         )
 
-        # Store PySR parameters
-        self.pysr_params = {
-            'populations': 31,
-            'population_size': 50,
-            'niterations': 100,
-            'ncycles_per_iteration': 380, 
-            'early_stop_condition': 1e-6, # Stop the search if this value of the loss is reached
-            'maxdepth': 40,  # Limit the depth of the equations to maxsize so that the most complex expression tree is a chain (easy to compute).
-            'maxsize': 40,   
-            # 'timeout_in_seconds': 2, # Limit the search time
-        }
+        # PySR parameters
+        self.pysr_params = {}
 
         if self.task == 'classification':
-            # For the classification task we use only basic operators since 
-            # the there are only binary concepts and the target is binary as well.
-            self.pysr_params['binary_operators'] = ['*', '+', '-']
-            element_wise_loss = "loss(prediction, target) = (1 - prediction * target)^2"
-            self.pysr_params['elementwise_loss'] = element_wise_loss
-            self.pysr_params['model_selection'] = 'accuracy' # Select the equation with highest accuracy
-            # self.pysr_params['turbo'] = True
+            size = len(self.c_names) * 3 + 2 # At least we allow to find a linear equation over all concepts.
+            self.pysr_params = {
+                # For the classification task we use only basic operators since 
+                # there are only binary concepts and the target is binary as well.
+                'binary_operators': ['*', '+', '-'],
+                'unary_operators': [],
+                'extra_sympy_mappings': [],
+                'elementwise_loss': "loss(prediction, target) = (1 - prediction * target)^2",
+                # 'model_selection': 'accuracy' # Select the equation with highest accuracy
+                'maxdepth': size,
+                'maxsize': size,   
+                # Make the search faster
+                # 'turbo': True
+                # 'bumper': True
+                'populations': 40,
+                'population_size': 60,
+                'niterations': 20,
+                'ncycles_per_iteration': 380,
+                'early_stop_condition': 1e-6,
+                # 'guesses': [' + '.join([f'x{i}' for i in range(10)])],  # Initial guess: linear equations over single concepts,
+            }
+
         else:
-            self.pysr_params['binary_operators'] = binary_operators
-            self.pysr_params['unary_operators'] = unary_operators
-            self.pysr_params['extra_sympy_mappings'] = extra_functions
-            element_wise_loss = "loss(prediction, target) = (prediction - target)^2"
-            self.pysr_params['elementwise_loss'] = element_wise_loss
+            self.pysr_params = {
+                'binary_operators': binary_operators,
+                'unary_operators': unary_operators,
+                'extra_sympy_mappings': extra_functions,
+                'elementwise_loss': "loss(prediction, target) = (prediction - target)^2",
+                'maxdepth': 40,\
+                'maxsize': 40,  
+                'populations': 40,
+                'population_size': 60,
+                'niterations': 120,
+                'ncycles_per_iteration': 380,
+                'early_stop_condition': 1e-6
+            }
 
         # Instantiate the predictor
         self.predictor = BlackBoxPredictor(
@@ -180,6 +194,14 @@ class SymbolicRegressorCBM(BaseModel):
                               values are dictionaries mapping output names to 
                               sympy equations.
         """
+
+        # TODO: Add affine paramereters to the learned equations
+        # Each equation f(x) will be transformed into a*f(b*x + c) + d
+
+
+        # TODO: Sympify all equations
+
+
         self.predictor = SymbolicPredictor(
             equations=equations,
             c_names=self.c_names,

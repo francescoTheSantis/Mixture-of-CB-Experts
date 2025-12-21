@@ -13,6 +13,7 @@ import sympy as sp
 import warnings
 warnings.filterwarnings("ignore")
 import re
+from scipy.spatial.distance import cdist
 
 # DO NOT import PySRRegressor at module level - it will be imported lazily when needed
 # from pysr import PySRRegressor
@@ -468,6 +469,46 @@ def save_licem_linear_coefficients(model, loaded_set, log_dir, split='train'):
 
 
 
+def subsample_for_input_coverage(X, subsample_size, random_state=42):
+    """
+    Subsample data points to maintain good coverage of the input space.
+    Uses k-means clustering to identify representative samples.
+    
+    Args:
+        X: Input data array of shape (n_samples, n_features)
+        subsample_size: Number of samples to select
+        random_state: Random seed for reproducibility
+        
+    Returns:
+        indices: Array of indices to keep from the original dataset
+    """
+    from sklearn.cluster import KMeans
+    from sklearn.metrics import pairwise_distances_argmin_min
+    
+    n_samples = X.shape[0]
+    
+    # If subsample_size >= n_samples, return all indices
+    if subsample_size >= n_samples:
+        return np.arange(n_samples)
+    
+    # Convert to numpy if needed
+    if torch.is_tensor(X):
+        X_np = X.cpu().numpy()
+    else:
+        X_np = X
+    
+    # Use k-means to find cluster centers
+    kmeans = KMeans(n_clusters=subsample_size, random_state=random_state, n_init=1, verbose=1)
+    kmeans.fit(X_np)
+    
+    # For each cluster center, find the closest actual data point
+    # indices, _ = pairwise_distances_argmin_min(kmeans.cluster_centers_, X_np)
+    D = cdist(kmeans.cluster_centers_, X_np, metric="euclidean")   # or any other metric
+    indices = D.argmin(axis=1)
+
+    return indices
+
+
 def symbolic_regression(
         stored_concepts, 
         stored_targets, 
@@ -478,6 +519,7 @@ def symbolic_regression(
         y_names,
         device,
         pysr_params,
+        task
     ):
 
     """
@@ -553,11 +595,21 @@ def symbolic_regression(
                 all_equations[memory_idx][output_name] = sp.sympify("0")
                 continue
             
-            # Subsample if needed
+            # NOTE: Subsample if needed using input space coverage
             subsample_size = 10000
             if n_samples_for_memory > subsample_size:
-                print(f"Subsampling to {subsample_size} for PySR (memory {memory_idx}, output '{output_name}').")
+                print(f"Subsampling to {subsample_size} for PySR using input space coverage (memory {memory_idx}, output '{output_name}').")
+                
+                # TODO: still to define if it is better to use random subsampling or Kmeans-based subsampling
+                # if task == 'regression':
+                #     # Random subsampling
+                #     indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
+                # else:
+                #     # Kmeans-based subsampling
+                #     indices = subsample_for_input_coverage(X_memory, subsample_size)
+
                 indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
+
                 X_memory = X_memory[indices]
                 y_target = y_target[indices]
             

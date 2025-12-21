@@ -8,7 +8,7 @@ hydra:
   sweep:
       # This directory can be deleted as it only contains temporary files and the 
       # preprocessed data will be saved in the cache.
-      dir: memory_less_cls/${now:%Y-%m-%d_%H-%M-%S} 
+      dir: output/memory_less_cls/${now:%Y-%m-%d_%H-%M-%S} 
   sweeper:
     grid_params:
       model: blackbox, cem, dcr, licem

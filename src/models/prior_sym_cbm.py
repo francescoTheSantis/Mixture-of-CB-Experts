@@ -144,7 +144,6 @@ class PriorSymbolicCBM(BaseModel):
         return {
             'y_hat': prior_predictor_output['y_hat'],
             'c_hat': c_hat,
-            'explanations': prior_predictor_output['explanations'],
             'selection_dist': selection_dist,
             'sampled_memory_idxs': selector_probs
         }

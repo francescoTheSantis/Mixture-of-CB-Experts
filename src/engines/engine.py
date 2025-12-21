@@ -327,8 +327,11 @@ class Engine(pl.LightningModule):
                         pred_class_idx = 0
                     
                     y_name = self.y_name[pred_class_idx] if len(self.y_name) > 1 else self.y_name[0]
-                    # Greater than two since we handle binary classification as single-output
-                    memory_idx = selected_memory[i, pred_class_idx].item() if (len(self.y_name) > 1 and self.model.task == 'classification') else selected_memory[i].item()
+                    
+                    if self.model_name in ['BlackBox', 'ConceptEmbeddingModel']:
+                        memory_idx = 0  # No memory slots, use default
+                    else:
+                        memory_idx = selected_memory[i, pred_class_idx].item() if (len(self.y_name) > 1 and self.model.task == 'classification') else selected_memory[i].item()
                     
                     # Extract the equation for the predicted class from the selected memory slot
                     slot_equations = equations_per_slot.get(memory_idx, "No equation available")

@@ -8,6 +8,7 @@ import scienceplots
 import warnings
 import yaml
 from tqdm import tqdm
+from show_results import table_path, result_figs, regression_datasets
 
 # I used scienceplots for the style of the plots, but you can use any other style you want.
 plt.style.use(['science', 'ieee', 'no-latex'])
@@ -77,21 +78,6 @@ def get_df_name(df):
         return 'Feynman I.14.3'
     elif df=='feynman_I_15_10':
         return 'Feynman I.15.10'
-
-# NOTE: keep in mind to update this list if you add new regression datasets
-regression_datasets = [
-    'feynman_I_6_2',
-    'feynman_I_9_18',
-    'feynman_I_12_1',
-    'feynman_I_13_4',
-    'feynman_I_14_3',
-    'feynman_I_15_10',
-    'mnist_arithmetic', 
-    'dsprites_simple', 
-    'dsprites_complex', 
-    'pendulum', 
-    'mawps'
-]
 
 #########################################
 ######### Data Extraction ###############
@@ -508,9 +494,8 @@ def plot_intervention_results(
     plt.tight_layout()
     str_store = str(unique_noises[0]).replace('.', '')
     suffix = 'relative_accuracy_difference' if relative_accuracy else 'absolute_accuracy'
-    prefix = out_dir if out_dir is not None else 'figs'
-    os.makedirs(f'{prefix}/intervention/{suffix}', exist_ok=True)
-    plt.savefig(f'{prefix}/intervention/{suffix}/{str_store}.pdf')
+    os.makedirs(f'{result_figs}/intervention/{suffix}', exist_ok=True)
+    plt.savefig(f'{result_figs}/intervention/{suffix}/{str_store}.pdf')
     plt.show()
 
 def plot_intervention_memory_results(df, 
@@ -535,9 +520,6 @@ def plot_intervention_memory_results(df,
     df.loc[df['model'].isin(['cmb_linear', 'cem']), 'memory_size'] = 1
     df.loc[df['model'].isin(['licem', 'dcr']), 'memory_size'] = 500
 
-    # NOTE: keep in mind to update this list if you add new regression datasets
-    regression_datasets = ['mnist_arithmetic', 'dsprites_simple', 'dsprites_complex', 'cebab', 'pendulum', 'mawps']
-    
     # Separate datasets by task type
     classification_datasets = [d for d in unique_datasets if d not in regression_datasets]
     regression_datasets = [d for d in unique_datasets if d in regression_datasets]
@@ -550,7 +532,7 @@ def plot_intervention_memory_results(df,
     n_rows = 2  # Force 2 rows: MAE on first row, 1-accuracy on second
 
     # Save the df as a csv for future reference
-    df.to_csv(f'tabs/intervention_results.csv')
+    df.to_csv(f'{table_path}/intervention_results.csv')
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 6*n_rows), sharex=False, sharey=False)
 
@@ -741,8 +723,8 @@ def plot_intervention_memory_results(df,
     plt.tight_layout()
     str_store = str(p_int).replace('.', '')
     suffix = 'relative_accuracy_difference' if relative_accuracy else 'absolute_accuracy'
-    os.makedirs(f'figs/intervention_memory/{suffix}', exist_ok=True)
-    plt.savefig(f'figs/intervention_memory/{suffix}/interventions_pint_{str_store}.pdf')
+    os.makedirs(f'{result_figs}/intervention_memory/{suffix}', exist_ok=True)
+    plt.savefig(f'{result_figs}/intervention_memory/{suffix}/interventions_pint_{str_store}.pdf')
     plt.show()
 
 ###########################################
@@ -909,7 +891,7 @@ def plot_memory_ablation(performance, model_styles, title_font, label_font, tick
         fig.legend(handles=custom_handles, loc='lower center', ncol=len(custom_handles), fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.15), columnspacing=1.0, handletextpad=0.5)
 
     plt.tight_layout()
-    plt.savefig(os.path.join(os.environ.get("RESULT_FIGS"), 'memory_ablation.pdf'))
+    plt.savefig(os.path.join(result_figs, 'memory_ablation.pdf'))
 
     plt.show()
 
@@ -978,7 +960,7 @@ def plot_concept_size_ablation(
 
     # Save the figure
     plt.tight_layout()
-    plt.savefig(os.path.join(os.environ.get("RESULT_FIGS"), 'concept_size_ablation.pdf'), bbox_inches='tight')
+    plt.savefig(os.path.join(result_figs, 'concept_size_ablation.pdf'), bbox_inches='tight')
 
 
 
@@ -1079,7 +1061,7 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
     performance = compute_avg_and_uncertainty(performance, custom_order)
 
     # save the performance as csv
-    performance.to_csv(os.path.join(os.environ.get("TABLE_PATH"), 'memory_ablation_performance.csv'), index=False)
+    performance.to_csv(os.path.join(table_path, 'memory_ablation_performance.csv'), index=False)
 
     # Define operational complexity for each model
     oc = { 
@@ -1317,7 +1299,7 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
 
     plt.tight_layout()
     
-    plt.savefig(os.path.join(os.environ.get("RESULT_FIGS"), 'pareto_front.pdf'))
+    plt.savefig(os.path.join(result_figs, 'pareto_front.pdf'))
 
 
 def plot_intervention_memory_pareto_results(df, 
@@ -1607,8 +1589,8 @@ def plot_intervention_memory_pareto_results(df,
     plt.tight_layout()
     str_store = str(p_int).replace('.', '')
     suffix = 'relative_accuracy_difference' if relative_accuracy else 'absolute_accuracy'
-    os.makedirs(os.path.join(os.environ.get("RESULT_FIGS"), f'intervention_memory_pareto/{suffix}'), exist_ok=True)
-    plt.savefig(os.path.join(os.environ.get("RESULT_FIGS"), f'intervention_memory_pareto/{suffix}/interventions_pint_{str_store}.pdf'))
+    os.makedirs(os.path.join(result_figs, f'intervention_memory_pareto/{suffix}'), exist_ok=True)
+    plt.savefig(os.path.join(result_figs, f'intervention_memory_pareto/{suffix}/interventions_pint_{str_store}.pdf'))
     plt.show()
 
 
