@@ -1,30 +1,21 @@
 # Linear-Memory-Reasoner
 
-A framework for training and evaluating concept-based reasoning models with linear memory complexity.
-
 ## Setup
 
-1. **Create and activate the Conda environment**
-   *(Environment creation is done in two steps because one dependency (`pytorch_concepts`) imports PyTorch during installation, and PyTorch is only available after the base Conda environment is created.)*
+```bash
+python setup_environment.py
+conda activate lmr
+```
 
-   ```bash
-   conda env create -f environment.yml
-   conda activate lmr
-   ```
+This script creates the environment, installs dependencies, and pre-initializes Julia packages for PySR.
 
-2. **Install the remaining dependency**
-
-   ```bash
-   pip install --no-build-isolation git+https://github.com/pyc-team/pytorch_concepts.git@models
-   ```
-
-3. **Configure environment variables in** `env.py`:
+**Configure environment variables in** `env.py`:
 
    * `HOME` - Path to the project root
    * `DATA_PATH` - Path to load datasets
    * `PROJECT_NAME` (optional) - Project identifier for logging
 
-4. **Datasets**:
+**Datasets**:
    Most datasets are automatically downloaded and processed when needed. For CIFAR10/CIFAR100, you need to manually download prerequisite text files (one-time setup):
 
    * Download `cifar10_filtered.txt` and `cifar10_classes.txt` from [Label-free-CBM](https://github.com/Trustworthy-ML-Lab/Label-free-CBM/tree/main)
@@ -38,7 +29,7 @@ To replicate all experiments from the paper:
 1. **Run multiple experiments**:
 
    ```bash
-   python main.py --config-name "specific_config"
+   python run_sweep.py <specific_config>
    ```
 
    Where `"specific_config"` is one from the `conf/` directory.
@@ -54,14 +45,10 @@ To replicate all experiments from the paper:
 
 ## Configuration
 
-Training settings are defined in `conf/`:
+Experimental settings are defined in `conf/`:
 
 * `dataset/` – dataset parameters
 * `model/` – model architectures
 * `encoder/` – input encoder configs
 * `engine/` – training loop settings
 * `common.yaml` – shared defaults
-
-## Results
-
-Experiment logs and checkpoints are saved in the Hydra output directory (default: `outputs/`).

@@ -496,6 +496,7 @@ class Engine(pl.LightningModule):
                     eq_strs = []
                     for eq_name in self.model.predictor.equation_names[set_name]:
                         eq_module = self.model.predictor.trainable_equations[set_name][eq_name]
+                        # NOTE: get_equation_string() returns equations with current fine-tuned parameter values
                         eq_strs.append(f"{eq_name}: {eq_module.get_equation_string()}")
                     equations[mem_idx] = "; ".join(eq_strs)
             else:

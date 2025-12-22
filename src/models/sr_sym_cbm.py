@@ -8,6 +8,8 @@ from src.utils.expression_utils import store_eq, chain_expression
 import numpy as np
 import torch
 import os
+import random
+from sympy import Symbol, Add, simplify
 
 binary_operators = ["*", "+", "-", "/"]
 unary_operators = ["sin", "cos", "exp", "log", "tan", "tanh"]
@@ -55,6 +57,7 @@ class SymbolicRegressorCBM(BaseModel):
                  embedding_memory=False,
                  concept_penalty=1.0,
                  device='cpu',
+                 pysr_params=None,
                  **kwargs
                 ):
 
@@ -114,19 +117,9 @@ class SymbolicRegressorCBM(BaseModel):
                 # For the classification task we use only basic operators since 
                 # there are only binary concepts and the target is binary as well.
                 'binary_operators': ['*', '+', '-'],
-                # 'unary_operators': [],
-                # 'extra_sympy_mappings': [],
                 'elementwise_loss': "loss(prediction, target) = (1 - prediction * target)^2",
-                # 'model_selection': 'accuracy', # Select the equation with highest accuracy
                 'maxdepth': size,
                 'maxsize': size,   
-                # Make the search faster
-                # 'turbo': True,
-                # 'bumper': True,
-                'populations': 40,
-                'population_size': 60,
-                'niterations': 100,
-                'ncycles_per_iteration': 380,
                 'guesses': [' + '.join([f'1 * x{i}' for i in range(len(self.c_names))]) + ' + 1'],  # Initial guess: linear equations over single concepts,
             }
 
@@ -139,15 +132,19 @@ class SymbolicRegressorCBM(BaseModel):
                 'elementwise_loss': "loss(prediction, target) = (prediction - target)^2",
                 'maxdepth': size,
                 'maxsize': size,  
-                'populations': 40,
-                'population_size': 60,
-                'niterations': 100,
-                'ncycles_per_iteration': 380,
             }
 
         # Shared PySR parameters
         self.pysr_params['early_stop_condition'] = 1e-5
         self.pysr_params['optimizer_iterations'] = 10 # Optimizer steps for constants
+        self.pysr_params['populations'] = 40
+        self.pysr_params['population_size'] = 60
+        self.pysr_params['niterations'] = 100
+        self.pysr_params['ncycles_per_iteration'] = 380
+        
+        # Override with user-defined params
+        if pysr_params is not None:
+            self.pysr_params.update(pysr_params)
 
         # Instantiate the predictor
         self.predictor = BlackBoxPredictor(
@@ -185,7 +182,94 @@ class SymbolicRegressorCBM(BaseModel):
             'selection_dist': selection_dist,
             'sampled_memory_idxs': selector_probs
         }
+        
+    def add_affine_parameters(self, expr, input_vars):
+        """
+        Transform expression with affine parameters indexed by input variable.
+        Each variable x_i gets: affine_a_i, affine_b_i, affine_c_i, affine_d_i
+        
+        Example: x0^2 + sin(x1) → affine_a_0*(affine_b_0*x0+affine_c_0)^2 + affine_d_0 + affine_a_1*sin(affine_b_1*x1+affine_c_1) + affine_d_1
+        
+        The index i corresponds to the variable index, not the term index.
+        """
+        # Create affine parameters for each input variable
+        affine_params = {}
+        subs_dict = {}
+        
+        for i, var in enumerate(input_vars):
+            a_i = Symbol(f'affine_a_{i}')
+            b_i = Symbol(f'affine_b_{i}')
+            c_i = Symbol(f'affine_c_{i}')
+            
+            affine_params[var] = {'a': a_i, 'b': b_i, 'c': c_i}
+            # Substitute: x_i → affine_b_i*x_i + affine_c_i
+            subs_dict[var] = b_i * var + c_i
+        
+        # Apply substitution to get f(b*x + c)
+        transformed = expr.subs(subs_dict)
+        
+        # Now we need to multiply each term by the appropriate affine_a_i and add affine_d_i
+        # Split into additive terms
+        if isinstance(transformed, Add):
+            terms = transformed.args
+        else:
+            terms = [transformed]
+        
+        result_terms = []
+        for term in terms:
+            # Find which variable this term depends on
+            term_vars = term.free_symbols & set(input_vars)
+            
+            if len(term_vars) == 1:
+                # Term uses single variable - multiply by its affine_a_i and add affine_d_i
+                var = list(term_vars)[0]
+                idx = input_vars.index(var)
+                a_i = Symbol(f'affine_a_{idx}')
+                d_i = Symbol(f'affine_d_{idx}')
+                result_terms.append(a_i * term + d_i)
+            elif len(term_vars) > 1:
+                # Term uses multiple variables - use the first variable's parameters
+                var = list(term_vars)[0]
+                idx = input_vars.index(var)
+                a_i = Symbol(f'affine_a_{idx}')
+                d_i = Symbol(f'affine_d_{idx}')
+                result_terms.append(a_i * term + d_i)
+            else:
+                # Constant term
+                result_terms.append(term)
+        
+        result = sum(result_terms)
+        return result
     
+    def replace_affine_with_random(self, expr, seed=None, min_val=-2.0, max_val=2.0):
+        """
+        Replace all affine parameters with random numbers.
+        
+        Args:
+            expr: SymPy expression containing affine parameters
+            seed: Random seed for reproducibility (optional)
+            min_val: Minimum value for random numbers
+            max_val: Maximum value for random numbers
+        
+        Returns:
+            tuple: (Expression with affine parameters replaced, dict of substitutions)
+        """
+        if seed is not None:
+            random.seed(seed)
+        
+        # Find all affine parameter symbols
+        all_symbols = expr.free_symbols
+        affine_symbols = sorted([s for s in all_symbols if str(s).startswith('affine_')], 
+                               key=str)
+        
+        # Create substitution dictionary with random values
+        subs_dict = {sym: random.uniform(min_val, max_val) for sym in affine_symbols}
+        
+        # Apply substitution
+        result = expr.subs(subs_dict)
+        
+        return result, subs_dict
+
     def symbolic_substitution(self, equations):
         """
         Substitute symbolic equations into the model's predictor.
@@ -196,15 +280,32 @@ class SymbolicRegressorCBM(BaseModel):
                               sympy equations.
         """
 
-        # TODO: Add affine paramereters to the learned equations
-        # Each equation f(x) will be transformed into a*f(b*x + c) + d
-
-
-        # TODO: Sympify all equations
-
+        # Create input variables from concept names
+        input_vars = [Symbol(name) for name in self.c_names]
+        
+        # Apply affine transformation to each equation
+        transformed_equations = {}
+        for memory_idx, output_dict in equations.items():
+            transformed_equations[memory_idx] = {}
+            for output_name, equation in output_dict.items():
+                # Apply affine parameters to this equation
+                transformed_eq = self.add_affine_parameters(equation, input_vars)
+                
+                # Replace affine parameters with random values
+                randomized_eq, random_values = self.replace_affine_with_random(
+                    transformed_eq, 
+                    seed=42 + memory_idx * 100 + hash(output_name) % 100  # Deterministic but unique per equation
+                )
+                
+                transformed_equations[memory_idx][output_name] = simplify(randomized_eq)
+                
+                print(f"Memory {memory_idx}, Output '{output_name}':")
+                print(f"  Original:    {equation}")
+                print(f"  Transformed: {transformed_eq}")
+                print(f"  Randomized:  {randomized_eq}")
 
         self.predictor = SymbolicPredictor(
-            equations=equations,
+            equations=transformed_equations,
             c_names=self.c_names,
         )
 

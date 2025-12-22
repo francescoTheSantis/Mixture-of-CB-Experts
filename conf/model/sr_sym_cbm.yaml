@@ -10,6 +10,8 @@ params:
   memory_size: ${memory_size}
   embedding_size: ${embedding_size}
   mc_approx: 1
+  pysr_params:
+    niterations: 100
 
 metadata:
   name: sr_symbolic_cbm

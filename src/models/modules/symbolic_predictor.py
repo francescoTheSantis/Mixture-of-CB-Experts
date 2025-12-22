@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import sympy
-from sympy import symbols, sympify, preorder_traversal
+from sympy import symbols, sympify, preorder_traversal, simplify
 import re
 from typing import Dict, List, Tuple, Any
 import numpy as np
@@ -242,6 +242,8 @@ class TrainableEquation(nn.Module):
         expr = self.parameterized_expr
         for param_name, param_value in param_values.items():
             expr = expr.subs(sympy.Symbol(param_name), param_value)
+        # Simplify the expression before converting to string
+        expr = simplify(expr)
         return str(expr)
 
 
