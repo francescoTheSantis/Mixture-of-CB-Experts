@@ -108,45 +108,46 @@ class SymbolicRegressorCBM(BaseModel):
         )
 
         # PySR parameters
-        self.pysr_params = {}
-
         if self.task == 'classification':
-            size = len(self.c_names) * 3 + 2 # At least we allow to find a linear equation over all concepts.
+            size = len(self.c_names) * 4 + 2 # At least we allow to find a linear equation over all concepts.
             self.pysr_params = {
                 # For the classification task we use only basic operators since 
                 # there are only binary concepts and the target is binary as well.
                 'binary_operators': ['*', '+', '-'],
-                'unary_operators': [],
-                'extra_sympy_mappings': [],
+                # 'unary_operators': [],
+                # 'extra_sympy_mappings': [],
                 'elementwise_loss': "loss(prediction, target) = (1 - prediction * target)^2",
-                # 'model_selection': 'accuracy' # Select the equation with highest accuracy
+                # 'model_selection': 'accuracy', # Select the equation with highest accuracy
                 'maxdepth': size,
                 'maxsize': size,   
                 # Make the search faster
-                # 'turbo': True
-                # 'bumper': True
+                # 'turbo': True,
+                # 'bumper': True,
                 'populations': 40,
                 'population_size': 60,
-                'niterations': 20,
+                'niterations': 100,
                 'ncycles_per_iteration': 380,
-                'early_stop_condition': 1e-6,
-                # 'guesses': [' + '.join([f'x{i}' for i in range(10)])],  # Initial guess: linear equations over single concepts,
+                'guesses': [' + '.join([f'1 * x{i}' for i in range(len(self.c_names))]) + ' + 1'],  # Initial guess: linear equations over single concepts,
             }
 
         else:
+            size = 40 # Default size for regression tasks
             self.pysr_params = {
                 'binary_operators': binary_operators,
                 'unary_operators': unary_operators,
                 'extra_sympy_mappings': extra_functions,
                 'elementwise_loss': "loss(prediction, target) = (prediction - target)^2",
-                'maxdepth': 40,\
-                'maxsize': 40,  
+                'maxdepth': size,
+                'maxsize': size,  
                 'populations': 40,
                 'population_size': 60,
-                'niterations': 120,
+                'niterations': 100,
                 'ncycles_per_iteration': 380,
-                'early_stop_condition': 1e-6
             }
+
+        # Shared PySR parameters
+        self.pysr_params['early_stop_condition'] = 1e-5
+        self.pysr_params['optimizer_iterations'] = 10 # Optimizer steps for constants
 
         # Instantiate the predictor
         self.predictor = BlackBoxPredictor(

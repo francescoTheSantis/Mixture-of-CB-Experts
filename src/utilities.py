@@ -508,6 +508,51 @@ def subsample_for_input_coverage(X, subsample_size, random_state=42):
 
     return indices
 
+def proportional_subsampling(X_memory, subsample_size):
+    """
+    Perform proportional subsampling for binary input features.
+    Ensures that the subsample maintains the same proportion of unique binary patterns as the original data.
+    
+    Args:
+        X_memory: Input tensor of shape (n_samples, n_features) with binary features (0 or 1)
+        subsample_size: Number of samples to select
+    Returns:
+        indices: Array of indices to keep from the original dataset
+    """
+    # Convert to numpy if needed
+    if torch.is_tensor(X_memory):
+        X_np = X_memory.cpu().numpy()
+    else:
+        X_np = X_memory
+    
+    # Find unique rows and their counts
+    unique_rows, counts = np.unique(X_np, axis=0, return_counts=True)
+    total_count = counts.sum()
+    
+    # Calculate the number of samples to select for each unique row
+    proportions = counts / total_count
+    samples_per_unique = np.floor(proportions * subsample_size).astype(int)
+    
+    # Ensure at least one sample for each unique row if possible
+    samples_per_unique = np.maximum(samples_per_unique, 1)
+    
+    selected_indices = []
+    
+    for i, unique_row in enumerate(unique_rows):
+        # Find all indices in the original data that match this unique row
+        matching_indices = np.where((X_np == unique_row).all(axis=1))[0]
+        
+        n_to_select = min(samples_per_unique[i], len(matching_indices))
+        
+        # Randomly select the required number of indices
+        selected = np.random.choice(matching_indices, size=n_to_select, replace=False)
+        selected_indices.extend(selected)
+    
+    # If we have selected more than subsample_size due to rounding, randomly trim
+    if len(selected_indices) > subsample_size:
+        selected_indices = np.random.choice(selected_indices, size=subsample_size, replace=False)
+    
+    return np.array(selected_indices)
 
 def symbolic_regression(
         stored_concepts, 
@@ -608,7 +653,13 @@ def symbolic_regression(
                 #     # Kmeans-based subsampling
                 #     indices = subsample_for_input_coverage(X_memory, subsample_size)
 
-                indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
+                if task == 'classification':
+                    # If all the elements in X_memory are either 0 or 1
+                    if bool((torch.where(X_memory==1,1,0) + torch.where(X_memory==0,1,0)).sum() == X_memory.numel()):
+                        indices = proportional_subsampling(X_memory, subsample_size)
+                else:
+                    # Random subsampling
+                    indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
 
                 X_memory = X_memory[indices]
                 y_target = y_target[indices]

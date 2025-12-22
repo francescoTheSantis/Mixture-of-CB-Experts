@@ -263,11 +263,18 @@ class Trainer:
         self.model.fine_tuning_stage = 'allow_symbolic'
         self.model._set_metrics()
         
-        fine_tune_lr = self.cfg.dataset.metadata.lr
-                
-        # Update optimizer learning rate
-        for param_group in self.optimizer.param_groups:
-            param_group['lr'] = fine_tune_lr
+        if model_name == 'sr_symbolic_cbm':
+            # Higher LR for SR-Sym-CBM as there only few parameters in the predictor
+            fine_tune_lr = self.cfg.dataset.metadata.lr * 10 
+        else:
+            fine_tune_lr = self.cfg.dataset.metadata.lr
+        
+        # Recreate optimizer to include new SymbolicPredictor parameters
+        # The predictor was just replaced in symbolic_substitution, so we need to
+        # rebuild the optimizer to include its trainable parameters
+        trainable_params = [p for p in self.model.parameters() if p.requires_grad]
+        print(f"Number of trainable parameters after symbolic substitution: {sum(p.numel() for p in trainable_params)}")
+        self.optimizer = AdamW(trainable_params, lr=fine_tune_lr)
         
         # Create new scheduler
         LR_on_plateau = torch.optim.lr_scheduler.ReduceLROnPlateau(
