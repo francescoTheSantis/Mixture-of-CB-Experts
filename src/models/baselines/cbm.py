@@ -93,13 +93,16 @@ class ConceptBottleneckModel(BaseModel):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         return loss
 
-    def get_symbolic_equivalent(self, log_dir=None):
+    def get_symbolic_equivalent(self, log_dir=None, return_equations=False):
         """
         Returns the equation associated to the predictor of the model
         """
 
         # Get as many equations as the output size
         equations = self.y_predictor.to_symbolic()
+
+        if return_equations:
+            return equations
 
         # If the output is greater than 1, equations will be a list.
         # Each equation in the list will have the same complexity, therefore we return only the first one.

@@ -5,7 +5,7 @@ defaults:
   - _self_
 
 ## Common parameters
-gpus: [1]
+gpus: [2]
 max_epochs: 500
 patience: 50
 lr_patience: 25
@@ -24,7 +24,7 @@ scale_variables: False
 task_penalty: 0.1
 concept_penalty: 1.0
 int_prob: 0.25
-hard_concepts: False
+hard_concepts: True
 # It controls whether the concept and task predictors are trained sequentially. If trained sequentially then True.
 disjoint_training: True
 

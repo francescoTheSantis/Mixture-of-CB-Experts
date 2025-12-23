@@ -11,7 +11,7 @@ hydra:
       dir: output/memory_cls/${now:%Y-%m-%d_%H-%M-%S} 
   sweeper:
     grid_params:
-      model: lin_sym_cbm, cmr
+      model: lin_sym_cbm, cmr, sr_sym_cbm
       memory_size: 1, 2, 3, 4, 5, 10
       seed: 1, 2, 3, 4, 5
 
@@ -31,6 +31,7 @@ hydra:
         - google/vit-base-patch32-224-in21k
         - google/vit-base-patch32-224-in21k
 
-disjoint_training: False
+# For those models, using the true concepts to fit the predictor results in more stable training.
+disjoint_training: True 
 
 note: "Memory" 

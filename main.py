@@ -128,18 +128,6 @@ def main(cfg: DictConfig) -> None:
         intervention_df = trainer.interventions(loaded_test)
         intervention_df.to_csv(f"{log_dir}/interventions.csv", index=False)
 
-    ###### Save the learned linear coefficients (Useful for showing explanations) ######
-    if cfg.model.metadata.name == 'licem':
-        save_licem_linear_coefficients(model, loaded_train, log_dir, split='train')
-        save_licem_linear_coefficients(model, loaded_test, log_dir, split='test')
-        # save the c_names and y_names
-        with open(f"{log_dir}/c_names.txt", "w") as f:
-            for c in c_names:
-                f.write(f"{c}\n")
-        with open(f"{log_dir}/y_names.txt", "w") as f:
-            for y in y_names:
-                f.write(f"{y}\n")
-
     # Close the wandb logger if it is used
     if wandb_logger is not None:
         wandb_logger.experiment.finish()
