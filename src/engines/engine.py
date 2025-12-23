@@ -207,6 +207,31 @@ class Engine(pl.LightningModule):
 
         return loss 
 
+    def on_test_start(self):
+        """Called at the start of testing. Cache expensive equation extractions."""
+        # Cache equations for models that use get_symbolic_equivalent
+        if self.model_name in ['BlackBox', 'ConceptEmbeddingModel']:
+            try:
+                eq_result = self.model.get_symbolic_equivalent(return_equations=True)
+                # Store cached equations for reuse
+                # Use hasattr to check if it's iterable instead of isinstance to avoid potential issues
+                try:
+                    # Try to iterate - if it's a list/tuple, this will work
+                    eq_strs = [f"{self.y_name[i]}: {str(eq)}" for i, eq in enumerate(eq_result)]
+                    self.cached_equations = {0: "; ".join(eq_strs)}
+                except (TypeError, AttributeError):
+                    # Single output - not iterable
+                    self.cached_equations = {0: f"{self.y_name[0] if isinstance(self.y_name, list) else self.y_name}: {str(eq_result)}"}
+            except Exception as e:
+                self.cached_equations = {0: f"Error extracting equation: {str(e)}"}
+        elif self.model_name in ['KANSymbolicCBM', 'LinearSymbolicCBM', 'PriorSymbolicCBM', 'SymbolicRegressorCBM']:
+            # For memory-based models, extract and parse equations once
+            self.cached_equations = self._extract_memory_equations()
+            self.cached_parsed_equations = self._parse_memory_equations(self.cached_equations)
+        else:
+            self.cached_equations = None
+            self.cached_parsed_equations = None
+    
     def test_step(self, batch, batch_idx):
         self.model.phase = 'test'
         loss, model_output = self.shared_step(batch)
@@ -262,6 +287,12 @@ class Engine(pl.LightningModule):
             # No memory selection available (for BlackBox and ConceptEmbeddingModel)
             selected_memory = torch.zeros(batch_size, dtype=torch.long)
         
+        # Batch convert all tensors to numpy once (optimization)
+        predictions_np = y_hat_metrics.detach().cpu().numpy()
+        y_true_np = batch['y'].detach().cpu().numpy()
+        c_true_np = batch['c'].detach().cpu().numpy()
+        c_pred_np = c_hat_metrics.detach().cpu().numpy() if c_hat_metrics is not None else None
+        
         # Extract equations for this batch
         if self.model_name == 'LinearConceptEmbeddingModel':
             # For LinearConceptEmbeddingModel, equations are per-sample (not per-memory-slot)
@@ -271,13 +302,18 @@ class Engine(pl.LightningModule):
             with torch.no_grad():
                 equations_per_sample = self.model.get_local_explanations(batch['x'])
         else:
-            # For other models, equations are per-memory-slot
-            equations_per_slot = self._extract_memory_equations()
+            # For other models, use cached parsed equations if available
+            if hasattr(self, 'cached_parsed_equations') and self.cached_parsed_equations is not None:
+                parsed_equations = self.cached_parsed_equations
+            else:
+                # Fallback: extract and parse equations on-the-fly
+                equations_per_slot = self._extract_memory_equations()
+                parsed_equations = self._parse_memory_equations(equations_per_slot)
         
         # Store data for each sample in the batch
         for i in range(batch_size):
-            prediction = y_hat_metrics[i].detach().cpu().numpy()
-            y_true = batch['y'][i].detach().cpu().numpy()
+            prediction = predictions_np[i]
+            y_true = y_true_np[i]
             
             # Determine if this is a single-output or multi-output task
             is_multi_output = y_true.ndim > 0 and len(y_true) > 1
@@ -296,26 +332,8 @@ class Engine(pl.LightningModule):
                     eq_parts = []
                     for out_idx, y_name in enumerate(self.y_name):
                         memory_idx = selected_memory[i, out_idx].item()
-                        # Extract the equation for this output from the selected memory slot
-                        slot_equations = equations_per_slot.get(memory_idx, "No equation available")
-                        if ';' in slot_equations:
-                            # Multi-output format: "y0: eq0; y1: eq1; ..."
-                            eqs = slot_equations.split(';')
-                            # Find the equation for this output
-                            for eq in eqs:
-                                if eq.strip().startswith(f"{y_name}:"):
-                                    # Remove the "y_name:" prefix
-                                    eq_only = eq.strip().split(':', 1)[1].strip()
-                                    eq_parts.append(eq_only)
-                                    break
-                            else:
-                                eq_parts.append("N/A")
-                        else:
-                            # Single output format - remove prefix if present
-                            if ':' in slot_equations:
-                                eq_parts.append(slot_equations.split(':', 1)[1].strip())
-                            else:
-                                eq_parts.append(slot_equations)
+                        # Use pre-parsed equations for fast lookup
+                        eq_parts.append(parsed_equations.get((memory_idx, y_name), "N/A"))
                     equation = "; ".join(eq_parts)
                 else:
                     # Single-output task: store only the equation for the predicted class
@@ -333,38 +351,51 @@ class Engine(pl.LightningModule):
                     else:
                         memory_idx = selected_memory[i, pred_class_idx].item() if (len(self.y_name) > 1 and self.model.task == 'classification') else selected_memory[i].item()
                     
-                    # Extract the equation for the predicted class from the selected memory slot
-                    slot_equations = equations_per_slot.get(memory_idx, "No equation available")
-                    if ';' in slot_equations:
-                        # Multi-class format: "class0: eq0; class1: eq1; ..."
-                        eqs = slot_equations.split(';')
-                        # Find the equation for the predicted class
-                        for eq in eqs:
-                            if eq.strip().startswith(f"{y_name}:"):
-                                # Remove the "y_name:" prefix
-                                equation = eq.strip().split(':', 1)[1].strip()
-                                break
-                        else:
-                            equation = "N/A"
-                    else:
-                        # Single class format - remove prefix if present
-                        if ':' in slot_equations:
-                            equation = slot_equations.split(':', 1)[1].strip()
-                        else:
-                            equation = slot_equations
+                    # Use pre-parsed equations for fast lookup
+                    equation = parsed_equations.get((memory_idx, y_name), "N/A")
 
-            c_pred = c_hat_metrics[i].detach().cpu().numpy() if c_hat_metrics is not None else None
+            c_pred = c_pred_np[i] if c_pred_np is not None else None
 
             sample_data = {
                 'sample_idx': batch_idx * batch_size + i,
                 'equation': equation,
                 'c_pred': c_pred,
                 'y_pred': prediction,
-                'c_true': batch['c'][i].detach().cpu().numpy(),
-                'y_true': batch['y'][i].detach().cpu().numpy(),
+                'c_true': c_true_np[i],
+                'y_true': y_true,
             }
             
             self.test_predictions.append(sample_data)
+
+    def _parse_memory_equations(self, equations_per_slot):
+        """
+        Pre-parse equation strings into a structured format for fast lookup.
+        Returns a dictionary mapping (memory_idx, output_name) -> equation_string.
+        This avoids repeated string parsing inside the per-sample loop.
+        """
+        parsed = {}
+        
+        for mem_idx, slot_equations in equations_per_slot.items():
+            if ';' in slot_equations:
+                # Multi-output format: "y0: eq0; y1: eq1; ..."
+                eqs = slot_equations.split(';')
+                for eq in eqs:
+                    eq = eq.strip()
+                    if ':' in eq:
+                        # Extract output name and equation
+                        output_name, equation = eq.split(':', 1)
+                        parsed[(mem_idx, output_name.strip())] = equation.strip()
+            else:
+                # Single output format
+                if ':' in slot_equations:
+                    output_name, equation = slot_equations.split(':', 1)
+                    parsed[(mem_idx, output_name.strip())] = equation.strip()
+                else:
+                    # No prefix - assume it applies to all outputs
+                    for y_name in self.y_name:
+                        parsed[(mem_idx, y_name)] = slot_equations.strip()
+        
+        return parsed
 
     def _extract_per_sample_equations(self, model_output, batch_size):
         """
@@ -505,32 +536,40 @@ class Engine(pl.LightningModule):
                     equations[mem_idx] = "No symbolic equations (BlackBoxPredictor)"
         
         elif model_name == 'BlackBox':
-            # Extract equation from predictor using get_symbolic_equivalent
-            try:
-                eq_result = self.model.get_symbolic_equivalent(return_equations=True)
-                # For multi-output, eq_result is a list of equations
-                if isinstance(eq_result, list):
-                    eq_strs = [f"{self.y_name[i]}: {str(eq)}" for i, eq in enumerate(eq_result)]
-                    equations[0] = "; ".join(eq_strs)
-                else:
-                    # Single output
-                    equations[0] = f"{self.y_name[0] if isinstance(self.y_name, list) else self.y_name}: {str(eq_result)}"
-            except Exception as e:
-                equations[0] = f"Error extracting equation: {str(e)}"
+            # Use cached equations if available (set in on_test_start)
+            if hasattr(self, 'cached_equations') and self.cached_equations is not None:
+                equations = self.cached_equations
+            else:
+                # Fallback: Extract equation from predictor using get_symbolic_equivalent
+                try:
+                    eq_result = self.model.get_symbolic_equivalent(return_equations=True)
+                    # For multi-output, eq_result is a list of equations
+                    if isinstance(eq_result, list):
+                        eq_strs = [f"{self.y_name[i]}: {str(eq)}" for i, eq in enumerate(eq_result)]
+                        equations[0] = "; ".join(eq_strs)
+                    else:
+                        # Single output
+                        equations[0] = f"{self.y_name[0] if isinstance(self.y_name, list) else self.y_name}: {str(eq_result)}"
+                except Exception as e:
+                    equations[0] = f"Error extracting equation: {str(e)}"
         
         elif model_name == 'ConceptEmbeddingModel':
-            # Extract equation from y_predictor using get_symbolic_equivalent
-            try:
-                eq_result = self.model.get_symbolic_equivalent(return_equations=True)
-                # For multi-output, eq_result is a list of equations
-                if isinstance(eq_result, list):
-                    eq_strs = [f"{self.y_name[i]}: {str(eq)}" for i, eq in enumerate(eq_result)]
-                    equations[0] = "; ".join(eq_strs)
-                else:
-                    # Single output
-                    equations[0] = f"{self.y_name[0] if isinstance(self.y_name, list) else self.y_name}: {str(eq_result)}"
-            except Exception as e:
-                equations[0] = f"Error extracting equation: {str(e)}"
+            # Use cached equations if available (set in on_test_start)
+            if hasattr(self, 'cached_equations') and self.cached_equations is not None:
+                equations = self.cached_equations
+            else:
+                # Fallback: Extract equation from y_predictor using get_symbolic_equivalent
+                try:
+                    eq_result = self.model.get_symbolic_equivalent(return_equations=True)
+                    # For multi-output, eq_result is a list of equations
+                    if isinstance(eq_result, list):
+                        eq_strs = [f"{self.y_name[i]}: {str(eq)}" for i, eq in enumerate(eq_result)]
+                        equations[0] = "; ".join(eq_strs)
+                    else:
+                        # Single output
+                        equations[0] = f"{self.y_name[0] if isinstance(self.y_name, list) else self.y_name}: {str(eq_result)}"
+                except Exception as e:
+                    equations[0] = f"Error extracting equation: {str(e)}"
         
         else:
             # Other models - no memory-based equations

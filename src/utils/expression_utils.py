@@ -374,8 +374,9 @@ def _apply_nonlinearity(nonlinearity: str, arg: sp.Expr) -> sp.Expr:
 
 def store_eq(equation: sp.Expr, log_dir: Union[str, None], idx: int = None) -> None:
     """
-    Stores the given equations in pickle format to the specified log directory.
-    Uses dill for serialization to handle SymPy's dynamically created Function objects.
+    Stores the given equations as string representation to the specified log directory.
+    Uses SymPy's srepr() for serialization to avoid recursion issues with complex expressions.
+    To load: equation = sp.sympify(open(filename).read())
     """
 
     if log_dir is None:
@@ -383,11 +384,13 @@ def store_eq(equation: sp.Expr, log_dir: Union[str, None], idx: int = None) -> N
 
     os.makedirs(log_dir, exist_ok=True)
     if idx is None:
-        filename = os.path.join(log_dir, "equation.pkl")
+        filename = os.path.join(log_dir, "equation.txt")
     else:
-        filename = os.path.join(log_dir, f"equation_{idx}.pkl")
-    with open(filename, "wb") as f:
-        dill.dump(equation, f)
+        filename = os.path.join(log_dir, f"equation_{idx}.txt")
+    
+    # Store as string representation using srepr for full fidelity
+    with open(filename, "w") as f:
+        f.write(sp.srepr(equation))
 
 
 if __name__ == "__main__":

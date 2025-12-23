@@ -134,21 +134,29 @@ def _visitation_length(expr: sp.Expr) -> int:
         Subtree sizes: * has size 5, + has size 3, each leaf has size 1
         Visitation length = 5 + 3 + 1 + 1 + 1 = 11
     """
-    # Calculate the size of this subtree
+    # Base case: atomic expression (leaf node)
     if expr.is_Atom:
-        subtree_size = 1
-    else:
-        subtree_size = 1 + sum(_node_count(arg) for arg in expr.args)
+        return 1
     
-    # Add this subtree's size to the total
-    total = subtree_size
+    # Recursively compute for all children
+    # Returns: (subtree_size, visitation_length)
+    def compute(node):
+        if node.is_Atom:
+            return (1, 1)
+        
+        # Compute for all children
+        child_results = [compute(arg) for arg in node.args]
+        
+        # Subtree size = 1 (this node) + sum of children sizes
+        subtree_size = 1 + sum(size for size, _ in child_results)
+        
+        # Visitation length = this subtree's size + sum of children's visitation lengths
+        visitation = subtree_size + sum(vl for _, vl in child_results)
+        
+        return (subtree_size, visitation)
     
-    # Recursively add visitation lengths of all children
-    if not expr.is_Atom:
-        for arg in expr.args:
-            total += _visitation_length(arg)
-    
-    return total
+    _, result = compute(expr)
+    return result
 
 
 def complexity_report(expr: Union[sp.Expr, List[sp.Expr]]) -> dict:
