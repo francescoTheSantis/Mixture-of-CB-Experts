@@ -441,34 +441,6 @@ def sanitize_concept_names(concept_names):
 
     return safe_names, mapping
 
-def save_licem_linear_coefficients(model, loaded_set, log_dir, split='train'):
-    """
-    iterate over the loaded training data to get the generated weights (model_out['weights'])
-    """
-    all_weights = []
-    model.model.eval()
-
-    if split=='train':
-        epss = [0.0]  # only one value for training
-    else:
-        epss = np.linspace(0, 1, 10)
-    for eps in epss:
-        all_weights = []
-        model.model.eps = eps
-        with torch.no_grad():
-            for batch in loaded_set:
-                batch = {k: v.to(model.device) for k, v in batch.items()}
-                model_out = model.model(batch)
-                all_weights.append(model_out['weights'].cpu())
-        all_weights = torch.cat(all_weights, dim=0)  # concatenate all weights
-
-        if split == 'train':
-            torch.save(all_weights, f"{log_dir}/learned_linear_coefficients_train.pt")
-        else:
-            torch.save(all_weights, f"{log_dir}/learned_linear_coefficients_test_{str(round(eps,2)).replace('.', '')}.pt")
-
-
-
 def subsample_for_input_coverage(X, subsample_size, random_state=42):
     """
     Subsample data points to maintain good coverage of the input space.
@@ -657,6 +629,8 @@ def symbolic_regression(
                     # If all the elements in X_memory are either 0 or 1
                     if bool((torch.where(X_memory==1,1,0) + torch.where(X_memory==0,1,0)).sum() == X_memory.numel()):
                         indices = proportional_subsampling(X_memory, subsample_size)
+                    else:
+                        indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
                 else:
                     # Random subsampling
                     indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)

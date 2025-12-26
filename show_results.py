@@ -198,8 +198,8 @@ def main():
     paths = [
         "output/memory_less_cls",
         "output/memory_cls",
-        "output/memory_reg",
-        "output/memory_less_reg"
+        #"output/memory_reg",
+        #"output/memory_less_reg"
     ]
 
     try:

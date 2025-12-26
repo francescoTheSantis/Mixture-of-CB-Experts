@@ -120,7 +120,10 @@ class SymbolicRegressorCBM(BaseModel):
                 'elementwise_loss': "loss(prediction, target) = (1 - prediction * target)^2",
                 'maxdepth': size,
                 'maxsize': size,   
-                'guesses': [' + '.join([f'1 * x{i}' for i in range(len(self.c_names))]) + ' + 1'],  # Initial guess: linear equations over single concepts,
+                # Initial guess: linear equations over single concepts
+                'guesses': [' + '.join([f'1 * x{i}' for i in range(len(self.c_names))]) + ' + 1'], 
+                # Select the equation with the highes accuracy
+                'model_selection' : 'accuracy',
             }
 
         else:

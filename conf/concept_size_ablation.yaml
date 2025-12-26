@@ -8,7 +8,7 @@ hydra:
   sweep:
       # This directory can be deleted as it only contains temporary files and the 
       # preprocessed data will be saved in the cache.
-      dir: concept_size_ablation/${now:%Y-%m-%d_%H-%M-%S} 
+      dir: output/concept_size_ablation/${now:%Y-%m-%d_%H-%M-%S} 
   sweeper:
     grid_params:
       seed: 1, 2, 3, 4, 5
@@ -20,9 +20,11 @@ hydra:
     list_params:
       dataset: 
         - cub
+        - awa2
         - cifar10
         - cifar100
       img_backbone_name: 
+        - facebook/dinov2-base
         - facebook/dinov2-base
         - google/vit-base-patch32-224-in21k
         - google/vit-large-patch16-224-in21k

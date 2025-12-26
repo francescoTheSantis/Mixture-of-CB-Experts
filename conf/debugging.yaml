@@ -9,8 +9,8 @@ hydra:
   sweeper:
     params:
       seed: 1
-      dataset: feynman_I_12_1 # mnist_addition, awa2_incomplete, awa2, cub, cub_incomplete 
-      model: kan_sym_cbm 
+      dataset: awa2 # mnist_addition, awa2_incomplete, awa2, cub, cub_incomplete 
+      model: sr_sym_cbm 
       memory_size: 1
     
 gpus: [2]
@@ -18,8 +18,7 @@ gpus: [2]
 scale_variables: False
 
 # NOTE: check this variable before running experiments 
-disjoint_training: True
-hard_concepts: True
+disjoint_training: False
 
 max_epochs: 1
 patience: 50

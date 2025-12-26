@@ -17,8 +17,6 @@ hydra:
       dataset: feynman_I_12_1, feynman_I_14_3, feynman_I_15_10, dsprites_simple, pendulum, dsprites_complex, mnist_arithmetic, mawps
       memory_size: 1, 1, 1, 1, 1, 3, 4, 4
 
-gpus: [0]
-
 wandb:
   entity: null
   project: null

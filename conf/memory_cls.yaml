@@ -31,7 +31,6 @@ hydra:
         - google/vit-base-patch32-224-in21k
         - google/vit-base-patch32-224-in21k
 
-# For those models, using the true concepts to fit the predictor results in more stable training.
-disjoint_training: True 
+disjoint_training: False 
 
 note: "Memory" 

@@ -7,7 +7,7 @@ from tqdm.auto import tqdm
 
 from src.trainer import Trainer
 from src.utilities import set_seed, set_loggers, update_config_from_data, \
-    is_valid_experiment, generate_data_path, save_licem_linear_coefficients
+    is_valid_experiment, generate_data_path
 
 @hydra.main(config_path="conf", config_name="debugging")
 def main(cfg: DictConfig) -> None:

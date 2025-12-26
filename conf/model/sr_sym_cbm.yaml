@@ -10,8 +10,12 @@ params:
   memory_size: ${memory_size}
   embedding_size: ${embedding_size}
   mc_approx: 1
-  pysr_params:
-    niterations: 100
+  # Update PySR parameters as needed
+  # pysr_params:
+  #   niterations: ...
+  #   populations: ...
+  #   population_size: ...
+  #   ncycles_per_iteration: ...
 
 metadata:
   name: sr_symbolic_cbm
