@@ -84,6 +84,9 @@ def get_df_name(df):
 #########################################
 
 def get_exp_from_path(paths):
+    from src.utils.complexity import compute_complexity
+    from sympy import sympify
+    
     # Collect all the experiments in the given paths
     exps_path = []
     lmr_paths = []
@@ -91,7 +94,6 @@ def get_exp_from_path(paths):
         experiment_dir = os.listdir(path)
         for exp in experiment_dir:
             exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
-
 
     performance = pd.DataFrame()
 
@@ -132,6 +134,65 @@ def get_exp_from_path(paths):
                         d['concept_mae'] = result['test/c/mae'].iloc[-1]
                     else:
                         d['concept_acc'] = result['test/c/acc'].iloc[-1]
+                
+                # Compute complexity for equations if available
+                predictions_file = os.path.join(exp, 'logs/experiment_metrics/test_predictions_per_sample.csv')
+                if os.path.exists(predictions_file):
+                    try:
+                        df_pred = pd.read_csv(predictions_file)
+                        
+                        # Check if 'equation' column exists
+                        if 'equation' in df_pred.columns:
+                            # The variables of the equations are the concept names
+                            vars = [x.replace('c_pred_','') for x in df_pred.columns if 'c_pred' in x]
+                            
+                            # Count unique equations and their occurrences
+                            equation_counts = df_pred['equation'].value_counts().to_dict()
+
+                            # Remove NaN or empty equations
+                            equation_counts = {eq: cnt for eq, cnt in equation_counts.items() if pd.notna(eq) and eq != ''}
+
+                            # Remove target from equations if present (e.g., "y: <equation>")
+                            cleaned_equation_counts = {}
+                            for eq, cnt in equation_counts.items():
+                                if ':' in eq:
+                                    cleaned_eq = eq.split(':')[1].strip()
+                                else:
+                                    cleaned_eq = eq
+                                # Sum counts if multiple equations clean to the same form
+                                if cleaned_eq in cleaned_equation_counts:
+                                    cleaned_equation_counts[cleaned_eq] += cnt
+                                else:
+                                    cleaned_equation_counts[cleaned_eq] = cnt
+
+                            # Compute complexity for each unique equation
+                            total_complexity = 0
+                            total_count = 0
+                            for equation_str, count in tqdm(cleaned_equation_counts.items(), desc=f"Computing complexity ({d['dataset']}/{d['model']}/seed{d['seed']})", leave=False):
+                                try:
+                                    # Convert string to sympy expression
+                                    equation = sympify(equation_str, locals={v: sympify(v) for v in vars})
+                                    
+                                    # Compute complexity
+                                    complexity = compute_complexity(equation, metric='visitation_length')
+                                    
+                                    # Weight by occurrence count
+                                    total_complexity += complexity * count
+                                    total_count += count
+                                except Exception as e:
+                                    print(f"Error processing equation '{equation_str}': {e}")
+                                    continue
+
+                                except Exception as e:
+                                    print(f"Error processing equation '{equation_str}': {e}")
+                                    continue
+
+                            if total_count > 0:
+                                # Compute weighted average complexity
+                                d['complexity'] = total_complexity / total_count
+                                d['n_equations'] = total_count
+                    except Exception as e:
+                        print(f"Error computing complexity for {exp}: {e}")
                 
                 if d['model'] == 'linear_symbolic_cbm' and d['seed']==1:
                     expl_dict = d.copy()

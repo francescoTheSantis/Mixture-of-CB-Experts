@@ -71,10 +71,10 @@ model_styles = {
     'blackbox': {'marker': 'o', 'name': 'BlackBox', 'color': "black", 'size': marker_size},
     'cbm_linear': {'marker': '^', 'name': 'CBM', 'color': 'tab:orange', 'size': marker_size},
     'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:red', 'size': marker_size},
-    'kan_symbolic_cbm': {'marker': 'X', 'name': 'Kan-Sym-CBM', 'color': 'tab:green', 'size': marker_size},
-    'linear_symbolic_cbm': {'marker': 's', 'name': 'Lin-Sym-CBM', 'color': 'tab:orange', 'size': marker_size},
+    'kan_symbolic_cbm': {'marker': 'X', 'name': 'Kan-Sym-CBM', 'color': 'tab:orange', 'size': marker_size},
+    'linear_symbolic_cbm': {'marker': 's', 'name': 'Lin-Sym-CBM', 'color': 'tab:green', 'size': marker_size},
+    'sr_symbolic_cbm': {'marker': 'o', 'name': 'SR-Sym-CBM', 'color': 'tab:green', 'size': marker_size},
     'prior_symbolic_cbm': {'marker': '*', 'name': 'Prior-Sym-CBM', 'color': 'tab:cyan', 'size': marker_size},
-    'sr_symbolic_cbm': {'marker': 'o', 'name': 'SR-Sym-CBM', 'color': 'tab:blue', 'size': marker_size},
     'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:brown', 'size': marker_size},
     'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:purple', 'size': marker_size},
@@ -114,8 +114,8 @@ def main():
     # 3. compute the similarity between the learned expressions and the ground truth ones
 
     paths = [
-        # "output/sr_ablation",
-        # "output/prior_reg",
+        "output/sr_ablation",
+        "output/prior_reg",
     ]
  
     try:
@@ -198,8 +198,8 @@ def main():
     paths = [
         "output/memory_less_cls",
         "output/memory_cls",
-        #"output/memory_reg",
-        #"output/memory_less_reg"
+        "output/memory_reg",
+        "output/memory_less_reg"
     ]
 
     try:
@@ -215,15 +215,36 @@ def main():
         performance = performance[performance['model'].isin(model_styles.keys()) & \
                                 performance['dataset'].isin(custom_order)]
 
-        plot_memory_ablation(performance, model_styles, title_font, label_font, tick_font, custom_order)
+        # Memory vs accuracy 
+        plot_memory_ablation(
+            performance, 
+            model_styles, 
+            title_font, 
+            label_font, 
+            tick_font, 
+            custom_order
+        )
 
-        # Plot the models in the pareto front
-        plot_pareto_front(performance, 
-                        model_styles, 
-                        title_font, 
-                        label_font, 
-                        tick_font, 
-                        custom_order,
+        # OP Complexity vs accuracy
+        plot_pareto_front(
+            performance, 
+            model_styles, 
+            title_font, 
+            label_font, 
+            tick_font, 
+            custom_order, 
+            complexity_type='op',
+        )
+
+        # Composed Complexity vs accuracy
+        plot_pareto_front(
+            performance, 
+            model_styles, 
+            title_font, 
+            label_font, 
+            tick_font, 
+            custom_order, 
+            complexity_type='composed',
         )
         
     except Exception as e:

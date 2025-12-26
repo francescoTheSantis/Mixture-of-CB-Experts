@@ -123,7 +123,7 @@ class SymbolicRegressorCBM(BaseModel):
                 # Initial guess: linear equations over single concepts
                 'guesses': [' + '.join([f'1 * x{i}' for i in range(len(self.c_names))]) + ' + 1'], 
                 # Select the equation with the highes accuracy
-                'model_selection' : 'accuracy',
+                # 'model_selection' : 'accuracy',
             }
 
         else:

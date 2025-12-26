@@ -31,6 +31,6 @@ hydra:
         - google/vit-base-patch32-224-in21k
         - google/vit-base-patch32-224-in21k
 
-disjoint_training: False 
+disjoint_training: True
 
 note: "Memory" 

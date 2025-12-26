@@ -118,11 +118,6 @@ def main(cfg: DictConfig) -> None:
     # Test the model on the test-set
     trainer.test(loaded_test)
 
-    ###### Store symbolic expression associated to the predictor ######
-    file_name = f"{log_dir}/equations"
-    os.makedirs(file_name, exist_ok=True)
-    model.model.get_symbolic_equivalent(file_name)
-
     ###### Perform Interventions ######
     if model.model.has_concepts:
         intervention_df = trainer.interventions(loaded_test)

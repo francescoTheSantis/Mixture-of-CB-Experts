@@ -13,4 +13,6 @@ hydra:
       dataset: dsprites_simple, pendulum, dsprites_complex, mnist_arithmetic, mawps
       seed: 1, 2, 3, 4, 5
 
+disjoint_training: True
+
 note: "Memory-reg" 

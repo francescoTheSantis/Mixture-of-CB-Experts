@@ -149,28 +149,13 @@ class BaseModel(nn.Module):
         return y, y_hat
     
     def _handle_hard_concepts(self, c_hat, int_idxs):
-        """
-        When the hard_concepts variable is True:
-            - the boolean concepts are made hard by applying a threshold at 0.5
-            - the integer concepts are made hard by rounding to the nearest integer
-            - the floating concepts are left unchanged
-        In the locations identified by int_idxs we apply the identity function, as the intervention already happened, 
-        and the values do not need to undergo any further transformation.
-        """
-        if self.hard_concepts:
-            # Boolean concepts
-            binary_mask = torch.tensor([c_type == 'binary' for c_type in self.concept_type], device=c_hat.device)
-            binary_mask = binary_mask & ~int_idxs
-            c_hat = torch.where(binary_mask, (c_hat > 0.5).float(), c_hat) if binary_mask.any() else c_hat
-
-            # Integer concepts
-            # integer_mask = torch.tensor([c_type == 'integer' for c_type in self.concept_type], device=c_hat.device)
-            # integer_mask = integer_mask & ~int_idxs
-            # c_hat = torch.where(integer_mask, c_hat.round(), c_hat) if integer_mask.any() else c_hat
-
-            # Continuous concepts
-            # This concept manipulation strategy can be applied only on discrete concepts. 
-            # Therefore, continuous concepts are left unchanged
+        """For binary concepts, we apply a hard thresholding at 0.5 to obtain binary values."""
+        all_binary = all([c_type == 'binary' for c_type in self.concept_type])
+        if self.hard_concepts and all_binary:
+            # Apply hard thresholding only where binary_mask is True
+            c_hard = torch.where(c_hat > 0.5, 1, 0)
+            # Straight Through Estimator for hard concepts
+            c_hat = c_hat + (c_hard - c_hat).detach()
         return c_hat
 
     def _apply_concept_activation(self, c_hat, int_idxs):
