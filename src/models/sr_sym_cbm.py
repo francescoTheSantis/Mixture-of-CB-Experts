@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import os
 import random
-from sympy import Symbol, Add, simplify
+from sympy import Symbol, Add, simplify, sympify
 
 binary_operators = ["*", "+", "-", "/"]
 unary_operators = ["sin", "cos", "exp", "log", "tan", "tanh"]
@@ -121,9 +121,9 @@ class SymbolicRegressorCBM(BaseModel):
                 'maxdepth': size,
                 'maxsize': size,   
                 # Initial guess: linear equations over single concepts
-                'guesses': [' + '.join([f'1 * x{i}' for i in range(len(self.c_names))]) + ' + 1'], 
+                # 'guesses': [' + '.join([f'1 * x{i}' for i in range(len(self.c_names))]) + ' + 1'], 
                 # Select the equation with the highes accuracy
-                # 'model_selection' : 'accuracy',
+                'model_selection' : 'accuracy',
             }
 
         else:
@@ -139,7 +139,7 @@ class SymbolicRegressorCBM(BaseModel):
 
         # Shared PySR parameters
         self.pysr_params['early_stop_condition'] = 1e-5
-        self.pysr_params['optimizer_iterations'] = 10 # Optimizer steps for constants
+        self.pysr_params['optimizer_iterations'] = 8 # Optimizer steps for constants
         self.pysr_params['populations'] = 40
         self.pysr_params['population_size'] = 60
         self.pysr_params['niterations'] = 100
@@ -188,58 +188,47 @@ class SymbolicRegressorCBM(BaseModel):
         
     def add_affine_parameters(self, expr, input_vars):
         """
-        Transform expression with affine parameters indexed by input variable.
-        Each variable x_i gets: affine_a_i, affine_b_i, affine_c_i, affine_d_i
+        Transform expression with affine parameters for each term.
+        Each term gets its own set of affine parameters: affine_a_i, affine_b_j, affine_c_j, affine_d_i
+        where i is the term index and j is indexed by which variables appear in that term.
         
-        Example: x0^2 + sin(x1) → affine_a_0*(affine_b_0*x0+affine_c_0)^2 + affine_d_0 + affine_a_1*sin(affine_b_1*x1+affine_c_1) + affine_d_1
-        
-        The index i corresponds to the variable index, not the term index.
+        Example: x0^2 + x0 → affine_a_0*(affine_b_0*x0+affine_c_0)^2 + affine_d_0 + affine_a_1*(affine_b_1*x0+affine_c_1) + affine_d_1
         """
-        # Create affine parameters for each input variable
-        affine_params = {}
-        subs_dict = {}
+        # Convert to SymPy expression if it's a plain number
+        expr = sympify(expr)
         
-        for i, var in enumerate(input_vars):
-            a_i = Symbol(f'affine_a_{i}')
-            b_i = Symbol(f'affine_b_{i}')
-            c_i = Symbol(f'affine_c_{i}')
-            
-            affine_params[var] = {'a': a_i, 'b': b_i, 'c': c_i}
-            # Substitute: x_i → affine_b_i*x_i + affine_c_i
-            subs_dict[var] = b_i * var + c_i
-        
-        # Apply substitution to get f(b*x + c)
-        transformed = expr.subs(subs_dict)
-        
-        # Now we need to multiply each term by the appropriate affine_a_i and add affine_d_i
         # Split into additive terms
-        if isinstance(transformed, Add):
-            terms = transformed.args
+        if isinstance(expr, Add):
+            terms = list(expr.args)
         else:
-            terms = [transformed]
+            terms = [expr]
         
         result_terms = []
-        for term in terms:
-            # Find which variable this term depends on
-            term_vars = term.free_symbols & set(input_vars)
+        param_counter = 0  # Global counter for affine parameters
+        
+        for term_idx, term in enumerate(terms):
+            # Find which input variables this term depends on
+            term_vars = list(term.free_symbols & set(input_vars))
             
-            if len(term_vars) == 1:
-                # Term uses single variable - multiply by its affine_a_i and add affine_d_i
-                var = list(term_vars)[0]
-                idx = input_vars.index(var)
-                a_i = Symbol(f'affine_a_{idx}')
-                d_i = Symbol(f'affine_d_{idx}')
-                result_terms.append(a_i * term + d_i)
-            elif len(term_vars) > 1:
-                # Term uses multiple variables - use the first variable's parameters
-                var = list(term_vars)[0]
-                idx = input_vars.index(var)
-                a_i = Symbol(f'affine_a_{idx}')
-                d_i = Symbol(f'affine_d_{idx}')
-                result_terms.append(a_i * term + d_i)
-            else:
-                # Constant term
+            if len(term_vars) == 0:
+                # Constant term - no transformation needed
                 result_terms.append(term)
+            else:
+                # Create substitution dictionary for this term's variables
+                subs_dict = {}
+                for var in term_vars:
+                    b_i = Symbol(f'affine_b_{param_counter}')
+                    c_i = Symbol(f'affine_c_{param_counter}')
+                    subs_dict[var] = b_i * var + c_i
+                    param_counter += 1
+                
+                # Apply substitution to this term
+                transformed_term = term.subs(subs_dict)
+                
+                # Add multiplicative and additive parameters
+                a_i = Symbol(f'affine_a_{term_idx}')
+                d_i = Symbol(f'affine_d_{term_idx}')
+                result_terms.append(a_i * transformed_term + d_i)
         
         result = sum(result_terms)
         return result
@@ -282,30 +271,32 @@ class SymbolicRegressorCBM(BaseModel):
                               values are dictionaries mapping output names to 
                               sympy equations.
         """
-
-        # Create input variables from concept names
-        input_vars = [Symbol(name) for name in self.c_names]
         
         # Apply affine transformation to each equation
-        transformed_equations = {}
-        for memory_idx, output_dict in equations.items():
-            transformed_equations[memory_idx] = {}
-            for output_name, equation in output_dict.items():
-                # Apply affine parameters to this equation
-                transformed_eq = self.add_affine_parameters(equation, input_vars)
-                
-                # Replace affine parameters with random values
-                randomized_eq, random_values = self.replace_affine_with_random(
-                    transformed_eq, 
-                    seed=42 + memory_idx * 100 + hash(output_name) % 100  # Deterministic but unique per equation
-                )
-                
-                transformed_equations[memory_idx][output_name] = simplify(randomized_eq)
-                
-                print(f"Memory {memory_idx}, Output '{output_name}':")
-                print(f"  Original:    {equation}")
-                print(f"  Transformed: {transformed_eq}")
-                print(f"  Randomized:  {randomized_eq}")
+        if self.task == 'classification':
+            # Create input variables from concept names
+            input_vars = [Symbol(name) for name in self.c_names]
+            transformed_equations = {}
+            for memory_idx, output_dict in equations.items():
+                transformed_equations[memory_idx] = {}
+                for output_name, equation in output_dict.items():
+                    # Apply affine parameters to this equation
+                    transformed_eq = self.add_affine_parameters(equation, input_vars)
+                    
+                    # Replace affine parameters with random values
+                    randomized_eq, random_values = self.replace_affine_with_random(
+                        transformed_eq, 
+                        seed=42 + memory_idx * 100 + hash(output_name) % 100  # Deterministic but unique per equation
+                    )
+                    
+                    transformed_equations[memory_idx][output_name] = simplify(randomized_eq)
+                    
+                    print(f"Memory {memory_idx}, Output '{output_name}':")
+                    print(f"  Original:    {equation}")
+                    print(f"  Transformed: {transformed_eq}")
+                    print(f"  Randomized:  {randomized_eq}")
+        else:
+            transformed_equations = equations
 
         self.predictor = SymbolicPredictor(
             equations=transformed_equations,

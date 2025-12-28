@@ -265,7 +265,7 @@ class Trainer:
         
         if model_name == 'sr_symbolic_cbm':
             # Higher LR for SR-Sym-CBM as there only few parameters in the predictor
-            fine_tune_lr = self.cfg.dataset.metadata.lr * 10 
+            fine_tune_lr = self.cfg.dataset.metadata.lr * 5 
         else:
             fine_tune_lr = self.cfg.dataset.metadata.lr
         

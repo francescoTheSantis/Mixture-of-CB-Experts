@@ -170,7 +170,7 @@ class Engine(pl.LightningModule):
         else:
             loss_name = "train_loss"
 
-        self.log(loss_name, loss.item())
+        self.log(loss_name, loss.item(), on_step=False, on_epoch=True, logger=True, prog_bar=True)
 
         y_hat_metrics, c_hat_metrics = self.model.filter_output_for_metrics(**model_output)
         # compute task metrics
@@ -197,7 +197,7 @@ class Engine(pl.LightningModule):
         else:
             loss_name = "val_loss"
 
-        self.log(loss_name, loss.item())
+        self.log(loss_name, loss.item(), on_step=False, on_epoch=True, logger=True, prog_bar=True)
 
         y_hat_metrics, c_hat_metrics = self.model.filter_output_for_metrics(**model_output)
         # compute task metrics
@@ -262,7 +262,7 @@ class Engine(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         self.model.phase = 'test'
         loss, model_output = self.shared_step(batch)
-        self.log("test_loss", loss.item())
+        self.log("test_loss", loss.item(), on_step=False, on_epoch=True, logger=True, prog_bar=True)
 
         y_hat_metrics, c_hat_metrics = self.model.filter_output_for_metrics(**model_output)
         # compute task metrics
@@ -342,10 +342,7 @@ class Engine(pl.LightningModule):
         for i in range(batch_size):
             prediction = predictions_np[i]
             y_true = y_true_np[i]
-            
-            # Determine if this is a single-output or multi-output task
-            is_multi_output = y_true.ndim > 0 and len(y_true) > 1
-            
+        
             # Get equation based on model type
             if self.model_name in ['LinearConceptEmbeddingModel']:
                 # Per-sample equations (already formatted)
@@ -354,33 +351,23 @@ class Engine(pl.LightningModule):
                 # Per-sample boolean rule explanations
                 equation = list(equations_per_sample[i].values())[0]
             else:
-                # Memory-based models with independent selection per output
-                if is_multi_output:
-                    # Multi-output task: store equations for all outputs
-                    eq_parts = []
-                    for out_idx, y_name in enumerate(self.y_name):
-                        memory_idx = selected_memory[i, out_idx].item()
-                        # Use pre-parsed equations for fast lookup
-                        eq_parts.append(parsed_equations.get((memory_idx, y_name), "N/A"))
-                    equation = "; ".join(eq_parts)
+                # Single-output task: store only the equation for the predicted class
+                if self.model.task == 'classification':
+                    # For classification, prediction is the predicted class index
+                    pred_class_idx = int(prediction) if prediction.ndim == 0 else int(prediction[0])
                 else:
-                    # Single-output task: store only the equation for the predicted class
-                    if self.model.task == 'classification':
-                        # For classification, prediction is the predicted class index
-                        pred_class_idx = int(prediction) if prediction.ndim == 0 else int(prediction[0])
-                    else:
-                        # For regression, we have a single output
-                        pred_class_idx = 0
-                    
-                    y_name = self.y_name[pred_class_idx] if len(self.y_name) > 1 else self.y_name[0]
-                    
-                    if self.model_name in ['BlackBox', 'ConceptEmbeddingModel', 'ConceptBottleneckModel']:
-                        memory_idx = 0  # No memory slots, use default
-                    else:
-                        memory_idx = selected_memory[i, pred_class_idx].item() if (len(self.y_name) > 1 and self.model.task == 'classification') else selected_memory[i].item()
-                    
-                    # Use pre-parsed equations for fast lookup
-                    equation = parsed_equations.get((memory_idx, y_name), "N/A")
+                    # For regression, we have a single output
+                    pred_class_idx = 0
+                
+                y_name = self.y_name[pred_class_idx] if len(self.y_name) > 1 else self.y_name[0]
+                
+                if self.model_name in ['BlackBox', 'ConceptEmbeddingModel', 'ConceptBottleneckModel']:
+                    memory_idx = 0  # No memory slots, use default
+                else:
+                    memory_idx = selected_memory[i, pred_class_idx].item() if (len(self.y_name) > 1 and self.model.task == 'classification') else selected_memory[i].item()
+                
+                # Use pre-parsed equations for fast lookup
+                equation = parsed_equations.get((memory_idx, y_name), "N/A")
 
             c_pred = c_pred_np[i] if c_pred_np is not None else None
 
