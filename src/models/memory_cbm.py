@@ -7,19 +7,7 @@ import torch
 
 
 class MemoryCBM(BaseModel):
-    """
-    Concept Bottleneck Model with Memory.
-    
-    This model routes inputs to different black box predictors based on a learned selector.
-    Unlike SymbolicRegressorCBM, it does NOT perform symbolic regression or fine-tuning.
-    
-    Architecture:
-    1. Encoder (from BaseModel) extracts latent representations
-    2. Concept bottleneck predicts concepts from latent
-    3. Selector routes each sample to a memory slot
-    4. Black box predictor makes final predictions based on concepts and selection
-    """
-    
+    """Standard Concept Bottleneck Model with a memory-augmented black box predictor."""
     def __init__(self, 
                  output_size,
                  c_names,
@@ -44,6 +32,7 @@ class MemoryCBM(BaseModel):
                  concept_penalty=1.0,
                  device='cpu',
                  l1_coeff=1e-3,
+                 threshold=1e-5,
                  **kwargs
                 ):
 
@@ -76,6 +65,8 @@ class MemoryCBM(BaseModel):
         self.mc_approx = mc_approx
         self.memory_size = memory_size
         self.l1_coeff = l1_coeff
+        self.threshold = threshold
+        self.phase = 'standard_training'
 
         # Instantiate the selector
         self.classifier_selector = SelectorModel(
@@ -104,19 +95,7 @@ class MemoryCBM(BaseModel):
         )
 
     def forward(self, input):
-        """
-        Forward pass through the model.
-        
-        Args:
-            input: Dictionary containing 'x', 'c', 'y'
-            
-        Returns:
-            Dictionary with:
-                - y_hat: predictions
-                - c_hat: predicted concepts
-                - selection_dist: selector distribution over memory slots
-                - sampled_memory_idxs: selected memory indices
-        """
+
         latent, x_concepts, c_true, int_idxs = self.encode(input)
 
         # Concept encoder and concept processing
@@ -139,23 +118,34 @@ class MemoryCBM(BaseModel):
         }
 
     def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):
-        """Compute the loss for training."""
+        """Standard CBM loss with L1 regularization on blackbox predictor weights."""
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
 
-        # L1 regularization on blackbox predictor weights
-        l1_norm = sum(p.abs().sum() for p in self.predictor.parameters())
-        loss += self.l1_coeff * l1_norm
+        if self.phase == 'standard_training':            
+            # L1 regularization on blackbox predictor weights
+            l1_norm = sum(p.abs().sum() for p in self.predictor.parameters())
+            loss += self.l1_coeff * l1_norm
 
         return loss
+
+    def cut_weights(self):
+        """Set to zero and freeze the weights of the blackbox predictor below a certain threshold."""
+        for param in self.predictor.parameters():
+            mask = (param.abs() > self.threshold).float()
+
+            # Zero out the masked weights
+            with torch.no_grad():
+                param.mul_(mask)
+
+            # Freeze only masked elements during backward
+            param.register_hook(lambda grad, mask=mask: grad * mask.to(grad.device))
+
+        # From now on we do not want to regularize the weights anymore
+        self.phase = 'frozen_weights'
     
-    def get_symbolic_equivalent(self, log_dir=None):
-        """
-        This model doesn't use symbolic regression, so we just return a placeholder.
-        This method is kept for compatibility with the evaluation pipeline.
-        """
-        if log_dir is not None:
-            import os
-            placeholder_file = os.path.join(log_dir, "no_symbolic_equations.txt")
-            with open(placeholder_file, "w") as f:
-                f.write("MemoryCBM uses black box predictors only.\n")
-                f.write("No symbolic equations are extracted.\n")
+    def get_symbolic_equivalent(self, memory_idx=None, return_equations=True):
+        """Get the symbolic equivalent of the memory CBM model."""
+        predictor_equations = self.predictor.memory_of_predictors[memory_idx].to_symbolic(
+            input_names=self.c_names
+        )
+        return predictor_equations

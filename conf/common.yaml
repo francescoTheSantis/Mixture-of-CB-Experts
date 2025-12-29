@@ -28,6 +28,10 @@ hard_concepts: True # If True, binary concepts are thresholded at 0.5 to obtain 
 # It controls whether the concept and task predictors are trained sequentially. If trained sequentially then True.
 disjoint_training: True
 
+## Regularization parameters
+L1_coeff: 1e-3
+threshold: 1e-5 # Thereshold below which predictor's parameters are set to zero.
+
 ## Shared Concept-embedding based model parameters
 embedding_size: 16
 

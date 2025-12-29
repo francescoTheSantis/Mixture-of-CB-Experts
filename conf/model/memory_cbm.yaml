@@ -11,7 +11,8 @@ params:
   mc_approx: 1
   selector_model: 'linear'  
   decay_rate: 'cosine'  
-  l1_coeff: 1e-3
+  l1_coeff: ${L1_coeff}
+  threshold: ${threshold}
 
 metadata:
   name: memory_cbm

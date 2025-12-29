@@ -201,16 +201,18 @@ def extract_memory_equations(model, model_name):
                     n_concepts = len(model.c_names)
                     for c_idx in range(n_concepts):
                         weight = weights_np[mem_idx, c_idx, out_idx]
-                        if abs(weight) > 1e-6:  # Only include non-zero terms
+                        if abs(weight) > 0.0:  # Only include non-zero terms
                             terms.append(f"{weight:.4f}*{model.c_names[c_idx]}")
                     
-                    # Add bias
+                    # Add bias only if non-zero
                     if model.bias == 'local':
                         bias_value = weights_np[mem_idx, -1, out_idx]
-                        terms.append(f"{bias_value:.4f}")
+                        if abs(bias_value) > 0.0:
+                            terms.append(f"{bias_value:.4f}")
                     elif model.bias == 'global':
                         bias_value = model.linear_memory_predictor.bias_params[out_idx].item()
-                        terms.append(f"{bias_value:.4f}")
+                        if abs(bias_value) > 0.0:
+                            terms.append(f"{bias_value:.4f}")
                     
                     eq_str = f"{y_name}: " + " + ".join(terms) if terms else f"{y_name}: 0"
                     eq_strs.append(eq_str)
@@ -247,6 +249,7 @@ def extract_memory_equations(model, model_name):
             # BlackBoxPredictor or not yet trained
             for mem_idx in range(getattr(model, 'memory_size', 1)):
                 equations[mem_idx] = "No symbolic equations (BlackBoxPredictor)"
+
     elif model_name == 'MemoryCBM':
         # Get the symbolic equivalent of each blackbox predictor
         for mem_idx in range(model.memory_size):

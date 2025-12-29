@@ -162,9 +162,14 @@ class LinearSymbolicCBM(BaseModel):
 
         return loss
 
-    def get_symbolic_equivalent(self, log_dir=None):
+    def get_symbolic_equivalent(self, log_dir=None, skip_zero_weights=True, threshold=0.0):
         """
         Returns the equation associated to the predictor of the model
+        
+        Args:
+            log_dir: Directory to store the equations
+            skip_zero_weights: If True, eliminates terms with weights below threshold
+            threshold: Threshold for skipping weights. Terms with abs(value) <= threshold will be skipped
         """
         
         # Return the most complex linear equation that can obtained after training (all concepts are relevant) 
@@ -176,11 +181,16 @@ class LinearSymbolicCBM(BaseModel):
         if log_dir is not None:
             memory_eq_dir = os.path.join(log_dir, "memory_slots")
             os.makedirs(memory_eq_dir, exist_ok=True)
-            self._store_memory_equations(memory_eq_dir)
+            self._store_memory_equations(memory_eq_dir, skip_zero_weights=skip_zero_weights, threshold=threshold)
 
-    def _store_memory_equations(self, dir):
+    def _store_memory_equations(self, dir, skip_zero_weights=True, threshold=0.0):
         """
         Store the linear equations associated to each memory slot.
+        
+        Args:
+            dir: Directory to store the equations
+            skip_zero_weights: If True, eliminates terms with weights below threshold
+            threshold: Threshold for skipping weights. Terms with abs(value) <= threshold will be skipped
         """
         # Get the equation parameters from memory
         equation_weights = self.linear_memory_predictor.equation_decoder(
@@ -211,24 +221,32 @@ class LinearSymbolicCBM(BaseModel):
                 # Store each output equation in this memory slot
                 for out_idx, y_name in enumerate(self.y_names):
                     # Build the symbolic expression
-                    expr = 0
+                    expr_terms = []
                     
                     # Add weighted concept terms
                     n_concepts = len(self.c_names)
                     for c_idx in range(n_concepts):
                         weight = weights_np[mem_idx, c_idx, out_idx]
-                        c_symbol = sp.Symbol(self.c_names[c_idx])
-                        expr += weight * c_symbol
+                        # Skip terms below threshold if enabled
+                        if not skip_zero_weights or abs(weight) > threshold:
+                            c_symbol = sp.Symbol(self.c_names[c_idx])
+                            expr_terms.append(weight * c_symbol)
                     
                     # Add bias if present
+                    bias_value = None
                     if self.bias == 'local':
                         # Local bias stored in the last parameter
                         bias_value = weights_np[mem_idx, -1, out_idx]
-                        expr += bias_value
                     elif self.bias == 'global':
                         # Global bias stored separately
                         bias_value = self.linear_memory_predictor.bias_params[out_idx].item()
-                        expr += bias_value
+                    
+                    # Add bias term if it passes the threshold
+                    if bias_value is not None and (not skip_zero_weights or abs(bias_value) > threshold):
+                        expr_terms.append(bias_value)
+                    
+                    # Build final expression
+                    expr = sum(expr_terms) if expr_terms else 0
                     
                     # Store in pickle format
                     store_eq(expr, mem_dir, idx=out_idx)
