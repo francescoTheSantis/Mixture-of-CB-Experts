@@ -85,7 +85,7 @@ class PriorSymbolicCBM(BaseModel):
             set_name = f'set{memory_idx}'
             symbolic_equations[set_name] = {}
             # Single task output per memory slot
-            eq_name = 'task0'
+            eq_name = self.y_names[0] 
             # Convert string equation to sympy expression if needed
             if isinstance(equation, str):
                 # Create local dict with concept names as symbols

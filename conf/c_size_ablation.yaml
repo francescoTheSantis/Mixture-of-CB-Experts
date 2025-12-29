@@ -12,9 +12,7 @@ hydra:
   sweeper:
     grid_params:
       seed: 1, 2, 3, 4, 5
-      model: sr_symbolic_cbm, lin_sym_cbm, cmr, dcr, licem, cem, cbm_linear
-      # The memory size fixed to 5 in order to have enough expressivity even for small concept sizes.
-      memory_size: 5
+      model: dcr, licem, cem
       concept_percentage: 0.2, 0.4, 0.6, 0.8, 1.0
 
     list_params:

@@ -8,7 +8,7 @@ params:
   concept_penalty: ${concept_penalty}
   int_prob: ${int_prob}
   embedding_size: ${embedding_size}
-  use_bias: False
+  use_bias: True
   weight_reg: 1e-4
   bias_reg: 1e-4
 

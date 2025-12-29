@@ -8,29 +8,27 @@ hydra:
   sweep:
       # This directory can be deleted as it only contains temporary files and the 
       # preprocessed data will be saved in the cache.
-      dir: output/memory_cls/${now:%Y-%m-%d_%H-%M-%S} 
+      dir: output/concept_size_ablation/${now:%Y-%m-%d_%H-%M-%S} 
   sweeper:
     grid_params:
-      model: lin_sym_cbm, cmr #, sr_sym_cbm
-      memory_size: 1, 2, 3, 4, 5, 10
       seed: 1, 2, 3, 4, 5
+      model: lin_sym_cbm, cmr #, sr_symbolic_cbm
+      # The memory size fixed to 5 in order to have enough expressivity even for small concept sizes.
+      memory_size: 2
+      concept_percentage: 0.2, 0.4, 0.6, 0.8, 1.0
 
     list_params:
       dataset: 
         - cub
-        - cub_incomplete
         - awa2
-        - awa2_incomplete
         - cifar10
         - cifar100
       img_backbone_name: 
         - facebook/dinov2-base
         - facebook/dinov2-base
-        - facebook/dinov2-base
-        - facebook/dinov2-base
         - google/vit-base-patch32-224-in21k
-        - google/vit-base-patch32-224-in21k
+        - google/vit-large-patch16-224-in21k
 
-disjoint_training: True
+disjoint_training: true
 
-note: "Memory" 
+note: "concept_size_ablation" 

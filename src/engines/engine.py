@@ -233,7 +233,7 @@ class Engine(pl.LightningModule):
                         self.cached_equations = {0: "; ".join(eq_strs)}
                     except (TypeError, AttributeError):
                         # Single output - not iterable
-                        self.cached_equations = {0: f"{self.y_name[0] if isinstance(self.y_name, list) else self.y_name}: {str(eq_result)}"}
+                        self.cached_equations = {0: f"{self.y_name[0]}: {str(eq_result)}"}
                     
                     pbar.set_description("Parsing equations")
                     # Parse the equations for fast lookup

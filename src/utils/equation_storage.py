@@ -247,6 +247,19 @@ def extract_memory_equations(model, model_name):
             # BlackBoxPredictor or not yet trained
             for mem_idx in range(getattr(model, 'memory_size', 1)):
                 equations[mem_idx] = "No symbolic equations (BlackBoxPredictor)"
+    elif model_name == 'MemoryCBM':
+        # Get the symbolic equivalent of each blackbox predictor
+        for mem_idx in range(model.memory_size):
+            eq_result = model.get_symbolic_equivalent(memory_idx=mem_idx, return_equations=True)
+            # For multi-output, eq_result is a list of equations
+            try:
+                # Try to iterate - if it's a list/tuple, this will work
+                eq_strs = [f"{model.y_names[i]}: {str(eq)}" for i, eq in enumerate(eq_result)]
+                equations[mem_idx] = "; ".join(eq_strs)
+            except (TypeError, AttributeError):
+                # Single output - not iterable
+                y_name = model.y_names[0] if isinstance(model.y_names, list) else model.y_names
+                equations[mem_idx] = f"{y_name}: {str(eq_result)}"
     
     elif model_name in ['BlackBox', 'ConceptEmbeddingModel']:
         # These should use cached equations set in on_test_start

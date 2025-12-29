@@ -79,13 +79,23 @@ def get_df_name(df):
     elif df=='feynman_I_15_10':
         return 'Feynman I.15.10'
 
+classes_x_dataset = {
+    'cub': 200,
+    'cub_incomplete': 200,
+    'awa2': 50,
+    'awa2_incomplete': 50,
+    'cifar10': 10,
+    'cifar100': 100,
+}
+
+
 #########################################
 ######### Data Extraction ###############
 #########################################
 
-def get_exp_from_path(paths):
+def get_exp_from_path(paths, sample_equations=False):
     from src.utils.complexity import compute_complexity
-    from sympy import sympify
+    from sympy import sympify, symbols
     
     # Collect all the experiments in the given paths
     exps_path = []
@@ -98,7 +108,7 @@ def get_exp_from_path(paths):
     performance = pd.DataFrame()
 
     # Iterate over all the experiments and collect the performance metrics and the config
-    for exp in exps_path:
+    for exp in tqdm(exps_path, desc="Processing experiments"):
         d = {}
         conf_file = os.path.join(exp, '.hydra/config.yaml')
         result_file = os.path.join(exp, 'logs/experiment_metrics/metrics.csv') 
@@ -135,64 +145,71 @@ def get_exp_from_path(paths):
                     else:
                         d['concept_acc'] = result['test/c/acc'].iloc[-1]
                 
-                # Compute complexity for equations if available
-                predictions_file = os.path.join(exp, 'logs/experiment_metrics/test_predictions_per_sample.csv')
-                if os.path.exists(predictions_file):
-                    try:
-                        df_pred = pd.read_csv(predictions_file)
-                        
-                        # Check if 'equation' column exists
-                        if 'equation' in df_pred.columns:
-                            # The variables of the equations are the concept names
-                            vars = [x.replace('c_pred_','') for x in df_pred.columns if 'c_pred' in x]
+                # Compute complexity for equations if available (skip for cem and blackbox)
+                if conf['model']['metadata']['name'] not in ['cem', 'blackbox']:
+                    predictions_file = os.path.join(exp, 'logs/experiment_metrics/test_predictions_per_sample.csv')
+                    if os.path.exists(predictions_file):
+                        try:
+                            df_pred = pd.read_csv(predictions_file)
                             
-                            # Count unique equations and their occurrences
-                            equation_counts = df_pred['equation'].value_counts().to_dict()
+                            # Check if 'equation' column exists
+                            if 'equation' in df_pred.columns:
+                                # The variables of the equations are the concept names
+                                vars = [x.replace('c_pred_','') for x in df_pred.columns if 'c_pred' in x]
+                                
+                                # Count unique equations and their occurrences
+                                equation_counts = df_pred['equation'].value_counts().to_dict()
 
-                            # Remove NaN or empty equations
-                            equation_counts = {eq: cnt for eq, cnt in equation_counts.items() if pd.notna(eq) and eq != ''}
+                                # Remove NaN or empty equations
+                                equation_counts = {eq: cnt for eq, cnt in equation_counts.items() if pd.notna(eq) and eq != ''}
 
-                            # Remove target from equations if present (e.g., "y: <equation>")
-                            cleaned_equation_counts = {}
-                            for eq, cnt in equation_counts.items():
-                                if ':' in eq:
-                                    cleaned_eq = eq.split(':')[1].strip()
-                                else:
-                                    cleaned_eq = eq
-                                # Sum counts if multiple equations clean to the same form
-                                if cleaned_eq in cleaned_equation_counts:
-                                    cleaned_equation_counts[cleaned_eq] += cnt
-                                else:
-                                    cleaned_equation_counts[cleaned_eq] = cnt
+                                if sample_equations and len(equation_counts) >= 10:
+                                    # Filter equation_counts to keep the top 10 most frequent equations
+                                    equation_counts = dict(sorted(equation_counts.items(), key=lambda item: item[1], reverse=True)[:10])
 
-                            # Compute complexity for each unique equation
-                            total_complexity = 0
-                            total_count = 0
-                            for equation_str, count in tqdm(cleaned_equation_counts.items(), desc=f"Computing complexity ({d['dataset']}/{d['model']}/seed{d['seed']})", leave=False):
-                                try:
-                                    # Convert string to sympy expression
-                                    equation = sympify(equation_str, locals={v: sympify(v) for v in vars})
-                                    
-                                    # Compute complexity
-                                    complexity = compute_complexity(equation, metric='visitation_length')
-                                    
-                                    # Weight by occurrence count
-                                    total_complexity += complexity * count
-                                    total_count += count
-                                except Exception as e:
-                                    print(f"Error processing equation '{equation_str}': {e}")
-                                    continue
+                                # Remove target from equations if present (e.g., "y: <equation>")
+                                cleaned_equation_counts = {}
+                                for eq, cnt in equation_counts.items():
+                                    if ':' in eq:
+                                        cleaned_eq = eq.split(':')[1].strip()
+                                    else:
+                                        cleaned_eq = eq
+                                    # Sum counts if multiple equations clean to the same form
+                                    if cleaned_eq in cleaned_equation_counts:
+                                        cleaned_equation_counts[cleaned_eq] += cnt
+                                    else:
+                                        cleaned_equation_counts[cleaned_eq] = cnt
 
-                                except Exception as e:
-                                    print(f"Error processing equation '{equation_str}': {e}")
-                                    continue
+                                # Compute complexity for each unique equation
+                                total_complexity = 0
+                                total_count = 0
+                                for equation_str, count in tqdm(cleaned_equation_counts.items(), desc=f"Computing complexity ({d['dataset']}/{d['model']}/seed{d['seed']})", leave=False):
+                                    try:
+                                        # Convert string to sympy expression
+                                        # Create proper symbols for all variables to avoid conflicts with built-in names
+                                        symbol_dict = {v: symbols(v) for v in vars}
+                                        equation = sympify(equation_str, locals=symbol_dict)
+                                        
+                                        # Compute complexity
+                                        complexity = compute_complexity(equation, metric='visitation_length')
+                                        
+                                        # Weight by occurrence count
+                                        total_complexity += complexity * count
+                                        total_count += count
+                                    except Exception as e:
+                                        print(f"Error processing equation '{equation_str}': {e}")
+                                        continue
 
-                            if total_count > 0:
-                                # Compute weighted average complexity
-                                d['complexity'] = total_complexity / total_count
-                                d['n_equations'] = total_count
-                    except Exception as e:
-                        print(f"Error computing complexity for {exp}: {e}")
+                                if total_count > 0:
+                                    # Compute weighted average complexity
+                                    d['complexity'] = total_complexity / total_count
+                                    d['n_equations'] = total_count
+                        except Exception as e:
+                            print(f"Error computing complexity for {exp}: {e}")
+                else:
+                    # Store NaN for blackbox and cem models
+                    d['complexity'] = np.nan
+                    d['n_equations'] = np.nan
                 
                 if d['model'] == 'linear_symbolic_cbm' and d['seed']==1:
                     expl_dict = d.copy()
@@ -267,41 +284,66 @@ def compute_avg_and_uncertainty(performance, custom_order):
     # Avg over the seeds for the performance metrics
     if 'task_acc' in performance.columns and 'task_mae' in performance.columns:
         # Handle both accuracy and MSE/MAE metrics
+        agg_dict_acc = {
+            'mean_task': ('task_acc', 'mean'),
+            'std_task': ('task_acc', 'std'),
+            'mean_concept': ('concept_acc', 'mean'),
+            'std_concept': ('concept_acc', 'std'),
+            'task_type': ('task_type', 'first')
+        }
+        if 'complexity' in performance.columns:
+            agg_dict_acc['mean_complexity'] = ('complexity', 'mean')
+            agg_dict_acc['std_complexity'] = ('complexity', 'std')
+        
         performance_acc = performance.dropna(subset=['task_acc']).groupby(['dataset', 'memory_size', 'model']).agg(
-            mean_task=('task_acc', 'mean'),
-            std_task=('task_acc', 'std'),
-            mean_concept=('concept_acc', 'mean'),
-            std_concept=('concept_acc', 'std'),
-            task_type=('task_type', 'first')
+            **agg_dict_acc
         ).reset_index()
         performance_acc['metric_type'] = 'accuracy'
         
-        performance_mse = performance.dropna(subset=['task_mae']).groupby(['dataset', 'memory_size', 'model']).agg(
-            mean_task=('task_mae', 'mean'),
-            std_task=('task_mae', 'std'),
-            mean_concept=('concept_mae', 'mean'),
-            std_concept=('concept_mae', 'std'),
-            task_type=('task_type', 'first')
-        ).reset_index()
-        performance_mse['metric_type'] = 'mae'
+        agg_dict_mae = {
+            'mean_task': ('task_mae', 'mean'),
+            'std_task': ('task_mae', 'std'),
+            'mean_concept': ('concept_mae', 'mean'),
+            'std_concept': ('concept_mae', 'std'),
+            'task_type': ('task_type', 'first')
+        }
+        if 'complexity' in performance.columns:
+            agg_dict_mae['mean_complexity'] = ('complexity', 'mean')
+            agg_dict_mae['std_complexity'] = ('complexity', 'std')
         
-        performance = pd.concat([performance_acc, performance_mse], ignore_index=True)
+        performance_mae = performance.dropna(subset=['task_mae']).groupby(['dataset', 'memory_size', 'model']).agg(
+            **agg_dict_mae
+        ).reset_index()
+        performance_mae['metric_type'] = 'mae'
+        
+        performance = pd.concat([performance_acc, performance_mae], ignore_index=True)
     else:
         # Fallback to original logic
         task_col = 'task_acc' if 'task_acc' in performance.columns else 'task_mae'
         concept_col = 'concept_acc' if 'concept_acc' in performance.columns else 'concept_mae'
+        agg_dict_fallback = {
+            'mean_task': (task_col, 'mean'),
+            'std_task': (task_col, 'std'),
+            'mean_concept': (concept_col, 'mean'),
+            'std_concept': (concept_col, 'std'),
+            'task_type': ('task_type', 'first')
+        }
+        if 'complexity' in performance.columns:
+            agg_dict_fallback['mean_complexity'] = ('complexity', 'mean')
+            agg_dict_fallback['std_complexity'] = ('complexity', 'std')
+        
         performance = performance.groupby(['dataset', 'memory_size', 'model']).agg(
-            mean_task=(task_col, 'mean'),
-            std_task=(task_col, 'std'),
-            mean_concept=(concept_col, 'mean'),
-            std_concept=(concept_col, 'std'),
-            task_type=('task_type', 'first')
+            **agg_dict_fallback
         ).reset_index()
         performance['metric_type'] = 'accuracy' if 'acc' in task_col else 'mae'
 
     # instead of the std compute the standard error at 95% confidence
     performance['se_task'] = 1.96 * performance['std_task'] / np.sqrt(num_seeds)
     performance['se_concept'] = 1.96 * performance['std_concept'] / np.sqrt(num_seeds)
+    
+    # Compute standard error for complexity if it exists
+    if 'std_complexity' in performance.columns:
+        performance['se_complexity'] = 1.96 * performance['std_complexity'] / np.sqrt(num_seeds)
 
     # Order the datasets according to custom_order and memory_size
     performance['dataset'] = pd.Categorical(performance['dataset'], categories=custom_order, ordered=True)
@@ -1117,24 +1159,23 @@ def filter_pareto_models(df: pd.DataFrame, fixed_memory: dict = None, custom_ord
 
     return filtered.reset_index(drop=True)
 
-def plot_pareto_front(performance, model_styles, title_font, label_font, tick_font, custom_order):
-
+def plot_pareto_front(performance, model_styles, title_font, label_font, tick_font, custom_order, complexity_type=False):
+    """
+    Plot Pareto front for model complexity vs accuracy.
+    
+    Parameters:
+    -----------
+    use_complexity_column : bool, default=False
+        If True, use the 'complexity' column directly from the dataframe.
+        If False, compute complexity as memory_size * operational_complexity.
+    """
     performance = compute_avg_and_uncertainty(performance, custom_order)
 
     # save the performance as csv
     performance.to_csv(os.path.join(table_path, 'memory_ablation_performance.csv'), index=False)
 
-    # Define operational complexity for each model
-    oc = { 
-        'licem': 2,
-        'dcr': 3,
-        'cmr': 3,
-        'linear_symbolic_cbm': 2,
-        'kan_symbolic_cbm': 7,
-    }
-
     # Filter out dcr and cmr for cub200, awa2, and cifar10 datasets
-    performance = performance[~((performance['dataset'].isin(['cub', 'awa2', 'cifar10'])) & (performance['model'].isin(['dcr', 'cmr'])))]
+    # performance = performance[~((performance['dataset'].isin(['cub', 'awa2', 'cifar10'])) & (performance['model'].isin(['dcr', 'cmr'])))]
 
     # Separate datasets by task type
     classification_datasets = performance[performance['task_type'] == 'classification']['dataset'].unique()
@@ -1176,11 +1217,28 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         
         # Compute complexity for each model
         data = data.copy()
-        data['complexity'] = data.apply(lambda row: row['memory_size'] * oc.get(row['model'], 1), axis=1)
+        data['has_infinity'] = False  # Initialize the column
+        
+        if complexity_type == 'oc' and 'mean_complexity' in data.columns:
+            # Use the 'complexity' column directly from the dataframe
+            pass  # data already has the complexity column
+        elif complexity_type == 'composed' and 'mean_complexity' in data.columns:
+            # Compute complexity as memory_size * operational_complexity from dataframe column
+            data['mean_complexity'] = data['memory_size'] * data['mean_complexity']
+            # Mark dcr and licem as having infinity complexity, then replace with large finite value
+            data['has_infinity'] = data['model'].isin(['dcr', 'licem'])
+            # Find max finite complexity to set infinity value appropriately
+            max_finite = data.loc[~data['has_infinity'], 'mean_complexity'].max()
+            infinity_value = max_finite * 100  # Use 100x the max as "infinity"
+            data.loc[data['has_infinity'], 'mean_complexity'] = infinity_value
+        else:
+            raise ValueError("Either complexity_type is not supported or required columns are missing in the dataframe.")
         
         # Get distinct complexities for this dataset (excluding cem and blackbox)
         pareto_data = data[~data['model'].isin(['cem', 'blackbox'])]
-        distinct_complexities = sorted(pareto_data['complexity'].unique())
+        distinct_complexities = sorted(pareto_data['mean_complexity'].unique())
+        infinity_complexity = data.loc[data.get('has_infinity', False), 'mean_complexity'].unique()
+        has_infinity_models = len(infinity_complexity) > 0
         
         # Collect all points for Pareto front calculation
         all_points = []
@@ -1198,22 +1256,28 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
             
             if model in ['cem', 'blackbox']:
                 # Plot as horizontal dotted lines for cem and blackbox
-                xlim = ax.get_xlim() if ax.get_xlim() != (0.0, 1.0) else (1, 1000)  # Default range if not set
+                xlim = ax.get_xlim() if ax.get_xlim() != (0.0, 1.0) else (1, 100000)  # Default range if not set
                 y_val = y_values.iloc[0]
                 
                 ax.axhline(y=y_val, color=model_styles[model]['color'], 
-                            linestyle=':', linewidth=2, alpha=0.8,
+                            linestyle='-.', linewidth=2.5, alpha=0.8,
                             label=model_styles[model]['name'])
                 
-                # Do not add uncertainty shading for blackbox and cem
+                # add uncertainty shading for blackbox and cem
+                y_err = y_errors.iloc[0]
+                ax.fill_between(xlim,
+                                y_val - y_err,
+                                y_val + y_err,
+                                color=model_styles[model]['color'],
+                                alpha=0.2)
                 
             else:
                 # Store points for Pareto front (excluding cem and blackbox)
-                for i, (complexity, y_val, y_err, memory_size) in enumerate(zip(model_data['complexity'], y_values, y_errors, model_data['memory_size'])):
+                for i, (complexity, y_val, y_err, memory_size) in enumerate(zip(model_data['mean_complexity'], y_values, y_errors, model_data['memory_size'])):
                     all_points.append((complexity, y_val, y_err, model, memory_size))
                 
                 # Plot each point with appropriate style
-                for i, (complexity, y_val, y_err, memory_size) in enumerate(zip(model_data['complexity'], y_values, y_errors, model_data['memory_size'])):
+                for i, (complexity, y_val, y_err, memory_size) in enumerate(zip(model_data['mean_complexity'], y_values, y_errors, model_data['memory_size'])):
                     # Use cbm_linear style if linear_symbolic_cbm has memory_size = 1
                     if model == 'linear_symbolic_cbm' and memory_size == 1:
                         plot_style = model_styles.get('cbm_linear', model_styles[model])
@@ -1290,9 +1354,7 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         ax.set_title(get_df_name(dataset), fontdict=title_font)
 
         if row==1:
-            ax.set_xlabel('Model Complexity', fontdict=label_font)
-        else:
-            ax.set_xlabel('')
+            ax.set_xlabel('Complexity', fontdict=label_font)
         
         # Set y-label only for the leftmost subplot in each row
         if col == 0:
@@ -1302,10 +1364,39 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         # Set x-axis to log scale
         ax.set_xscale('log')
 
-        # Set x-axis ticks to the actual complexity values
+        # Set x-axis ticks to 5 equally spaced values
         if distinct_complexities:
-            ax.set_xticks(distinct_complexities)
-            ax.set_xticklabels([str(int(c)) for c in distinct_complexities])
+            # Separate finite and infinity complexities
+            if has_infinity_models and infinity_complexity.size > 0:
+                inf_value = infinity_complexity[0]
+                finite_complexities = [c for c in distinct_complexities if c < inf_value]
+            else:
+                finite_complexities = distinct_complexities
+            
+            if finite_complexities:
+                min_c = min(finite_complexities)
+                max_c = max(finite_complexities)
+                
+                # Generate 5 equally spaced ticks in log space
+                if has_infinity_models:
+                    # Use 4 ticks for finite values and 1 for infinity
+                    log_min = np.log10(min_c)
+                    log_max = np.log10(max_c)
+                    tick_values = list(np.logspace(log_min, log_max, 4))
+                    tick_labels = [str(int(c)) for c in tick_values]
+                    # Add infinity tick at the actual infinity value position
+                    tick_values.append(inf_value)
+                    tick_labels.append('$\infty$')
+                    # Set x-axis limits to ensure infinity points are visible
+                    ax.set_xlim(min_c * 0.8, inf_value * 1.2)
+                else:
+                    log_min = np.log10(min_c)
+                    log_max = np.log10(max_c)
+                    tick_values = np.logspace(log_min, log_max, 5)
+                    tick_labels = [str(int(c)) for c in tick_values]
+                
+                ax.set_xticks(tick_values)
+                ax.set_xticklabels(tick_labels)
         
         ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
         ax.minorticks_off()
@@ -1360,7 +1451,7 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
 
     plt.tight_layout()
     
-    plt.savefig(os.path.join(result_figs, 'pareto_front.pdf'))
+    plt.savefig(os.path.join(result_figs, f'pareto_front_{complexity_type}.pdf'))
 
 
 def plot_intervention_memory_pareto_results(df, 
@@ -1821,8 +1912,9 @@ def show_symbolic_regression_results(
     create_latex_tables_from_csv(f'{table_dir}/sr_ablation_performance.csv', output_dir=table_dir)
 
 
-def compute_ted_metrics_for_sr_ablation(paths):
+def compute_ted_metrics_for_sr_ablation(paths, MEMORY_MODELS_LIST=['linear_symbolic_cbm', 'kan_symbolic_cbm','prior_symbolic_cbm']):
     """Compute Tree Edit Distance (TED) metrics for symbolic regression ablation experiments."""
+    
     import dill
     import pickle
     try:
@@ -1886,99 +1978,110 @@ def compute_ted_metrics_for_sr_ablation(paths):
     
     # Process each experiment group
     for (dataset_name, seed), models in tqdm(exp_groups.items(), desc="Processing experiment groups"):
-        # Find the prior_symbolic_cbm model for this dataset/seed
+        # Find the prior_symbolic_cbm model for this dataset/seed (ground truth)
         prior_model_path = models.get('prior_symbolic_cbm')
         
         if prior_model_path is None:
             print(f"Warning: No prior_symbolic_cbm found for dataset={dataset_name}, seed={seed}")
-            # Skip all models in this group since we need the prior as ground truth
             continue
         
-        # Load true equations from prior model's memory slots
-        prior_memory_dir = os.path.join(prior_model_path, 'logs/experiment_metrics/equations/memory_slots')
-        if not os.path.exists(prior_memory_dir):
-            print(f"Warning: No memory slots found for prior model at {prior_model_path}")
+        # Load true equations from prior model's predictions CSV
+        prior_predictions_file = os.path.join(prior_model_path, 'logs/experiment_metrics/test_predictions_per_sample.csv')
+        if not os.path.exists(prior_predictions_file):
+            print(f"Warning: No predictions file found for prior model at {prior_model_path}")
             continue
         
-        prior_memory_slots = [d for d in os.listdir(prior_memory_dir) if d.startswith('memory_slot_')]
-        
-        true_equations = []
-        for mem_slot in prior_memory_slots:
-            mem_slot_dir = os.path.join(prior_memory_dir, mem_slot)
-            eq_files = [f for f in os.listdir(mem_slot_dir) if f.startswith('equation_') and f.endswith('.pkl')]
+        try:
+            df_prior = pd.read_csv(prior_predictions_file)
             
-            for eq_file in eq_files:
-                eq_path = os.path.join(mem_slot_dir, eq_file)
-                try:
-                    with open(eq_path, 'rb') as f:
-                        eq = dill.load(f)
-                    true_equations.append(eq)
-                except Exception as e:
-                    print(f"Error loading prior equation from {eq_path}: {e}")
-                    continue
-        
-        if not true_equations:
-            print(f"Warning: No equations found in prior model for dataset={dataset_name}, seed={seed}")
-            continue
-        
-        # Convert true equations to trees once
-        weight_fn, rename_fn = make_costs()
-        true_trees = []
-        for eq in true_equations:
-            try:
-                tree = sympy_to_tree(eq, canonicalize_commutative=True, enforce_mul_for_add_terms=True)
-                true_trees.append(tree)
-            except Exception as e:
-                print(f"Error converting true equation to tree: {e}")
+            if 'equation' not in df_prior.columns:
+                print(f"Warning: 'equation' column not found in prior predictions")
                 continue
-        
-        if not true_trees:
+            
+            # Get concept variable names
+            prior_vars = [x.replace('c_pred_','') for x in df_prior.columns if 'c_pred' in x]
+            
+            # Get unique equations from prior model
+            true_equation_strs = []
+            for eq_str in df_prior['equation'].unique():
+                if pd.notna(eq_str) and eq_str != '':
+                    # Remove target prefix if present
+                    if ':' in eq_str:
+                        eq_str = eq_str.split(':')[1].strip()
+                    true_equation_strs.append(eq_str)
+            
+            if not true_equation_strs:
+                print(f"Warning: No equations found in prior model for dataset={dataset_name}, seed={seed}")
+                continue
+            
+            # Convert true equations to trees
+            weight_fn, rename_fn = make_costs()
+            true_trees = []
+            for eq_str in true_equation_strs:
+                try:
+                    equation = sympify(eq_str, locals={v: sympify(v) for v in prior_vars})
+                    tree = sympy_to_tree(equation, canonicalize_commutative=True, enforce_mul_for_add_terms=True)
+                    true_trees.append(tree)
+                except Exception as e:
+                    print(f"Error converting true equation '{eq_str}' to tree: {e}")
+                    continue
+            
+            if not true_trees:
+                print(f"Warning: Could not convert any true equations to trees for dataset={dataset_name}, seed={seed}")
+                continue
+            
+        except Exception as e:
+            print(f"Error loading prior equations from {prior_predictions_file}: {e}")
             continue
         
-        # Now process all other models in this group
+        # Now process models in MEMORY_MODELS_LIST for this dataset/seed
         for model_name, exp_path in models.items():
-            # Process prior_symbolic_cbm as well to show TED=0 as sanity check
+            # Only process models in the specified list
+            if model_name not in MEMORY_MODELS_LIST:
+                continue
             
             try:
-                # Find learned equations for this model
-                memory_slots_dir = os.path.join(exp_path, 'logs/experiment_metrics/equations/memory_slots')
-                if not os.path.exists(memory_slots_dir):
-                    print(f"No memory slots directory found for {exp_path}")
+                # Load learned equations from predictions CSV
+                predictions_file = os.path.join(exp_path, 'logs/experiment_metrics/test_predictions_per_sample.csv')
+                if not os.path.exists(predictions_file):
+                    print(f"No predictions file found for {exp_path}")
                     continue
                 
-                memory_slots = [d for d in os.listdir(memory_slots_dir) if d.startswith('memory_slot_')]
+                df_pred = pd.read_csv(predictions_file)
                 
-                # Load all learned equations from memory slots
-                learned_equations = []
-                for mem_slot in memory_slots:
-                    mem_slot_dir = os.path.join(memory_slots_dir, mem_slot)
-                    eq_files = [f for f in os.listdir(mem_slot_dir) if f.startswith('equation_') and f.endswith('.pkl')]
-                    
-                    for eq_file in eq_files:
-                        eq_path = os.path.join(mem_slot_dir, eq_file)
-                        try:
-                            with open(eq_path, 'rb') as f:
-                                eq = dill.load(f)
-                            learned_equations.append(eq)
-                        except Exception as e:
-                            print(f"Error loading equation from {eq_path}: {e}")
-                            continue
+                if 'equation' not in df_pred.columns:
+                    print(f"Warning: 'equation' column not found in predictions for {model_name}")
+                    continue
                 
-                if not learned_equations:
+                # Get concept variable names
+                vars = [x.replace('c_pred_','') for x in df_pred.columns if 'c_pred' in x]
+                
+                # Get unique learned equations
+                learned_equation_strs = []
+                for eq_str in df_pred['equation'].unique():
+                    if pd.notna(eq_str) and eq_str != '':
+                        # Remove target prefix if present
+                        if ':' in eq_str:
+                            eq_str = eq_str.split(':')[1].strip()
+                        learned_equation_strs.append(eq_str)
+                
+                if not learned_equation_strs:
                     print(f"No learned equations found for {exp_path}")
                     continue
                 
                 # Convert learned equations to trees
                 learned_trees = []
-                for eq in learned_equations:
+                for eq_str in learned_equation_strs:
                     try:
-                        tree = sympy_to_tree(eq, canonicalize_commutative=True, enforce_mul_for_add_terms=True)
+                        equation = sympify(eq_str, locals={v: sympify(v) for v in vars})
+                        tree = sympy_to_tree(equation, canonicalize_commutative=True, enforce_mul_for_add_terms=True)
                         learned_trees.append(tree)
                     except Exception as e:
-                        print(f"Error converting learned equation to tree: {e}")
+                        print(f"Error converting learned equation '{eq_str}' to tree: {e}")
                         continue
                 
                 if not learned_trees:
+                    print(f"Could not convert any learned equations to trees for {exp_path}")
                     continue
                 
                 # Compute TED matrix: rows = learned equations, cols = true equations
@@ -2034,257 +2137,189 @@ def compute_ted_metrics_for_sr_ablation(paths):
     
     # Create DataFrame
     results_df = pd.DataFrame(results)
-    return results_df
-
-
-def compute_equation_complexity_for_sr_ablation(paths, n_samples=None, random_seed=None):
-    """Compute complexity (visitation length) of learned equations for symbolic regression ablation."""
-    from src.utils.complexity import compute_complexity
-    from sympy import sympify
     
-    # Collect all experiment paths
-    exps_path = []
-    for path in paths:
-        experiment_dir = os.listdir(path)
-        for exp in experiment_dir:
-            exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
+    # Create equations dataframe for a randomly selected seed
+    equations_data = []
     
-    results = []
-    
-    # Process each experiment
-    for exp_path in tqdm(exps_path, desc="Processing experiments for complexity"):
+    if len(results_df) > 0:
+        # Get all available seeds
+        available_seeds = results_df['seed'].unique()
         
-        try:
-            # Load config to get dataset info, model, seed
-            config_file = os.path.join(exp_path, '.hydra/config.yaml')
-            if not os.path.exists(config_file):
-                continue
+        if len(available_seeds) > 0:
+            # Randomly select one seed
+            selected_seed = np.random.choice(available_seeds)
+            print(f"\nSelected seed {selected_seed} for equation collection")
+            
+            # Collect equations for the selected seed
+            for (dataset_name, seed), models in exp_groups.items():
+                if seed != selected_seed:
+                    continue
                 
-            with open(config_file, 'r') as f:
-                config = yaml.safe_load(f)
-            
-            dataset_name = config['dataset']['metadata']['name']
-            model_name = config['model']['metadata']['name']
-            seed = config['seed']
-            
-            # Read test_predictions_per_sample.csv
-            predictions_file = os.path.join(exp_path, 'logs/experiment_metrics/test_predictions_per_sample.csv')
-            if not os.path.exists(predictions_file):
-                # Skip experiments without predictions file
-                continue
-            
-            df = pd.read_csv(predictions_file)
-            
-            # Check if 'equation' column exists
-            if 'equation' not in df.columns:
-                print(f"Warning: 'equation' column not found in {predictions_file}")
-                continue
-
-            # The variables of the equations are the concept names
-            vars = [x.replace('c_pred_','') for x in df.columns if 'c_pred' in x]
-
-            # For those models there is a potentially different equation for each sample
-            if model_name in ['licem', 'dcr']:
-                # Compute complexity for each equation in the dataset
-                complexities = []
-                for idx, row in tqdm(df.iterrows(), total=len(df), desc=f"Processing equations ({dataset_name}/{model_name}/seed{seed})", leave=False):
-                    equation_str = row['equation']
-                    
-                    # Skip NaN or empty equations
-                    if pd.isna(equation_str) or equation_str == '':
+                # Process models in MEMORY_MODELS_LIST
+                for model_name, exp_path in models.items():
+                    if model_name not in MEMORY_MODELS_LIST:
                         continue
                     
-                    # Remove target from equation if present (e.g., "y: <equation>")
-                    if ':' in equation_str:
-                        equation_str = equation_str.split(':')[1].strip()
-
-                    # Convert string to sympy expression
-                    equation = sympify(equation_str, locals={v: sympify(v) for v in vars})
+                    try:
+                        # Load learned equations from predictions CSV
+                        predictions_file = os.path.join(exp_path, 'logs/experiment_metrics/test_predictions_per_sample.csv')
+                        if not os.path.exists(predictions_file):
+                            continue
+                        
+                        df_pred = pd.read_csv(predictions_file)
+                        
+                        if 'equation' not in df_pred.columns:
+                            continue
+                        
+                        # Get unique learned equations
+                        for eq_str in df_pred['equation'].unique():
+                            if pd.notna(eq_str) and eq_str != '':
+                                # Remove target prefix if present
+                                if ':' in eq_str:
+                                    cleaned_eq = eq_str.split(':')[1].strip()
+                                else:
+                                    cleaned_eq = eq_str
+                                
+                                equations_data.append({
+                                    'model': model_name,
+                                    'dataset': dataset_name,
+                                    'equation': cleaned_eq
+                                })
                     
-                    # Compute complexity
-                    complexity = compute_complexity(equation, metric='visitation_length')
-                    complexities.append(complexity)
-            else:
-                # List of unique equations and their correpsonding frequencies
-                equation_counts = df['equation'].value_counts().to_dict()
-
-                # Remove NaN or empty equations
-                equation_counts = {eq: cnt for eq, cnt in equation_counts.items() if pd.notna(eq) and eq != ''}
-
-                # Remove target from equations if present (e.g., "y: <equation>")
-                cleaned_equation_counts = {}
-                for eq, cnt in equation_counts.items():
-                    if ':' in eq:
-                        cleaned_eq = eq.split(':')[1].strip()
-                    else:
-                        cleaned_eq = eq
-                    cleaned_equation_counts[cleaned_eq] = cnt
-
-                # Compute complexity for each unique equation
-                complexities = []
-                for equation_str, count in tqdm(cleaned_equation_counts.items(), desc=f"Processing unique equations ({dataset_name}/{model_name}/seed{seed})", leave=False):
-                    # Convert string to sympy expression
-                    equation = sympify(equation_str, locals={v: sympify(v) for v in vars})
-                    
-                    # Compute complexity
-                    complexity = compute_complexity(equation, metric='visitation_length')
-                    
-                    # Append complexity 'count' times to account for frequency
-                    complexities.extend([complexity] * count)
-
-            if not complexities:
-                continue
-            
-            # Average complexity across all samples
-            avg_complexity = np.mean(complexities)
-            
-            results.append({
-                'dataset': dataset_name,
-                'model': model_name,
-                'seed': seed,
-                'complexity': avg_complexity,
-                'n_equations': len(complexities)
-            })
-            
-        except Exception as e:
-            print(f"Error processing experiment {exp_path}: {e}")
-            continue
-    
-    # Create DataFrame
-    results_df = pd.DataFrame(results)
-    
-    if len(results_df) == 0:
-        return results_df
-    
-    # Group by dataset and model, then average across seeds
-    summary_df = results_df.groupby(['dataset', 'model']).agg(
-        mean_complexity=('complexity', 'mean'),
-        std_complexity=('complexity', 'std'),
-        n_seeds=('seed', 'count')
-    ).reset_index()
-    
-    return summary_df
-
-
-def compare_equations_with_prior(paths, selected_seed=None):
-    """Compare equations learned by different models with the prior model's equations."""
-    from src.utils.complexity import compute_complexity
-    from sympy import sympify
-    
-    # Collect all experiment paths
-    exps_path = []
-    for path in paths:
-        experiment_dir = os.listdir(path)
-        for exp in experiment_dir:
-            exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
-    
-    results = []
-    for exp_path in tqdm(exps_path, desc="Processing experiments for complexity"):
-        equations = []
-        try:
-            # Load config to get dataset info, model, seed
-            config_file = os.path.join(exp_path, '.hydra/config.yaml')
-            if not os.path.exists(config_file):
-                continue
-                
-            with open(config_file, 'r') as f:
-                config = yaml.safe_load(f)
-            
-            dataset_name = config['dataset']['metadata']['name']
-            model_name = config['model']['metadata']['name']
-            seed = config['seed']
-            
-            # Read test_predictions_per_sample.csv
-            predictions_file = os.path.join(exp_path, 'logs/experiment_metrics/test_predictions_per_sample.csv')
-            if not os.path.exists(predictions_file):
-                # Skip experiments without predictions file
-                continue
-            
-            df = pd.read_csv(predictions_file)
-            
-            # Check if 'equation' column exists
-            if 'equation' not in df.columns:
-                print(f"Warning: 'equation' column not found in {predictions_file}")
-                continue
-
-            # The variables of the equations are the concept names
-            vars = [x.replace('c_pred_','') for x in df.columns if 'c_pred' in x]
-
-            # For those models there is a potentially different equation for each sample
-            if model_name in ['licem', 'dcr']:
-                # Compute complexity for each equation in the dataset
-                complexities = []
-                for idx, row in tqdm(df.iterrows(), total=len(df), desc=f"Processing equations ({dataset_name}/{model_name}/seed{seed})", leave=False):
-                    equation_str = row['equation']
-                    
-                    # Skip NaN or empty equations
-                    if pd.isna(equation_str) or equation_str == '':
+                    except Exception as e:
+                        print(f"Error collecting equations from {exp_path}: {e}")
                         continue
-                    
-                    # Remove target from equation if present (e.g., "y: <equation>")
-                    if ':' in equation_str:
-                        equation_str = equation_str.split(':')[1].strip()
+    
+    equations_df = pd.DataFrame(equations_data)
+    
+    return results_df, equations_df
 
-                    # Convert string to sympy expression
-                    equation = sympify(equation_str, locals={v: sympify(v) for v in vars})
-                    equations.append(equation)
-            else:
-                # List of unique equations and their correpsonding frequencies
-                equation_counts = df['equation'].value_counts().to_dict()
 
-                # Remove NaN or empty equations
-                equation_counts = {eq: cnt for eq, cnt in equation_counts.items() if pd.notna(eq) and eq != ''}
-
-                # Remove target from equations if present (e.g., "y: <equation>")
-                cleaned_equation_counts = {}
-                for eq, cnt in equation_counts.items():
-                    if ':' in eq:
-                        cleaned_eq = eq.split(':')[1].strip()
-                    else:
-                        cleaned_eq = eq
-                    cleaned_equation_counts[cleaned_eq] = cnt
-
-                # Compute complexity for each unique equation
-                complexities = []
-                for equation_str, count in tqdm(cleaned_equation_counts.items(), desc=f"Processing unique equations ({dataset_name}/{model_name}/seed{seed})", leave=False):
-                    # Convert string to sympy expression
-                    equation = sympify(equation_str, locals={v: sympify(v) for v in vars})
-                    
-                    # Compute complexity
-                    complexity = compute_complexity(equation, metric='visitation_length')
-                    
-                    # Append complexity 'count' times to account for frequency
-                    complexities.extend([complexity] * count)
-
-            if not complexities:
-                continue
+# def compute_equation_complexity_for_sr_ablation(paths, n_samples=None, random_seed=None):
+#     """Compute complexity (visitation length) of learned equations for symbolic regression ablation."""
+#     from src.utils.complexity import compute_complexity
+#     from sympy import sympify
+    
+#     # Collect all experiment paths
+#     exps_path = []
+#     for path in paths:
+#         experiment_dir = os.listdir(path)
+#         for exp in experiment_dir:
+#             exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
+    
+#     results = []
+    
+#     # Process each experiment
+#     for exp_path in tqdm(exps_path, desc="Processing experiments for complexity"):
+        
+#         try:
+#             # Load config to get dataset info, model, seed
+#             config_file = os.path.join(exp_path, '.hydra/config.yaml')
+#             if not os.path.exists(config_file):
+#                 continue
+                
+#             with open(config_file, 'r') as f:
+#                 config = yaml.safe_load(f)
             
-            # Average complexity across all samples
-            avg_complexity = np.mean(complexities)
+#             dataset_name = config['dataset']['metadata']['name']
+#             model_name = config['model']['metadata']['name']
+#             seed = config['seed']
             
-            results.append({
-                'dataset': dataset_name,
-                'model': model_name,
-                'seed': seed,
-                'complexity': avg_complexity,
-                'equations': equations
-            })
+#             # Read test_predictions_per_sample.csv
+#             predictions_file = os.path.join(exp_path, 'logs/experiment_metrics/test_predictions_per_sample.csv')
+#             if not os.path.exists(predictions_file):
+#                 # Skip experiments without predictions file
+#                 continue
             
-        except Exception as e:
-            print(f"Error processing experiment {exp_path}: {e}")
-            continue
+#             df = pd.read_csv(predictions_file)
+            
+#             # Check if 'equation' column exists
+#             if 'equation' not in df.columns:
+#                 print(f"Warning: 'equation' column not found in {predictions_file}")
+#                 continue
+
+#             # The variables of the equations are the concept names
+#             vars = [x.replace('c_pred_','') for x in df.columns if 'c_pred' in x]
+
+#             # For those models there is a potentially different equation for each sample
+#             if model_name in ['licem', 'dcr']:
+#                 # Compute complexity for each equation in the dataset
+#                 complexities = []
+#                 for idx, row in tqdm(df.iterrows(), total=len(df), desc=f"Processing equations ({dataset_name}/{model_name}/seed{seed})", leave=False):
+#                     equation_str = row['equation']
+                    
+#                     # Skip NaN or empty equations
+#                     if pd.isna(equation_str) or equation_str == '':
+#                         continue
+                    
+#                     # Remove target from equation if present (e.g., "y: <equation>")
+#                     if ':' in equation_str:
+#                         equation_str = equation_str.split(':')[1].strip()
+
+#                     # Convert string to sympy expression
+#                     equation = sympify(equation_str, locals={v: sympify(v) for v in vars})
+                    
+#                     # Compute complexity
+#                     complexity = compute_complexity(equation, metric='visitation_length')
+#                     complexities.append(complexity)
+#             else:
+#                 # List of unique equations and their correpsonding frequencies
+#                 equation_counts = df['equation'].value_counts().to_dict()
+
+#                 # Remove NaN or empty equations
+#                 equation_counts = {eq: cnt for eq, cnt in equation_counts.items() if pd.notna(eq) and eq != ''}
+
+#                 # Remove target from equations if present (e.g., "y: <equation>")
+#                 cleaned_equation_counts = {}
+#                 for eq, cnt in equation_counts.items():
+#                     if ':' in eq:
+#                         cleaned_eq = eq.split(':')[1].strip()
+#                     else:
+#                         cleaned_eq = eq
+#                     cleaned_equation_counts[cleaned_eq] = cnt
+
+#                 # Compute complexity for each unique equation
+#                 complexities = []
+#                 for equation_str, count in tqdm(cleaned_equation_counts.items(), desc=f"Processing unique equations ({dataset_name}/{model_name}/seed{seed})", leave=False):
+#                     # Convert string to sympy expression
+#                     equation = sympify(equation_str, locals={v: sympify(v) for v in vars})
+                    
+#                     # Compute complexity
+#                     complexity = compute_complexity(equation, metric='visitation_length')
+                    
+#                     # Append complexity 'count' times to account for frequency
+#                     complexities.extend([complexity] * count)
+
+#             if not complexities:
+#                 continue
+            
+#             # Average complexity across all samples
+#             avg_complexity = np.mean(complexities)
+            
+#             results.append({
+#                 'dataset': dataset_name,
+#                 'model': model_name,
+#                 'seed': seed,
+#                 'complexity': avg_complexity,
+#                 'n_equations': len(complexities)
+#             })
+            
+#         except Exception as e:
+#             print(f"Error processing experiment {exp_path}: {e}")
+#             continue
     
-    # Create DataFrame
-    results_df = pd.DataFrame(results)
+#     # Create DataFrame
+#     results_df = pd.DataFrame(results)
     
-    if len(results_df) == 0:
-        return results_df
+#     if len(results_df) == 0:
+#         return results_df
     
-    # Group by dataset and model, then average across seeds
-    summary_df = results_df.groupby(['dataset', 'model']).agg(
-        mean_complexity=('complexity', 'mean'),
-        std_complexity=('complexity', 'std'),
-        n_seeds=('seed', 'count')
-    ).reset_index()
+#     # Group by dataset and model, then average across seeds
+#     summary_df = results_df.groupby(['dataset', 'model']).agg(
+#         mean_complexity=('complexity', 'mean'),
+#         std_complexity=('complexity', 'std'),
+#         n_seeds=('seed', 'count')
+#     ).reset_index()
     
-    return summary_df
+#     return summary_df
+

@@ -1,0 +1,17 @@
+defaults:
+  - common
+  - _self_
+  
+params:
+  _target_: "src.models.memory_cbm.MemoryCBM"
+  task_penalty: ${task_penalty}
+  concept_penalty: ${concept_penalty}
+  int_prob: ${int_prob}
+  memory_size: ${memory_size}
+  mc_approx: 1
+  selector_model: 'linear'  
+  decay_rate: 'cosine'  
+  l1_coeff: 1e-3
+
+metadata:
+  name: memory_cbm

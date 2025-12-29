@@ -40,7 +40,7 @@ class MLPEncoder(BaseEncoder):
             x = self.input_transform(x)
         return self.mlp(x)
     
-    def to_symbolic(self):
+    def to_symbolic(self, input_names=None):
         """
         Generates a symbolic expression (SymPy object) representing
         the forward computation of the MLP as scalar equations.

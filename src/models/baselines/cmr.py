@@ -230,8 +230,10 @@ class ConceptMemoryReasoner(BaseModel):
 
         y_per_rule = (eps / 2 + y_per_rule * (1 - eps/2))
 
-        assert (y_per_rule < 1.0).all(), "y_per_rule should be in [0, 1]"
-        assert (y_per_rule > 0.0).all(), "y_per_rule should be in [0, 1]"
+        y_per_rule = y_per_rule.clamp(min=0.0+eps, max=1.0-eps)
+
+        assert (y_per_rule <= 1.0).all(), "y_per_rule should be in [0, 1]"
+        assert (y_per_rule >= 0.0).all(), "y_per_rule should be in [0, 1]"
 
         # performing a conj while iterating over concepts of y_per_rule
         y_per_rule = semantic.conj(

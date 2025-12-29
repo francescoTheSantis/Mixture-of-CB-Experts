@@ -119,13 +119,32 @@ def main():
     ]
  
     try:
-        performance, _ = get_exp_from_path(paths)
+        performance, _ = get_exp_from_path(paths, sample_equations=True)
         # Filter the performance dataframe to keep only the models in model_styles 
         # and datasets in custom_order.
-        performance = performance[performance['model'].isin(model_styles.keys()) & \
-                                performance['dataset'].isin(custom_order)]
+        performance = performance[performance['model'].isin(model_styles.keys()) & performance['dataset'].isin(custom_order)]
         
         show_symbolic_regression_results(performance, custom_order, table_path)
+
+        # Compute equation complexity metrics
+        print("\nComputing equation complexity metrics...")
+
+        complexity_results = performance[['dataset', 'model', 'seed', 'complexity', 'n_equations']].copy()
+        complexity_csv_path = os.path.join(table_path, 'sr_ablation', 'complexity_metrics.csv')
+        complexity_results.to_csv(complexity_csv_path, index=False)
+        print(f"Complexity metrics saved to {complexity_csv_path}")
+        print(f"Complexity results summary:\n{complexity_results}")
+
+        # Compute Tree Edit Distance (TED) metrics
+        print("\nComputing Tree Edit Distance (TED) metrics...")
+        ted_results, equations_df = compute_ted_metrics_for_sr_ablation(paths)
+        ted_csv_path = os.path.join(table_path, 'sr_ablation', 'ted_metrics.csv')
+        ted_results.to_csv(ted_csv_path, index=False)
+        print(f"TED metrics saved to {ted_csv_path}")
+        print(f"TED results summary:\n{ted_results.groupby(['dataset', 'model'])['avg_ted'].agg(['mean', 'std', 'count'])}")
+        equations_csv_path = os.path.join(table_path, 'sr_ablation', 'equations.csv')
+        equations_df.to_csv(equations_csv_path, index=False)
+        print(f"Learned equations saved to {equations_csv_path}")
 
         # Now plot intervention results with noise=0.0
         performance = get_intervention_from_path(paths, filtered_exps=None)
@@ -147,31 +166,6 @@ def main():
                                     model_styles=model_styles,
                                     relative_accuracy=False,
                                     out_dir=f'{result_figs}/sr_ablation')
-
-        # Compute equation complexity metrics
-        print("\nComputing equation complexity metrics...")
-        complexity_results = compute_equation_complexity_for_sr_ablation(paths, n_samples=1)
-        complexity_csv_path = os.path.join(table_path, 'sr_ablation', 'complexity_metrics.csv')
-        complexity_results.to_csv(complexity_csv_path, index=False)
-        print(f"Complexity metrics saved to {complexity_csv_path}")
-        print(f"Complexity results summary:\n{complexity_results}")
-
-        # Compare equations with prior model
-        print("\nComparing learned equations with prior model...")
-        equation_comparison = compare_equations_with_prior(paths)
-        equation_comparison_csv_path = os.path.join(table_path, 'sr_ablation', 'equation_comparison.csv')
-        equation_comparison.to_csv(equation_comparison_csv_path, index=False)
-        print(f"Equation comparison saved to {equation_comparison_csv_path}")
-        if len(equation_comparison) > 0:
-            print(f"Compared {len(equation_comparison)} equations across {equation_comparison['dataset'].nunique()} datasets")
-    
-        # Compute Tree Edit Distance (TED) metrics
-        print("\nComputing Tree Edit Distance (TED) metrics...")
-        ted_results = compute_ted_metrics_for_sr_ablation(paths)
-        ted_csv_path = os.path.join(table_path, 'sr_ablation', 'ted_metrics.csv')
-        ted_results.to_csv(ted_csv_path, index=False)
-        print(f"TED metrics saved to {ted_csv_path}")
-        print(f"TED results summary:\n{ted_results.groupby(['dataset', 'model'])['avg_ted'].agg(['mean', 'std', 'count'])}")
 
     except Exception as e:
         print(f"Error occurred while plotting Symbolic Regression ablation results: {e}")
@@ -203,7 +197,7 @@ def main():
     ]
 
     try:
-        performance, _ = get_exp_from_path(paths)
+        performance, _ = get_exp_from_path(paths, sample_equations=True)
 
         # Count number of seeds
         seeds_count = performance.groupby(['dataset', 'model', 'memory_size'])['seed'].nunique().reset_index()
@@ -225,7 +219,7 @@ def main():
             custom_order
         )
 
-        # OP Complexity vs accuracy
+        # Operational Complexity vs accuracy
         plot_pareto_front(
             performance, 
             model_styles, 
@@ -233,7 +227,7 @@ def main():
             label_font, 
             tick_font, 
             custom_order, 
-            complexity_type='op',
+            complexity_type='oc',
         )
 
         # Composed Complexity vs accuracy

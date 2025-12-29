@@ -91,7 +91,7 @@ def main(cfg: DictConfig) -> None:
     # Train the model
     trainer.train(loaded_train, loaded_val)
 
-    ###### Fine-tuning for symbolic cmr (kan implementation) model ######
+    ###### Fine-tuning for symbolic models ######
     if cfg.model.metadata.name in ['kan_symbolic_cbm', 'sr_symbolic_cbm']:
         # Phase 1: Allow symbolic execution
         print("\n" + "="*70)
