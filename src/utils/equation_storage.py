@@ -263,24 +263,6 @@ def extract_memory_equations(model, model_name):
                 # Single output - not iterable
                 y_name = model.y_names[0] if isinstance(model.y_names, list) else model.y_names
                 equations[mem_idx] = f"{y_name}: {str(eq_result)}"
-    
-    elif model_name in ['BlackBox', 'ConceptEmbeddingModel']:
-        # These should use cached equations set in on_test_start
-        # This is a fallback for when caching is not available
-        try:
-            eq_result = model.get_symbolic_equivalent(return_equations=True)
-            # For multi-output, eq_result is a list of equations
-            try:
-                # Try to iterate - if it's a list/tuple, this will work
-                eq_strs = [f"{model.y_names[i]}: {str(eq)}" for i, eq in enumerate(eq_result)]
-                equations[0] = "; ".join(eq_strs)
-            except (TypeError, AttributeError):
-                # Single output - not iterable
-                y_name = model.y_names[0] if isinstance(model.y_names, list) else model.y_names
-                equations[0] = f"{y_name}: {str(eq_result)}"
-        except Exception as e:
-            equations[0] = f"Error extracting equation: {str(e)}"
-    
     else:
         # Other models - no memory-based equations
         equations[0] = f"Model {model_name} does not use memory-based equations"

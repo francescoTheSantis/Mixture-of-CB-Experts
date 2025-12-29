@@ -218,7 +218,12 @@ class Engine(pl.LightningModule):
         """Called at the start of testing. Cache expensive equation extractions."""
         print("\n[Test Setup] Caching equations for fast storage...")
         # Cache equations for models that use get_symbolic_equivalent
-        if self.model_name in ['BlackBox', 'ConceptEmbeddingModel', 'ConceptBottleneckModel']:
+        if self.model_name in ['BlackBox', 'ConceptEmbeddingModel']:
+            # For BlackBox and ConceptEmbeddingModel, store NaN instead of extracting equations
+            self.cached_equations = {0: "NaN"}
+            self.cached_parsed_equations = {(0, y_name): "NaN" for y_name in self.y_name}
+            print(f"✓ Set equations to NaN for {self.model_name}")
+        elif self.model_name == 'ConceptBottleneckModel':
             try:
                 with tqdm(total=2, desc="Extracting equations", leave=False) as pbar:
                     pbar.set_description("Extracting symbolic equations")

@@ -92,7 +92,7 @@ def main(cfg: DictConfig) -> None:
     trainer.train(loaded_train, loaded_val)
 
     ###### Fine-tuning for symbolic models ######
-    if cfg.model.metadata.name in ['kan_symbolic_cbm', 'sr_symbolic_cbm']:
+    if cfg.model.metadata.name in ['kan_symbolic_cbm', 'sr_symbolic_cbm', 'memory_cbm']:
         # Phase 1: Allow symbolic execution
         print("\n" + "="*70)
         print("PHASE 1: Allow symbolic execution")
