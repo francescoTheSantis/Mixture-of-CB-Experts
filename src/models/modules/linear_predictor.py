@@ -38,6 +38,7 @@ class LinearPredictor(nn.Module):
                  y_names,
                  bias='global',
                  activation='ReLU',
+                 threshold=1e-3,
                  ):
         super(LinearPredictor, self).__init__()
 
@@ -46,6 +47,8 @@ class LinearPredictor(nn.Module):
         self.c_names = c_names
         self.bias = bias
         self.y_names = y_names
+        self.threshold = threshold
+        self.stage = 'training'
 
         # check bias
         if self.bias not in ['global', 'local', None]:
@@ -76,12 +79,18 @@ class LinearPredictor(nn.Module):
         # Reshape to: (memory_size, parameters, n_classes)
         equation_weights = equation_weights.view(self.memory_size, len(self.parameters), len(self.y_names))
 
-        # Adding batch dimension to concept memory
+        # Adding batch dimension to concept memory: (batch_size, memory_size, parameters, n_classes)
         equation_weights = equation_weights.unsqueeze(dim=0).expand(bsz, -1, -1, -1)
 
+        if self.stage == 'fine_tuning':
+            reshaped_mask = self.mask.view(self.memory_size, len(self.parameters), len(self.y_names)) # Reshape to match equation_weights
+            reshaped_mask = reshaped_mask.unsqueeze(dim=0).expand(bsz, -1, -1, -1) # Add batch dimension
+            reshaped_mask = reshaped_mask.to(equation_weights.device) # Move to the correct device
+            # Zero out the masked weights and the respective gradients
+            equation_weights = equation_weights * reshaped_mask
+
         # Get the weights to generate the explanation
-        predicted_weights = self.get_weights_for_explanation(equation_weights, 
-                                                             prob_per_classifier)
+        predicted_weights = self.get_weights_for_explanation(equation_weights, prob_per_classifier)
 
         # Execute the linear equations stored in memory by performing the dot product 
         # among the input concepts and the weights of the linear equations.

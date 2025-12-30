@@ -10,6 +10,7 @@ import torch
 import os
 import random
 from sympy import Symbol, Add, simplify, sympify
+import tqdm
 
 binary_operators = ["*", "+", "-", "/"]
 unary_operators = ["sin", "cos", "exp", "log", "tan", "tanh"]
@@ -186,7 +187,7 @@ class SymbolicRegressorCBM(BaseModel):
             'sampled_memory_idxs': selector_probs
         }
         
-    def add_affine_parameters(self, expr, input_vars):
+    def add_affine_parameters(self, expr, input_vars_set):
         """
         Transform expression with affine parameters for each term.
         Each term gets its own set of affine parameters: affine_a_i, affine_b_j, affine_c_j, affine_d_i
@@ -194,21 +195,22 @@ class SymbolicRegressorCBM(BaseModel):
         
         Example: x0^2 + x0 → affine_a_0*(affine_b_0*x0+affine_c_0)^2 + affine_d_0 + affine_a_1*(affine_b_1*x0+affine_c_1) + affine_d_1
         """
-        # Convert to SymPy expression if it's a plain number
-        expr = sympify(expr)
+        # Convert to SymPy expression if it's a plain number (only if needed)
+        if not hasattr(expr, 'free_symbols'):
+            expr = sympify(expr)
         
         # Split into additive terms
         if isinstance(expr, Add):
-            terms = list(expr.args)
+            terms = expr.args  # Use tuple directly instead of converting to list
         else:
-            terms = [expr]
+            terms = (expr,)
         
         result_terms = []
         param_counter = 0  # Global counter for affine parameters
         
         for term_idx, term in enumerate(terms):
-            # Find which input variables this term depends on
-            term_vars = list(term.free_symbols & set(input_vars))
+            # Find which input variables this term depends on (use pre-computed set)
+            term_vars = term.free_symbols & input_vars_set
             
             if len(term_vars) == 0:
                 # Constant term - no transformation needed
@@ -230,7 +232,7 @@ class SymbolicRegressorCBM(BaseModel):
                 d_i = Symbol(f'affine_d_{term_idx}')
                 result_terms.append(a_i * transformed_term + d_i)
         
-        result = sum(result_terms)
+        result = Add(*result_terms) if len(result_terms) > 1 else result_terms[0]
         return result
     
     def replace_affine_with_random(self, expr, seed=None, min_val=-2.0, max_val=2.0):
@@ -244,23 +246,28 @@ class SymbolicRegressorCBM(BaseModel):
             max_val: Maximum value for random numbers
         
         Returns:
-            tuple: (Expression with affine parameters replaced, dict of substitutions)
+            Expression with affine parameters replaced by random values
         """
         if seed is not None:
             random.seed(seed)
         
-        # Find all affine parameter symbols
-        all_symbols = expr.free_symbols
-        affine_symbols = sorted([s for s in all_symbols if str(s).startswith('affine_')], 
-                               key=str)
+        # Find all affine parameter symbols using faster filtering
+        affine_symbols = [s for s in expr.free_symbols if str(s).startswith('affine_')]
         
-        # Create substitution dictionary with random values
+        # Early return if no affine symbols
+        if not affine_symbols:
+            return expr
+        
+        # Sort for deterministic behavior
+        affine_symbols.sort(key=str)
+        
+        # Create substitution dictionary with random values (single pass)
         subs_dict = {sym: random.uniform(min_val, max_val) for sym in affine_symbols}
         
         # Apply substitution
         result = expr.subs(subs_dict)
         
-        return result, subs_dict
+        return result
 
     def symbolic_substitution(self, equations):
         """
@@ -274,27 +281,25 @@ class SymbolicRegressorCBM(BaseModel):
         
         # Apply affine transformation to each equation
         if self.task == 'classification':
-            # Create input variables from concept names
-            input_vars = [Symbol(name) for name in self.c_names]
+            # Create input variables from concept names (as a set for O(1) lookups)
+            input_vars_set = {Symbol(name) for name in self.c_names}
             transformed_equations = {}
+            
             for memory_idx, output_dict in equations.items():
                 transformed_equations[memory_idx] = {}
-                for output_name, equation in output_dict.items():
+                for output_name, equation in tqdm.tqdm(output_dict.items()):
                     # Apply affine parameters to this equation
-                    transformed_eq = self.add_affine_parameters(equation, input_vars)
+                    transformed_eq = self.add_affine_parameters(equation, input_vars_set)
                     
                     # Replace affine parameters with random values
-                    randomized_eq, random_values = self.replace_affine_with_random(
+                    randomized_eq = self.replace_affine_with_random(
                         transformed_eq, 
                         seed=42 + memory_idx * 100 + hash(output_name) % 100  # Deterministic but unique per equation
                     )
                     
-                    transformed_equations[memory_idx][output_name] = simplify(randomized_eq)
-                    
-                    print(f"Memory {memory_idx}, Output '{output_name}':")
-                    print(f"  Original:    {equation}")
-                    print(f"  Transformed: {transformed_eq}")
-                    print(f"  Randomized:  {randomized_eq}")
+                    # CRITICAL OPTIMIZATION: Remove simplify() call - it's very slow and unnecessary 
+                    # after numerical substitution. The expression is already in a usable form.
+                    transformed_equations[memory_idx][output_name] = randomized_eq
         else:
             transformed_equations = equations
 

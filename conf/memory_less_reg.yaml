@@ -14,4 +14,6 @@ hydra:
 
 disjoint_training: True
 
+gpus: [0]
+
 note: "Memory-less-reg" 

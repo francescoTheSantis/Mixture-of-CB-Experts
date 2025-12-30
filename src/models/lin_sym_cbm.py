@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch_concepts.nn as pyc_nn
 from src.models.baselines.base import BaseModel
@@ -34,6 +35,7 @@ class LinearSymbolicCBM(BaseModel):
                  bias=None,
                  disjoint_training=False,
                  concept_penalty=1.0,
+                 threshold=1e-3,
                  **kwargs
                  ):
 
@@ -61,6 +63,8 @@ class LinearSymbolicCBM(BaseModel):
         self.has_concepts = True
         self.y_names = list(y_names)
         self.weight_reg = weight_reg
+        self.stage = 'training'
+        self.threshold = threshold
 
         self.mc_approx = mc_approx
         self.memory_size = memory_size
@@ -102,6 +106,7 @@ class LinearSymbolicCBM(BaseModel):
             bias=self.bias,
             y_names=y_names,
             activation=activation,
+            threshold=threshold,
         )
 
     def forward(self, input):
@@ -135,6 +140,17 @@ class LinearSymbolicCBM(BaseModel):
             'selection_dist': selection_dist
         }
         
+    def cut_weights(self):
+        """Set to zero and freeze the weights of the linear predictor below a certain threshold."""
+        self.stage = 'fine_tuning'
+        self.linear_memory_predictor.stage = 'fine_tuning'
+
+        # Generate the mask for the parameters in memory
+        memory_params = self.linear_memory_predictor.equation_decoder(
+            self.linear_memory_predictor.equation_memory.weight
+        )
+        self.linear_memory_predictor.mask = (memory_params.abs() > self.threshold).float()
+        
     def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
 
@@ -153,12 +169,13 @@ class LinearSymbolicCBM(BaseModel):
             weights = params
             bias = self.linear_memory_predictor.bias_params
 
-        # L1 Regularization over weights
-        loss += self.weight_reg * weights.abs().sum()
+        if self.stage == 'training':
+            # L1 Regularization over weights
+            loss += self.weight_reg * weights.abs().sum()
 
-        # L2 regularization over the bias
-        if bias != None:
-            loss += self.weight_reg * bias.pow(2).sum()
+            # L2 regularization over the bias
+            if bias != None:
+                loss += self.weight_reg * bias.pow(2).sum()
 
         return loss
 

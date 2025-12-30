@@ -5,12 +5,17 @@ import scienceplots
 import warnings
 import os
 import yaml
+import hashlib
 from plot_utils import *
 
 # I used scienceplots for the style of the plots, but you can use any other style you want.
 warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
+######### Paths to load results #########
+output_path = 'archived_outputs'
+
+######### Paths to save results #########
 result_figs = "results/figs"
 table_path = "results/tabs"
 
@@ -71,10 +76,11 @@ model_styles = {
     'blackbox': {'marker': 'o', 'name': 'BlackBox', 'color': "black", 'size': marker_size},
     'cbm_linear': {'marker': '^', 'name': 'CBM', 'color': 'tab:orange', 'size': marker_size},
     'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:red', 'size': marker_size},
-    'kan_symbolic_cbm': {'marker': 'X', 'name': 'Kan-Sym-CBM', 'color': 'tab:orange', 'size': marker_size},
-    'linear_symbolic_cbm': {'marker': 's', 'name': 'Lin-Sym-CBM', 'color': 'tab:green', 'size': marker_size},
-    'sr_symbolic_cbm': {'marker': 'o', 'name': 'SR-Sym-CBM', 'color': 'tab:green', 'size': marker_size},
-    'prior_symbolic_cbm': {'marker': '*', 'name': 'Prior-Sym-CBM', 'color': 'tab:cyan', 'size': marker_size},
+    'kan_symbolic_cbm': {'marker': 'X', 'name': 'Kan-Mem-CBM', 'color': 'tab:orange', 'size': marker_size},
+    'linear_symbolic_cbm': {'marker': 's', 'name': 'Lin-Mem-CBM', 'color': 'tab:green', 'size': marker_size},
+    'sr_symbolic_cbm': {'marker': 'o', 'name': 'Sym-Mem-CBM', 'color': 'tab:green', 'size': marker_size},
+    'prior_symbolic_cbm': {'marker': '*', 'name': 'Prior-Mem-CBM', 'color': 'tab:cyan', 'size': marker_size},
+    'memory_cbm': {'marker': 'P', 'name': 'MLP-Mem-CBM', 'color': colors[0], 'size': marker_size},
     'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:brown', 'size': marker_size},
     'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
     'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:purple', 'size': marker_size},
@@ -88,12 +94,18 @@ tick_font = {'size': 28}
 
 # Number of mechanisms of each dataset for which those are known
 fixed_memory={
-                'dsprites_simple': 1, 
-                'mnist_arithmetic': 4,
-                'dsprites_complex': 3,
-                'pendulum': 1,
-                'mawps': 4,
-            }
+    'feynman_I_6_2': 1,
+    'feynman_I_9_18': 1,
+    'feynman_I_12_1': 1,
+    'feynman_I_13_4': 1,
+    'feynman_I_14_3': 1,
+    'feynman_I_15_10': 1,
+    'dsprites_simple': 1, 
+    'mnist_arithmetic': 4,
+    'dsprites_complex': 3,
+    'pendulum': 1,
+    'mawps': 4,
+}
 
 def main():
 
@@ -114,12 +126,12 @@ def main():
     # 3. compute the similarity between the learned expressions and the ground truth ones
 
     paths = [
-        "output/sr_ablation",
-        "output/prior_reg",
+        f"{output_path}/sr_ablation",
+        f"{output_path}/prior_reg",
     ]
  
     try:
-        performance, _ = get_exp_from_path(paths, sample_equations=True)
+        performance, _ = get_exp_from_path_cached(paths, cache_name='sr_ablation', output_path=output_path, sample_equations=True)
         # Filter the performance dataframe to keep only the models in model_styles 
         # and datasets in custom_order.
         performance = performance[performance['model'].isin(model_styles.keys()) & performance['dataset'].isin(custom_order)]
@@ -147,7 +159,7 @@ def main():
         print(f"Learned equations saved to {equations_csv_path}")
 
         # Now plot intervention results with noise=0.0
-        performance = get_intervention_from_path(paths, filtered_exps=None)
+        performance = get_intervention_from_path(paths)
 
         # Filter the performance dataframe to keep only the models in model_styles 
         # and datasets in custom_order.
@@ -179,7 +191,7 @@ def main():
     ]
 
     try:
-        performance, _ = get_exp_from_path(paths)
+        performance, _ = get_exp_from_path_cached(paths, cache_name='concept_size_ablation', output_path=output_path, sample_equations=False)
         # Plot the results on the concept size ablation
         plot_concept_size_ablation(performance, model_styles, title_font, label_font, tick_font)
     except Exception as e:
@@ -190,14 +202,14 @@ def main():
     ##################################################
 
     paths = [
-        "output/memory_less_cls",
-        "output/memory_cls",
-        "output/memory_reg",
-        "output/memory_less_reg"
+        f"{output_path}/memory_less_cls",
+        f"{output_path}/memory_cls",
+        f"{output_path}/memory_reg",
+        f"{output_path}/memory_less_reg"
     ]
 
     try:
-        performance, _ = get_exp_from_path(paths, sample_equations=True)
+        performance, _ = get_exp_from_path_cached(paths, cache_name='memory_ablation', output_path=output_path, sample_equations=True)
 
         # Count number of seeds
         seeds_count = performance.groupby(['dataset', 'model', 'memory_size'])['seed'].nunique().reset_index()
@@ -219,16 +231,16 @@ def main():
             custom_order
         )
 
-        # Operational Complexity vs accuracy
-        plot_pareto_front(
-            performance, 
-            model_styles, 
-            title_font, 
-            label_font, 
-            tick_font, 
-            custom_order, 
-            complexity_type='oc',
-        )
+        # # Operational Complexity vs accuracy
+        # plot_pareto_front(
+        #     performance, 
+        #     model_styles, 
+        #     title_font, 
+        #     label_font, 
+        #     tick_font, 
+        #     custom_order, 
+        #     complexity_type='oc',
+        # )
 
         # Composed Complexity vs accuracy
         plot_pareto_front(
@@ -250,53 +262,18 @@ def main():
 
     try:
 
-        performance, _ = get_exp_from_path(paths)
-        # For the dataset for which we know the exact number of mechanisms, we select the memory size accordingly.
-        filtered_exps = filter_pareto_models(
-            performance, 
-            fixed_memory=fixed_memory,
-            custom_order=custom_order
+        performance, _ = get_exp_from_path_cached(paths, cache_name='memory_ablation', output_path=output_path, sample_equations=True)
+
+        # Filter the experiments in order to show only the 
+        performance = get_intervention_from_path(
+            paths, 
+            model_styles=model_styles, 
+            custom_order=custom_order, 
+            apply_filter=True,
+            fixed_memory=fixed_memory, 
+            selected_memory_size=2
         )
 
-        performance = get_intervention_from_path(paths, filtered_exps=None)
-
-        # Filter the performance dataframe to keep only the models in model_styles 
-        # and datasets in custom_order.
-        performance = performance[performance['model'].isin(model_styles.keys()) & \
-                                performance['dataset'].isin(custom_order)]
-        
-        # Plot intervention results for memory ablation
-        plot_intervention_memory_results(performance, 
-                                        p_int=1,  # Fixed p_int value
-                                        metric='accuracy', 
-                                        title_font=title_font, 
-                                        label_font=label_font, 
-                                        tick_font=tick_font, 
-                                        legend_font=legend_font,
-                                        custom_order=custom_order,
-                                        model_styles=model_styles,
-                                        n_mechanisms=fixed_memory,
-                                    )
-        
-        plot_intervention_memory_pareto_results(performance, 
-                                    p_int=1,  
-                                    metric='accuracy', 
-                                    title_font=title_font, 
-                                    label_font=label_font, 
-                                    tick_font=tick_font, 
-                                    legend_font=legend_font,
-                                    custom_order=custom_order,
-                                    model_styles=model_styles,
-                                    n_mechanisms=fixed_memory,
-        )
-
-        performance = get_intervention_from_path(paths, filtered_exps=filtered_exps)
-
-        # Filter the performance dataframe to keep only the models in model_styles 
-        # and datasets in custom_order.
-        performance = performance[performance['model'].isin(model_styles.keys()) & \
-                                performance['dataset'].isin(custom_order)]
-        
         ########## Intervention plots ##########
         noises = list(performance['noise'].unique())
         for noise in noises:
@@ -311,6 +288,7 @@ def main():
                 custom_order=custom_order,
                 model_styles=model_styles,
                 relative_accuracy=False,
+                out_dir=f'{result_figs}',
             )
             
             plot_intervention_results(
@@ -324,6 +302,7 @@ def main():
                 custom_order=custom_order,
                 model_styles=model_styles,
                 relative_accuracy=True,
+                out_dir=f'{result_figs}',
             )
             
     except Exception as e:

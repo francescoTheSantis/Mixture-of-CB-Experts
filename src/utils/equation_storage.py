@@ -4,6 +4,7 @@ Used by the Engine class during test time to collect per-sample equation data.
 """
 
 import torch
+from tqdm import tqdm
 
 
 def clean_equation(equation):
@@ -43,27 +44,34 @@ def parse_memory_equations(equations_per_slot, y_names):
     Returns:
         dict: Dictionary mapping (memory_idx, output_name) -> equation_string
     """
-    parsed = {}
+    parsed = dict()
     
-    for mem_idx, slot_equations in equations_per_slot.items():
-        if ';' in slot_equations:
+    for mem_idx, slot_equations in tqdm(equations_per_slot.items(), desc="Parsing equations", leave=False):
+        # Check for multi-output format first (most common case)
+        semicolon_idx = slot_equations.find(';')
+        if semicolon_idx != -1:
             # Multi-output format: "y0: eq0; y1: eq1; ..."
-            eqs = slot_equations.split(';')
-            for eq in eqs:
-                eq = eq.strip()
-                if ':' in eq:
-                    # Extract output name and equation
-                    output_name, equation = eq.split(':', 1)
-                    parsed[(mem_idx, output_name.strip())] = equation.strip()
+            # Split and process in one pass
+            for eq in slot_equations.split(';'):
+                colon_idx = eq.find(':')
+                if colon_idx != -1:
+                    # Strip only the necessary parts, not the whole string
+                    output_name = eq[:colon_idx].strip()
+                    equation = eq[colon_idx+1:].strip()
+                    parsed[(mem_idx, output_name)] = equation
         else:
             # Single output format
-            if ':' in slot_equations:
-                output_name, equation = slot_equations.split(':', 1)
-                parsed[(mem_idx, output_name.strip())] = equation.strip()
+            colon_idx = slot_equations.find(':')
+            if colon_idx != -1:
+                output_name = slot_equations[:colon_idx].strip()
+                equation = slot_equations[colon_idx+1:].strip()
+                parsed[(mem_idx, output_name)] = equation
             else:
                 # No prefix - assume it applies to all outputs
+                # Strip once and reuse
+                eq_stripped = slot_equations.strip()
                 for y_name in y_names:
-                    parsed[(mem_idx, y_name)] = slot_equations.strip()
+                    parsed[(mem_idx, y_name)] = eq_stripped
     
     return parsed
 
@@ -165,104 +173,137 @@ def extract_memory_equations(model, model_name):
     
     if model_name == 'KANSymbolicCBM':
         # Extract from KAN predictor or SymbolicPredictor
-        if hasattr(model.predictor, 'trainable_equations'):
+        predictor = model.predictor
+        if hasattr(predictor, 'trainable_equations'):
             # SymbolicPredictor with learned equations
-            for mem_idx, set_name in enumerate(sorted(model.predictor.trainable_equations.keys())):
-                eq_strs = []
-                for eq_name in model.predictor.equation_names[set_name]:
-                    eq_module = model.predictor.trainable_equations[set_name][eq_name]
-                    eq_strs.append(f"{eq_name}: {eq_module.get_equation_string()}")
+            trainable_eqs = predictor.trainable_equations
+            eq_names = predictor.equation_names
+            sorted_keys = sorted(trainable_eqs.keys())
+            
+            for mem_idx, set_name in enumerate(tqdm(sorted_keys, desc="Extracting KAN equations", leave=False)):
+                # Build list of equation strings more efficiently
+                eq_strs = [f"{eq_name}: {trainable_eqs[set_name][eq_name].get_equation_string()}"
+                          for eq_name in eq_names[set_name]]
                 equations[mem_idx] = "; ".join(eq_strs)
-        elif hasattr(model.predictor, 'kans'):
+        elif hasattr(predictor, 'kans'):
             # KANPredictor - abstract representation
-            for mem_idx in range(len(model.predictor.kans)):
-                equations[mem_idx] = f"KAN{mem_idx}[{model.widths}]"
+            widths_str = str(model.widths)
+            equations = {mem_idx: f"KAN{mem_idx}[{widths_str}]"
+                        for mem_idx in range(len(predictor.kans))}
         else:
             equations[0] = "No equations available"
     
     elif model_name == 'LinearSymbolicCBM':
         # Extract linear equations from memory
         try:
-            equation_weights = model.linear_memory_predictor.equation_decoder(
-                model.linear_memory_predictor.equation_memory.weight
-            )
+            # Cache attribute lookups
+            predictor = model.linear_memory_predictor
+            memory_size = model.memory_size
+            c_names = model.c_names
+            y_names = model.y_names
+            n_concepts = len(c_names)
+            bias_mode = model.bias
+            
+            # Compute weights once
+            equation_weights = predictor.equation_decoder(predictor.equation_memory.weight)
             equation_weights = equation_weights.view(
-                model.memory_size, 
-                len(model.linear_memory_predictor.parameters), 
-                len(model.y_names)
+                memory_size, 
+                len(predictor.parameters), 
+                len(y_names)
             )
+            # Add the Mask
+            if predictor.stage == 'fine_tuning' and hasattr(predictor, 'mask'):
+                reshaped_mask = predictor.mask.view(
+                    memory_size, 
+                    len(predictor.parameters), 
+                    len(y_names)
+                )
+                equation_weights = equation_weights * reshaped_mask.to(equation_weights.device)
             weights_np = equation_weights.detach().cpu().numpy()
             
-            for mem_idx in range(model.memory_size):
+            # Pre-compute bias values if global
+            global_bias = None
+            if bias_mode == 'global':
+                global_bias = [predictor.bias_params[i].item() for i in range(len(y_names))]
+            
+            # Build equations for all memory slots
+            for mem_idx in tqdm(range(memory_size), desc="Extracting linear equations", leave=False):
                 eq_strs = []
-                for out_idx, y_name in enumerate(model.y_names):
-                    # Build equation string
-                    terms = []
-                    n_concepts = len(model.c_names)
-                    for c_idx in range(n_concepts):
-                        weight = weights_np[mem_idx, c_idx, out_idx]
-                        if abs(weight) > 0.0:  # Only include non-zero terms
-                            terms.append(f"{weight:.4f}*{model.c_names[c_idx]}")
+                for out_idx, y_name in enumerate(y_names):
+                    # Build equation string using list comprehension for terms
+                    terms = [f"{weights_np[mem_idx, c_idx, out_idx]:.4f}*{c_names[c_idx]}"
+                            for c_idx in range(n_concepts)
+                            if abs(weights_np[mem_idx, c_idx, out_idx]) > 1e-6]
                     
                     # Add bias only if non-zero
-                    if model.bias == 'local':
+                    if bias_mode == 'local':
                         bias_value = weights_np[mem_idx, -1, out_idx]
-                        if abs(bias_value) > 0.0:
+                        if abs(bias_value) > 1e-6:
                             terms.append(f"{bias_value:.4f}")
-                    elif model.bias == 'global':
-                        bias_value = model.linear_memory_predictor.bias_params[out_idx].item()
-                        if abs(bias_value) > 0.0:
+                    elif bias_mode == 'global' and global_bias:
+                        bias_value = global_bias[out_idx]
+                        if abs(bias_value) > 1e-6:
                             terms.append(f"{bias_value:.4f}")
                     
-                    eq_str = f"{y_name}: " + " + ".join(terms) if terms else f"{y_name}: 0"
+                    eq_str = f"{y_name}: {' + '.join(terms)}" if terms else f"{y_name}: 0"
                     eq_strs.append(eq_str)
                 
                 equations[mem_idx] = "; ".join(eq_strs)
         except Exception as e:
-            for mem_idx in range(getattr(model, 'memory_size', 1)):
-                equations[mem_idx] = f"Error extracting equation: {str(e)}"
+            error_msg = f"Error extracting equation: {str(e)}"
+            equations = {mem_idx: error_msg for mem_idx in range(getattr(model, 'memory_size', 1))}
     
     elif model_name == 'PriorSymbolicCBM':
         # Extract from prior_predictor
-        if hasattr(model.prior_predictor, 'trainable_equations'):
-            for mem_idx, set_name in enumerate(sorted(model.prior_predictor.trainable_equations.keys())):
-                eq_strs = []
-                for eq_name in model.prior_predictor.equation_names[set_name]:
-                    eq_module = model.prior_predictor.trainable_equations[set_name][eq_name]
-                    eq_strs.append(f"{eq_name}: {eq_module.get_equation_string()}")
+        predictor = model.prior_predictor
+        if hasattr(predictor, 'trainable_equations'):
+            trainable_eqs = predictor.trainable_equations
+            eq_names = predictor.equation_names
+            sorted_keys = sorted(trainable_eqs.keys())
+            
+            for mem_idx, set_name in enumerate(tqdm(sorted_keys, desc="Extracting prior equations", leave=False)):
+                eq_strs = [f"{eq_name}: {trainable_eqs[set_name][eq_name].get_equation_string()}"
+                          for eq_name in eq_names[set_name]]
                 equations[mem_idx] = "; ".join(eq_strs)
         else:
             equations[0] = "No equations available"
     
     elif model_name == 'SymbolicRegressorCBM':
         # Extract from predictor
-        if hasattr(model.predictor, 'trainable_equations'):
+        predictor = model.predictor
+        if hasattr(predictor, 'trainable_equations'):
             # SymbolicPredictor with learned equations
-            for mem_idx, set_name in enumerate(sorted(model.predictor.trainable_equations.keys())):
-                eq_strs = []
-                for eq_name in model.predictor.equation_names[set_name]:
-                    eq_module = model.predictor.trainable_equations[set_name][eq_name]
-                    # NOTE: get_equation_string() returns equations with current fine-tuned parameter values
-                    eq_strs.append(f"{eq_name}: {eq_module.get_equation_string()}")
+            trainable_eqs = predictor.trainable_equations
+            eq_names = predictor.equation_names
+            sorted_keys = sorted(trainable_eqs.keys())
+            
+            for mem_idx, set_name in enumerate(tqdm(sorted_keys, desc="Extracting SR equations", leave=False)):
+                # NOTE: get_equation_string() returns equations with current fine-tuned parameter values
+                eq_strs = [f"{eq_name}: {trainable_eqs[set_name][eq_name].get_equation_string()}"
+                          for eq_name in eq_names[set_name]]
                 equations[mem_idx] = "; ".join(eq_strs)
         else:
             # BlackBoxPredictor or not yet trained
-            for mem_idx in range(getattr(model, 'memory_size', 1)):
-                equations[mem_idx] = "No symbolic equations (BlackBoxPredictor)"
+            no_eq_msg = "No symbolic equations (BlackBoxPredictor)"
+            equations = {mem_idx: no_eq_msg for mem_idx in range(getattr(model, 'memory_size', 1))}
 
     elif model_name == 'MemoryCBM':
         # Get the symbolic equivalent of each blackbox predictor
-        for mem_idx in range(model.memory_size):
+        memory_size = model.memory_size
+        y_names = model.y_names
+        
+        for mem_idx in tqdm(range(memory_size), desc="Extracting memory equations", leave=False):
             eq_result = model.get_symbolic_equivalent(memory_idx=mem_idx, return_equations=True)
             # For multi-output, eq_result is a list of equations
-            try:
-                # Try to iterate - if it's a list/tuple, this will work
-                eq_strs = [f"{model.y_names[i]}: {str(eq)}" for i, eq in enumerate(eq_result)]
+            # Check if iterable (but not string)
+            if hasattr(eq_result, '__iter__') and not isinstance(eq_result, str):
+                # Multi-output: use list comprehension
+                eq_strs = [f"{y_names[i]}: {eq}" for i, eq in enumerate(eq_result)]
                 equations[mem_idx] = "; ".join(eq_strs)
-            except (TypeError, AttributeError):
-                # Single output - not iterable
-                y_name = model.y_names[0] if isinstance(model.y_names, list) else model.y_names
-                equations[mem_idx] = f"{y_name}: {str(eq_result)}"
+            else:
+                # Single output
+                y_name = y_names[0] if isinstance(y_names, list) else y_names
+                equations[mem_idx] = f"{y_name}: {eq_result}"
     else:
         # Other models - no memory-based equations
         equations[0] = f"Model {model_name} does not use memory-based equations"

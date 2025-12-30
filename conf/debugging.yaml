@@ -9,17 +9,19 @@ hydra:
   sweeper:
     params:
       seed: 1
-      dataset: xor # mnist_addition, awa2_incomplete, awa2, cub, cub_incomplete 
-      model: memory_cbm
-      memory_size: 2
+      dataset: awa2_incomplete # mnist_addition, awa2_incomplete, awa2, cub, cub_incomplete 
+      model: lin_sym_cbm 
+      memory_size: 1
     
-gpus: [0]
-
+gpus: [1]
 
 # NOTE: check this variable before running experiments 
 disjoint_training: True
 
-max_epochs: 5
+L1_coeff: 1e-5
+threshold: 1e-6
+
+max_epochs: 600
 patience: 50
 
 use_stored_dataset: True

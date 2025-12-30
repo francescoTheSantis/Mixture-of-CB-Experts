@@ -6,19 +6,34 @@ defaults:
 hydra:
   mode: MULTIRUN
   sweep:
-      # This directory can be deleted as it only contains temporary files and the 
-      # preprocessed data will be saved in the cache.
       dir: output/concept_size_ablation/${now:%Y-%m-%d_%H-%M-%S} 
   sweeper:
     grid_params:
-      seed: 1, 2, 3, 4, 5
-      model: dcr, licem, cem
-      concept_percentage: 0.2, 0.4, 0.6, 0.8, 1.0
+      seed: 1, 2, 3
+      concept_percentage: 0.2, 0.4, 0.6, 0.8
 
     list_params:
+      model: 
+        - dcr
+        - licem
+        - cem
+        - blackbox
+        - memory_cbm
+        - lin_sym_cbm
+        - cmr
+        - sr_sym_cbm
+      disjoint_training:
+        - False
+        - False
+        - False
+        - False
+        - True
+        - True
+        - True
+        - True
       dataset: 
-        - cub
         - awa2
+        - cub
         - cifar10
         - cifar100
       img_backbone_name: 
@@ -27,6 +42,6 @@ hydra:
         - google/vit-base-patch32-224-in21k
         - google/vit-large-patch16-224-in21k
 
-disjoint_training: False
+memory_size: 1
 
 note: "concept_size_ablation" 

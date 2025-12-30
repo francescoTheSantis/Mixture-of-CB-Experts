@@ -91,7 +91,7 @@ class MemoryCBM(BaseModel):
             c_names=len(self.c_names),
             output_size=self.output_size,
             activation=activation,
-            latent_size=latent_size,
+            latent_size=len(self.c_names),
         )
 
     def forward(self, input):

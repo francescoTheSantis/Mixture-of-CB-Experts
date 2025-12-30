@@ -258,7 +258,7 @@ class Trainer:
             # Run symbolic substitution to create the SymbolicPredictor
             self.model.model.symbolic_substitution(equations)
 
-        elif model_name == 'memory_cbm':
+        elif model_name in ['memory_cbm', 'linear_symbolic_cbm']:
             print("Cutting parameters of the predictor below the threshold: ", self.model.model.threshold)
             self.model.model.cut_weights()
             epochs = self.cfg.max_epochs

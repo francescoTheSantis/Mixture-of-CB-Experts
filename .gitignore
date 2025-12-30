@@ -21,6 +21,7 @@ results/
 stored_output/
 synthetic_motion_dataset/
 archived_outputs/
+archived_outputs_2/
 archive/
 test_synthetic_motion_embeddings.py
 

@@ -8,8 +8,6 @@ defaults:
 hydra:
   mode: MULTIRUN
   sweep:
-      # This directory can be deleted as it only contains temporary files and the 
-      # preprocessed data will be saved in the cache.
       dir: preprocess/${now:%Y-%m-%d_%H-%M-%S} 
   sweeper:
     grid_params:

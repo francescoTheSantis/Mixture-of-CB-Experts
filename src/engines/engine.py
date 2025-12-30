@@ -225,25 +225,16 @@ class Engine(pl.LightningModule):
             print(f"✓ Set equations to NaN for {self.model_name}")
         elif self.model_name == 'ConceptBottleneckModel':
             try:
-                with tqdm(total=2, desc="Extracting equations", leave=False) as pbar:
-                    pbar.set_description("Extracting symbolic equations")
-                    eq_result = self.model.get_symbolic_equivalent(return_equations=True)
-                    pbar.update(1)
-                    
-                    # Store cached equations for reuse
-                    # Use hasattr to check if it's iterable instead of isinstance to avoid potential issues
-                    try:
-                        # Try to iterate - if it's a list/tuple, this will work
-                        eq_strs = [f"{self.y_name[i]}: {str(eq)}" for i, eq in enumerate(eq_result)]
-                        self.cached_equations = {0: "; ".join(eq_strs)}
-                    except (TypeError, AttributeError):
-                        # Single output - not iterable
-                        self.cached_equations = {0: f"{self.y_name[0]}: {str(eq_result)}"}
-                    
-                    pbar.set_description("Parsing equations")
-                    # Parse the equations for fast lookup
-                    self.cached_parsed_equations = parse_memory_equations(self.cached_equations, self.y_name)
-                    pbar.update(1)
+                eq_result = self.model.get_symbolic_equivalent(return_equations=True)
+                # Store cached equations - check if multi-output using hasattr for __iter__
+                if hasattr(eq_result, '__iter__') and not isinstance(eq_result, str):
+                    # Multi-output: format as "y0: eq0; y1: eq1; ..."
+                    self.cached_equations = {0: "; ".join(f"{self.y_name[i]}: {eq}" for i, eq in enumerate(eq_result))}
+                else:
+                    # Single output
+                    self.cached_equations = {0: f"{self.y_name[0]}: {eq_result}"}
+                # Parse the equations for fast lookup
+                self.cached_parsed_equations = parse_memory_equations(self.cached_equations, self.y_name)
                 print(f"✓ Cached {len(self.cached_parsed_equations)} equation(s)")
             except Exception as e:
                 print(f"✗ Error extracting equations: {str(e)}")
@@ -251,14 +242,8 @@ class Engine(pl.LightningModule):
                 self.cached_parsed_equations = {(0, y_name): f"Error extracting equation: {str(e)}" for y_name in self.y_name}
         elif self.model_name in ['KANSymbolicCBM', 'LinearSymbolicCBM', 'PriorSymbolicCBM', 'SymbolicRegressorCBM', 'MemoryCBM']:
             # For memory-based models, extract and parse equations once
-            with tqdm(total=2, desc="Processing memory equations", leave=False) as pbar:
-                pbar.set_description("Extracting memory equations")
-                self.cached_equations = extract_memory_equations(self.model, self.model_name)
-                pbar.update(1)
-                
-                pbar.set_description("Parsing memory equations")
-                self.cached_parsed_equations = parse_memory_equations(self.cached_equations, self.y_name)
-                pbar.update(1)
+            self.cached_equations = extract_memory_equations(self.model, self.model_name)
+            self.cached_parsed_equations = parse_memory_equations(self.cached_equations, self.y_name)
             print(f"✓ Cached {len(self.cached_parsed_equations)} memory equation(s)")
         else:
             self.cached_equations = None
