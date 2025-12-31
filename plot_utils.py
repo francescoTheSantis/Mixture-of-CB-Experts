@@ -309,9 +309,10 @@ def get_intervention_from_path(paths, model_styles=None, custom_order=None, appl
     lmr_paths = []
     
     for path in paths:
-        experiment_dir = os.listdir(path)
-        for exp in experiment_dir:
-            exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
+        if os.path.exists(path):
+            experiment_dir = os.listdir(path)
+            for exp in experiment_dir:
+                exps_path += [os.path.join(path, exp, e) for e in os.listdir(os.path.join(path, exp)) if 'multirun' not in e]
 
     for exp in exps_path:
         conf_file = os.path.join(exp, '.hydra/config.yaml')
@@ -1039,6 +1040,9 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
     elif n_cols == 1:
         axes = [[ax] for ax in axes]
 
+    # Track which model styles are actually plotted across all subplots
+    all_plotted_styles = set()
+
     for idx, dataset in enumerate(organized_datasets):
         # Determine row based on task type
         if dataset in found_regression_datasets:
@@ -1056,30 +1060,70 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         data = performance[performance['dataset'] == dataset]
         metric_type = data['metric_type'].iloc[0]
         
+        # Debug: print models present for this dataset
+        print(f"Dataset: {dataset}, Models: {data['model'].unique()}")
+        
         # Compute complexity for each model
         data = data.copy()
         data['has_infinity'] = False  # Initialize the column
         
         if complexity_type == 'oc' and 'mean_complexity' in data.columns:
             # Use the 'complexity' column directly from the dataframe
-            pass  # data already has the complexity column
+            # Mark dcr and licem as having infinity complexity
+            data['has_infinity'] = data['model'].isin(['dcr', 'licem'])
+            # Find max finite complexity to set infinity value appropriately
+            finite_complexities = data.loc[~data['has_infinity'], 'mean_complexity']
+            finite_complexities = finite_complexities[finite_complexities.notna() & (finite_complexities > 0)]
+            
+            if len(finite_complexities) > 0:
+                max_finite = finite_complexities.max()
+                infinity_value = max_finite * 100  # Use 100x the max as "infinity"
+            else:
+                # Fallback if no valid finite complexities exist
+                infinity_value = 1000.0
+            
+            data.loc[data['has_infinity'], 'mean_complexity'] = infinity_value
         elif complexity_type == 'composed' and 'mean_complexity' in data.columns:
             # Compute complexity as memory_size * operational_complexity from dataframe column
             data['mean_complexity'] = data['memory_size'] * data['mean_complexity']
             # Mark dcr and licem as having infinity complexity, then replace with large finite value
             data['has_infinity'] = data['model'].isin(['dcr', 'licem'])
             # Find max finite complexity to set infinity value appropriately
-            max_finite = data.loc[~data['has_infinity'], 'mean_complexity'].max()
-            infinity_value = max_finite * 100  # Use 100x the max as "infinity"
+            # Filter out NaN and negative values when finding max
+            finite_complexities = data.loc[~data['has_infinity'], 'mean_complexity']
+            finite_complexities = finite_complexities[finite_complexities.notna() & (finite_complexities > 0)]
+            
+            if len(finite_complexities) > 0:
+                max_finite = finite_complexities.max()
+                infinity_value = max_finite * 100  # Use 100x the max as "infinity"
+            else:
+                # Fallback if no valid finite complexities exist
+                infinity_value = 1000.0
+            
             data.loc[data['has_infinity'], 'mean_complexity'] = infinity_value
         else:
             raise ValueError("Either complexity_type is not supported or required columns are missing in the dataframe.")
+
+        # Filter out rows with NaN or non-positive complexity values
+        # BUT keep blackbox and cem models even if they have NaN complexity (they'll be plotted as horizontal lines)
+        data = data[(data['mean_complexity'].notna() & (data['mean_complexity'] > 0)) | 
+                    (data['model'].isin(['cem', 'blackbox']))]
+        
+        # Debug: check if data is empty after filtering
+        if data.empty:
+            print(f"WARNING: Dataset {dataset} has no valid complexity data after filtering!")
+            continue
         
         # Get distinct complexities for this dataset (excluding cem and blackbox)
         pareto_data = data[~data['model'].isin(['cem', 'blackbox'])]
         distinct_complexities = sorted(pareto_data['mean_complexity'].unique())
-        infinity_complexity = data.loc[data.get('has_infinity', False), 'mean_complexity'].unique()
-        has_infinity_models = len(infinity_complexity) > 0
+        
+        # Check if we have infinity models (dcr, licem) in the data
+        has_infinity_models = any(data['model'].isin(['dcr', 'licem']))
+        if has_infinity_models:
+            infinity_complexity = data.loc[data['model'].isin(['dcr', 'licem']), 'mean_complexity'].unique()
+        else:
+            infinity_complexity = np.array([])
         
         # Collect all points for Pareto front calculation
         all_points = []
@@ -1112,6 +1156,9 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                                 color=model_styles[model]['color'],
                                 alpha=0.2)
                 
+                # Track that this style was plotted
+                all_plotted_styles.add(model)
+                
             else:
                 # Store points for Pareto front (excluding cem and blackbox)
                 for i, (complexity, y_val, y_err, memory_size) in enumerate(zip(model_data['mean_complexity'], y_values, y_errors, model_data['memory_size'])):
@@ -1123,9 +1170,14 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                     if model == 'linear_symbolic_cbm' and memory_size == 1:
                         plot_style = model_styles.get('cbm_linear', model_styles[model])
                         plot_label = model_styles.get('cbm_linear', {})['name'] if 'cbm_linear' in model_styles else model_styles[model]['name']
+                        style_key = 'cbm_linear'
                     else:
                         plot_style = model_styles[model]
                         plot_label = model_styles[model]['name']
+                        style_key = model
+                    
+                    # Track that this style was plotted
+                    all_plotted_styles.add(style_key)
                     
                     # Only add label for the first point of each unique style to avoid duplicate legends
                     label = plot_label if i == 0 else ""
@@ -1219,7 +1271,7 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                 max_c = max(finite_complexities)
                 
                 # Generate 5 equally spaced ticks in log space
-                if has_infinity_models:
+                if has_infinity_models and infinity_complexity.size > 0:
                     # Calculate equal log spacing across all 5 ticks including infinity
                     # Infinity tick should be at the actual inf_value position
                     log_min = np.log10(min_c)
@@ -1242,7 +1294,17 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                     tick_labels = [str(int(c)) for c in tick_values]
                 
                 ax.set_xticks(tick_values)
-                ax.set_xticklabels(tick_labels)
+                # Use FixedFormatter to ensure our custom labels are preserved
+                from matplotlib.ticker import FixedFormatter
+                ax.xaxis.set_major_formatter(FixedFormatter(tick_labels))
+            elif has_infinity_models and infinity_complexity.size > 0:
+                # Only infinity models exist (no finite complexities)
+                # Just show the infinity value with infinity label
+                inf_value = infinity_complexity[0]
+                ax.set_xticks([inf_value])
+                from matplotlib.ticker import FixedFormatter
+                ax.xaxis.set_major_formatter(FixedFormatter(['$\infty$']))
+                ax.set_xlim(inf_value * 0.5, inf_value * 1.5)
         
         ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
         ax.minorticks_off()
@@ -1265,16 +1327,11 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         if legend_ax is None and col == n_cols - 1:
             legend_ax = axes[1][col]
 
-    # Create filtered styles including both original models and cbm_linear for kan_symbolic_cbm with memory_size=1
+    # Create filtered styles based on what was actually plotted
     filtered_styles = {}
-    for name, style in model_styles.items():
-        if name in performance['model'].values:
-            filtered_styles[name] = style
-    
-    # Add cbm_linear style if kan_symbolic_cbm appears with memory_size=1
-    if 'kan_symbolic_cbm' in performance['model'].values and 'cbm_linear' in model_styles:
-        if any((performance['model'] == 'kan_symbolic_cbm') & (performance['memory_size'] == 1)):
-            filtered_styles['cbm_linear'] = model_styles['cbm_linear']
+    for name in all_plotted_styles:
+        if name in model_styles:
+            filtered_styles[name] = model_styles[name]
 
     # Create custom legend handles
     custom_handles = []

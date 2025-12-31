@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore")
 plt.style.use(['science', 'ieee', 'no-latex'])
 
 ######### Paths to load results #########
-output_path = 'archived_outputs'
+output_path = 'output'
 
 ######### Paths to save results #########
 result_figs = "results/figs"
@@ -211,6 +211,10 @@ def main():
     try:
         performance, _ = get_exp_from_path_cached(paths, cache_name='memory_ablation', output_path=output_path, sample_equations=True)
 
+        # The linear_symbolic_cbm model with memory_size=1 is equivalent to the cbm_linear model.
+        # So, we will rename the model accordingly for memory_size=1.
+        performance.loc[(performance['model'] == 'linear_symbolic_cbm') & (performance['memory_size'] == 1), 'model'] = 'cbm_linear'
+
         # Count number of seeds
         seeds_count = performance.groupby(['dataset', 'model', 'memory_size'])['seed'].nunique().reset_index()
         # Save in csv file
@@ -230,17 +234,6 @@ def main():
             tick_font, 
             custom_order
         )
-
-        # # Operational Complexity vs accuracy
-        # plot_pareto_front(
-        #     performance, 
-        #     model_styles, 
-        #     title_font, 
-        #     label_font, 
-        #     tick_font, 
-        #     custom_order, 
-        #     complexity_type='oc',
-        # )
 
         # Composed Complexity vs accuracy
         plot_pareto_front(
@@ -263,6 +256,10 @@ def main():
     try:
 
         performance, _ = get_exp_from_path_cached(paths, cache_name='memory_ablation', output_path=output_path, sample_equations=True)
+
+        # The linear_symbolic_cbm model with memory_size=1 is equivalent to the cbm_linear model.
+        # So, we will rename the model accordingly for memory_size=1.
+        performance.loc[(performance['model'] == 'linear_symbolic_cbm') & (performance['memory_size'] == 1), 'model'] = 'cbm_linear'
 
         # Filter the experiments in order to show only the 
         performance = get_intervention_from_path(
@@ -288,20 +285,6 @@ def main():
                 custom_order=custom_order,
                 model_styles=model_styles,
                 relative_accuracy=False,
-                out_dir=f'{result_figs}',
-            )
-            
-            plot_intervention_results(
-                performance, 
-                metric='accuracy', 
-                unique_noises=[noise], 
-                title_font=title_font, 
-                label_font=label_font, 
-                tick_font=tick_font, 
-                legend_font=legend_font,
-                custom_order=custom_order,
-                model_styles=model_styles,
-                relative_accuracy=True,
                 out_dir=f'{result_figs}',
             )
             

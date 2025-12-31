@@ -6,7 +6,7 @@ defaults:
 
 ## Common parameters
 gpus: [1]
-max_epochs: 500
+max_epochs: 600
 patience: 50
 lr_patience: 25
 early_stopping_min_delta: 1e-3  # Minimum improvement threshold for early stopping
