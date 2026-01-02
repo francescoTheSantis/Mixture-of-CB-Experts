@@ -73,18 +73,96 @@ cmap = plt.cm.RdYlGn
 colors = list(reversed([cmap(i) for i in np.linspace(0, 1, 5)]))
 
 model_styles = {
-    'blackbox': {'marker': 'o', 'name': 'BlackBox', 'color': "black", 'size': marker_size},
-    'cbm_linear': {'marker': '^', 'name': 'CBM', 'color': 'tab:orange', 'size': marker_size},
-    'cem': {'marker': 'P', 'name': 'CEM', 'color': 'tab:red', 'size': marker_size},
-    'kan_symbolic_cbm': {'marker': 'X', 'name': 'Kan-Mem-CBM', 'color': 'tab:orange', 'size': marker_size},
-    'linear_symbolic_cbm': {'marker': 's', 'name': 'Lin-Mem-CBM', 'color': 'tab:green', 'size': marker_size},
-    'sr_symbolic_cbm': {'marker': 'o', 'name': 'Sym-Mem-CBM', 'color': 'tab:green', 'size': marker_size},
-    'prior_symbolic_cbm': {'marker': '*', 'name': 'Prior-Mem-CBM', 'color': 'tab:cyan', 'size': marker_size},
-    'memory_cbm': {'marker': 'P', 'name': 'MLP-Mem-CBM', 'color': colors[0], 'size': marker_size},
-    'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:brown', 'size': marker_size},
-    'cmr': {'marker': 'v', 'name': 'CMR', 'color': 'tab:pink', 'size': marker_size},
-    'dcr': {'marker': 'h', 'name': 'DCR', 'color': 'tab:purple', 'size': marker_size},
+    # =========================
+    # BASELINES (non-verifiable)
+    # =========================
+    'blackbox': {
+        'marker': 'o',
+        'name': 'BlackBox',
+        'color': 'tab:gray',
+        'size': marker_size,
+        'fillstyle': 'none'
+    },
+    'cem': {
+        'marker': 's',
+        'name': 'CEM',
+        'color': 'tab:red',
+        'size': marker_size,
+        'fillstyle': 'none'
+    },
+    'licem': {
+        'marker': 'D',
+        'name': 'LICEM',
+        'color': 'tab:brown',
+        'size': marker_size,
+        'fillstyle': 'none'
+    },
+    'dcr': {
+        'marker': 'v',
+        'name': 'DCR',
+        'color': 'tab:purple',
+        'size': marker_size,
+        'fillstyle': 'none'
+    },
+
+    # =========================
+    # BASELINE but VERIFIABLE
+    # =========================
+    'cmr': {
+        'marker': 'P',
+        'name': 'CMR',
+        'color': 'black',
+        'size': marker_size,
+        'fillstyle': 'full'
+    },
+    'cbm_linear': {
+        'marker': '^',
+        'name': 'CBM',
+        'color': 'tab:orange',
+        'size': marker_size,
+        'fillstyle': 'none'
+    },
+    
+    # =========================
+    # PROPOSED MODELS (verifiable)
+    # =========================
+    'memory_cbm': {
+        'marker': 'X',
+        'name': 'MLP-Mem-CBM',
+        'color': 'tab:blue',
+        'size': marker_size,
+        'fillstyle': 'full'
+    },
+    'prior_symbolic_cbm': {
+        'marker': '*',
+        'name': 'Prior-Mem-CBM',
+        'color': 'tab:cyan',
+        'size': marker_size,
+        'fillstyle': 'full'
+    },
+    'sr_symbolic_cbm': {
+        'marker': 'h',
+        'name': 'Sym-Mem-CBM',
+        'color': 'tab:green',
+        'size': marker_size,
+        'fillstyle': 'full'
+    },
+    'linear_symbolic_cbm': {
+        'marker': '8',
+        'name': 'Lin-Mem-CBM',
+        'color': 'tab:olive',
+        'size': marker_size,
+        'fillstyle': 'full'
+    },
+    'kan_symbolic_cbm': {
+        'marker': 'p',
+        'name': 'Kan-Mem-CBM',
+        'color': 'tab:teal',
+        'size': marker_size,
+        'fillstyle': 'full'
+    },
 }
+
 
 # Call the function with the desired metric and font properties
 legend_font = {'size': 44}

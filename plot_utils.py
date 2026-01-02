@@ -451,9 +451,16 @@ def plot_intervention_results(
 
     unique_datasets = [d for d in df['dataset'].unique()]
 
+    # # sort the organized_datasets according to custom_order
+    # organized_datasets = [d for d in custom_order if d in organized_datasets]
+
     # Separate datasets by task type
     classification_datasets = [d for d in unique_datasets if d not in regression_datasets]
     found_regression_datasets = [d for d in unique_datasets if d in regression_datasets]
+
+    # Orgsanize dataset based on custom order
+    classification_datasets = [d for d in custom_order if d in classification_datasets]
+    found_regression_datasets = [d for d in custom_order if d in found_regression_datasets]
     
     # Determine if we have both types of datasets
     has_classification = len(classification_datasets) > 0
@@ -476,11 +483,6 @@ def plot_intervention_results(
         n_cols = max(len(classification_datasets), len(found_regression_datasets))
         n_rows = 2  # Force 2 rows: regression on first row, classification on second
     
-    # sort the organized_datasets according to custom_order
-    organized_datasets = [d for d in custom_order if d in organized_datasets]
-
-    n_datasets = len(organized_datasets)
-
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 6*n_rows), sharex=False, sharey=False)
 
     # Ensure axes is always a 2D array for consistent indexing

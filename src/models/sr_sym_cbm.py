@@ -297,8 +297,6 @@ class SymbolicRegressorCBM(BaseModel):
                         seed=42 + memory_idx * 100 + hash(output_name) % 100  # Deterministic but unique per equation
                     )
                     
-                    # CRITICAL OPTIMIZATION: Remove simplify() call - it's very slow and unnecessary 
-                    # after numerical substitution. The expression is already in a usable form.
                     transformed_equations[memory_idx][output_name] = randomized_eq
         else:
             transformed_equations = equations
