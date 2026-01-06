@@ -24,6 +24,7 @@ archived_outputs/
 archived_outputs_2/
 archive/
 test_synthetic_motion_embeddings.py
+backup/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

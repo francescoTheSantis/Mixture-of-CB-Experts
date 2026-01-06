@@ -9,7 +9,7 @@ loader:
 # Dataset parameters
 metadata:
   task: classification
-  lr: 0.0001
+  lr: 0.001
   name: cub
   data_type: image
   concept_type: binary

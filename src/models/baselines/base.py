@@ -47,6 +47,7 @@ class BaseModel(nn.Module):
         self.noise = noise
         self.disjoint_training = disjoint_training
         self.concept_penalty = concept_penalty
+        self.allow_symbolic = False 
 
         self.logic_reasoning = False # This value has to be overriden by the inheriting class if it is a logic-based model
 
@@ -191,7 +192,10 @@ class BaseModel(nn.Module):
         # intervene
         c_hat = self._intervene(c_hat, c_true, int_idxs)
 
-        # Check whether disjoint training is enabled
+        # Flag to to determine whether to use true or predicted concepts
+        # symbolic_flag = self.task=='regression' or (self.task=='classification' and not self.allow_symbolic)
+        # if self.disjoint_training and self.phase in ['train', 'val'] and symbolic_flag:
+
         if self.disjoint_training and self.phase in ['train', 'val']:
             input_concepts = c_true
         else:

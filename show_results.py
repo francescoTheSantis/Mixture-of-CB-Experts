@@ -29,7 +29,7 @@ custom_order = [
     'cub', 
     'cub_incomplete',
     'cifar10',
-    'cifar100',
+    # 'cifar100',
     'feynman_I_6_2',
     'feynman_I_9_18',
     'feynman_I_12_1',
@@ -38,7 +38,7 @@ custom_order = [
     'feynman_I_15_10',
     'dsprites_simple',
     'pendulum',
-    'dsprites_complex',
+    # 'dsprites_complex',
     'mnist_arithmetic',
     'mawps',
 ]
@@ -59,7 +59,6 @@ regression_datasets = [
     'mawps'
 ]
 
-
 # Define a dictionary to associate marker, name, and color to each model.
 # If the experiment you run does not contain a model, just remove it from the dictionary.
 # If you want to add a new model, just add it to the dictionary.
@@ -67,6 +66,8 @@ marker_size = 18
 
 # Define complexity order
 # models = list(reversed(['blackbox', 'cem', 'kan_symbolic_cbm', 'licem', 'linear_symbolic_cbm', 'dcr', 'cmr']))
+
+MEMORY_MODELS_LIST = ['cmr', 'linear_symbolic_cbm', 'sr_symbolic_cbm', 'prior_symbolic_cbm', 'memory_cbm']
 
 # Generate colors from a colormap
 cmap = plt.cm.RdYlGn 
@@ -76,91 +77,23 @@ model_styles = {
     # =========================
     # BASELINES (non-verifiable)
     # =========================
-    'blackbox': {
-        'marker': 'o',
-        'name': 'BlackBox',
-        'color': 'tab:gray',
-        'size': marker_size,
-        'fillstyle': 'none'
-    },
-    'cem': {
-        'marker': 's',
-        'name': 'CEM',
-        'color': 'tab:red',
-        'size': marker_size,
-        'fillstyle': 'none'
-    },
-    'licem': {
-        'marker': 'D',
-        'name': 'LICEM',
-        'color': 'tab:brown',
-        'size': marker_size,
-        'fillstyle': 'none'
-    },
-    'dcr': {
-        'marker': 'v',
-        'name': 'DCR',
-        'color': 'tab:purple',
-        'size': marker_size,
-        'fillstyle': 'none'
-    },
-
+    'blackbox': {'marker': 'o', 'name': 'BlackBox', 'color': 'tab:gray', 'size': marker_size, 'fillstyle': 'none'},
+    'cem': {'marker': 's', 'name': 'CEM', 'color': 'tab:red', 'size': marker_size, 'fillstyle': 'none'},
+    'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:brown', 'size': marker_size, 'fillstyle': 'none'},
+    'dcr': {'marker': 'v', 'name': 'DCR', 'color': 'tab:purple', 'size': marker_size, 'fillstyle': 'none'},
     # =========================
     # BASELINE but VERIFIABLE
     # =========================
-    'cmr': {
-        'marker': 'P',
-        'name': 'CMR',
-        'color': 'black',
-        'size': marker_size,
-        'fillstyle': 'full'
-    },
-    'cbm_linear': {
-        'marker': '^',
-        'name': 'CBM',
-        'color': 'tab:orange',
-        'size': marker_size,
-        'fillstyle': 'none'
-    },
-    
+    'cmr': {'marker': 'P', 'name': 'CMR', 'color': 'black', 'size': marker_size, 'fillstyle': 'full'},
+    'cbm_linear': {'marker': '^', 'name': 'CBM', 'color': 'tab:orange', 'size': marker_size, 'fillstyle': 'none'},
     # =========================
     # PROPOSED MODELS (verifiable)
     # =========================
-    'memory_cbm': {
-        'marker': 'X',
-        'name': 'MLP-Mem-CBM',
-        'color': 'tab:blue',
-        'size': marker_size,
-        'fillstyle': 'full'
-    },
-    'prior_symbolic_cbm': {
-        'marker': '*',
-        'name': 'Prior-Mem-CBM',
-        'color': 'tab:cyan',
-        'size': marker_size,
-        'fillstyle': 'full'
-    },
-    'sr_symbolic_cbm': {
-        'marker': 'h',
-        'name': 'Sym-Mem-CBM',
-        'color': 'tab:green',
-        'size': marker_size,
-        'fillstyle': 'full'
-    },
-    'linear_symbolic_cbm': {
-        'marker': '8',
-        'name': 'Lin-Mem-CBM',
-        'color': 'tab:olive',
-        'size': marker_size,
-        'fillstyle': 'full'
-    },
-    'kan_symbolic_cbm': {
-        'marker': 'p',
-        'name': 'Kan-Mem-CBM',
-        'color': 'tab:teal',
-        'size': marker_size,
-        'fillstyle': 'full'
-    },
+    'memory_cbm': {'marker': 'X', 'name': 'MLP-Mem-CBM', 'color': 'tab:blue', 'size': marker_size, 'fillstyle': 'full'},
+    'prior_symbolic_cbm': {'marker': '*', 'name': 'Prior-Mem-CBM', 'color': 'tab:cyan', 'size': marker_size, 'fillstyle': 'full'},
+    'sr_symbolic_cbm': {'marker': 'h', 'name': 'Sym-Mem-CBM', 'color': 'tab:green', 'size': marker_size, 'fillstyle': 'full'},
+    'linear_symbolic_cbm': {'marker': '8', 'name': 'Lin-Mem-CBM', 'color': 'tab:olive', 'size': marker_size, 'fillstyle': 'full'},
+    'kan_symbolic_cbm': {'marker': 'p', 'name': 'Kan-Mem-CBM', 'color': 'tab:teal', 'size': marker_size, 'fillstyle': 'full'},
 }
 
 
@@ -209,7 +142,7 @@ def main():
     ]
  
     try:
-        performance, _ = get_exp_from_path_cached(paths, cache_name='sr_ablation', output_path=output_path, sample_equations=True)
+        performance = get_exp_from_path_cached(paths, cache_name='sr_ablation', output_path=output_path)
         # Filter the performance dataframe to keep only the models in model_styles 
         # and datasets in custom_order.
         performance = performance[performance['model'].isin(model_styles.keys()) & performance['dataset'].isin(custom_order)]
@@ -269,7 +202,7 @@ def main():
     ]
 
     try:
-        performance, _ = get_exp_from_path_cached(paths, cache_name='concept_size_ablation', output_path=output_path, sample_equations=False)
+        performance = get_exp_from_path_cached(paths, cache_name='concept_size_ablation', output_path=output_path)
         # Plot the results on the concept size ablation
         plot_concept_size_ablation(performance, model_styles, title_font, label_font, tick_font)
     except Exception as e:
@@ -283,25 +216,25 @@ def main():
         f"{output_path}/memory_less_cls",
         f"{output_path}/memory_cls",
         f"{output_path}/memory_reg",
-        f"{output_path}/memory_less_reg"
+        f"{output_path}/memory_less_reg",
+        f"{output_path}/prior_reg",
     ]
 
     try:
-        performance, _ = get_exp_from_path_cached(paths, cache_name='memory_ablation', output_path=output_path, sample_equations=True)
-
-        # The linear_symbolic_cbm model with memory_size=1 is equivalent to the cbm_linear model.
-        # So, we will rename the model accordingly for memory_size=1.
-        performance.loc[(performance['model'] == 'linear_symbolic_cbm') & (performance['memory_size'] == 1), 'model'] = 'cbm_linear'
+        performance = get_exp_from_path_cached(paths, cache_name='memory_ablation', output_path=output_path)
 
         # Count number of seeds
         seeds_count = performance.groupby(['dataset', 'model', 'memory_size'])['seed'].nunique().reset_index()
         # Save in csv file
         seeds_count.to_csv(os.path.join(result_figs, 'seeds_count_memory_ablation.csv'), index=False)
 
+        # remove feynman datasets custom order
+        refined_custom_order = [d for d in custom_order if not d.startswith('feynman')]
+
         # Filter the performance dataframe to keep only the models in model_styles 
         # and datasets in custom_order.
         performance = performance[performance['model'].isin(model_styles.keys()) & \
-                                performance['dataset'].isin(custom_order)]
+                                performance['dataset'].isin(refined_custom_order)]
 
         # Memory vs accuracy 
         plot_memory_ablation(
@@ -310,7 +243,7 @@ def main():
             title_font, 
             label_font, 
             tick_font, 
-            custom_order
+            refined_custom_order
         )
 
         # Composed Complexity vs accuracy
@@ -320,8 +253,7 @@ def main():
             title_font, 
             label_font, 
             tick_font, 
-            custom_order, 
-            complexity_type='composed',
+            refined_custom_order 
         )
         
     except Exception as e:
@@ -333,11 +265,7 @@ def main():
 
     try:
 
-        performance, _ = get_exp_from_path_cached(paths, cache_name='memory_ablation', output_path=output_path, sample_equations=True)
-
-        # The linear_symbolic_cbm model with memory_size=1 is equivalent to the cbm_linear model.
-        # So, we will rename the model accordingly for memory_size=1.
-        performance.loc[(performance['model'] == 'linear_symbolic_cbm') & (performance['memory_size'] == 1), 'model'] = 'cbm_linear'
+        performance = get_exp_from_path_cached(paths, cache_name='memory_ablation', output_path=output_path)
 
         # Filter the experiments in order to show only the 
         performance = get_intervention_from_path(

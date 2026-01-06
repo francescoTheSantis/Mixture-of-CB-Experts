@@ -278,9 +278,7 @@ def extract_memory_equations(model, model_name):
             sorted_keys = sorted(trainable_eqs.keys())
             
             for mem_idx, set_name in enumerate(tqdm(sorted_keys, desc="Extracting SR equations", leave=False)):
-                # NOTE: get_equation_string() returns equations with current fine-tuned parameter values
-                eq_strs = [f"{eq_name}: {trainable_eqs[set_name][eq_name].get_equation_string()}"
-                          for eq_name in eq_names[set_name]]
+                eq_strs = [f"{eq_name}: {trainable_eqs[set_name][eq_name].get_equation_string()}" for eq_name in eq_names[set_name]]
                 equations[mem_idx] = "; ".join(eq_strs)
         else:
             # BlackBoxPredictor or not yet trained

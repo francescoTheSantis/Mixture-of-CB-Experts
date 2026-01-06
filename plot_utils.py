@@ -7,8 +7,34 @@ import pandas as pd
 import scienceplots
 import warnings
 import yaml
+import signal
+from contextlib import contextmanager
 from tqdm import tqdm
-from show_results import table_path, result_figs, regression_datasets
+from show_results import table_path, result_figs, regression_datasets, MEMORY_MODELS_LIST
+
+
+class TimeoutError(Exception):
+    """Custom exception for timeout."""
+    pass
+
+
+@contextmanager
+def timeout(seconds=30):
+    """Context manager that raises TimeoutError if operation takes longer than specified seconds."""
+    def timeout_handler(signum, frame):
+        raise TimeoutError(f"Operation timed out after {seconds} seconds")
+    
+    # Set up the signal handler
+    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(seconds)
+    
+    try:
+        yield
+    finally:
+        # Disable the alarm and restore old handler
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
+
 
 # I used scienceplots for the style of the plots, but you can use any other style you want.
 plt.style.use(['science', 'ieee', 'no-latex'])
@@ -93,7 +119,7 @@ classes_x_dataset = {
 ######### Data Extraction ###############
 #########################################
 
-def get_exp_from_path_cached(paths, cache_name, output_path, sample_equations=False):
+def get_exp_from_path_cached(paths, cache_name, output_path):
     """
     Cached wrapper for get_exp_from_path function.
     
@@ -101,7 +127,6 @@ def get_exp_from_path_cached(paths, cache_name, output_path, sample_equations=Fa
         paths: List of paths to process
         cache_name: Name identifier for this experiment (e.g., 'sr_ablation', 'memory_ablation')
         output_path: Base output path where cache directory will be created
-        sample_equations: Whether to sample equations
     
     Returns:
         Tuple of (performance_df, other_data) as returned by get_exp_from_path
@@ -111,26 +136,26 @@ def get_exp_from_path_cached(paths, cache_name, output_path, sample_equations=Fa
     os.makedirs(cache_dir, exist_ok=True)
     
     # Generate cache filename based on experiment name and parameters
-    cache_file = os.path.join(cache_dir, f'{cache_name}_equations_{sample_equations}.csv')
+    cache_file = os.path.join(cache_dir, f'{cache_name}_equations.csv')
     
     # Check if cache exists
     if os.path.exists(cache_file):
         print(f"Loading cached results for {cache_name} from {cache_file}")
         performance = pd.read_csv(cache_file)
         # Return tuple to match original function signature
-        return performance, None
+        return performance
     else:
         print(f"No cache found for {cache_name}. Computing results...")
         # Call the original function
-        performance, other_data = get_exp_from_path(paths, sample_equations=sample_equations)
+        performance = get_exp_from_path(paths)
         
         # Save to cache
         print(f"Saving results to cache: {cache_file}")
         performance.to_csv(cache_file, index=False)
         
-        return performance, other_data
+        return performance
 
-def get_exp_from_path(paths, sample_equations=False):
+def get_exp_from_path(paths):
     from src.utils.complexity import compute_complexity
     from sympy import sympify, symbols
     
@@ -183,12 +208,13 @@ def get_exp_from_path(paths, sample_equations=False):
                     else:
                         d['concept_acc'] = result['test/c/acc'].iloc[-1]
                 
-                # Compute complexity for equations if available (skip for cem and blackbox)
-                if conf['model']['metadata']['name'] not in ['cem', 'blackbox']:
+                # Compute complexity for equations if available (skip for cem, blackbox, licem, dcr)
+                if conf['model']['metadata']['name'] not in ['cem', 'blackbox', 'licem', 'dcr']:
                     predictions_file = os.path.join(exp, 'logs/experiment_metrics/test_predictions_per_sample.csv')
                     if os.path.exists(predictions_file):
                         try:
-                            df_pred = pd.read_csv(predictions_file)
+                            with timeout(3):  # 3 second timeout
+                                df_pred = pd.read_csv(predictions_file)
                             
                             # Check if 'equation' column exists
                             if 'equation' in df_pred.columns:
@@ -200,10 +226,6 @@ def get_exp_from_path(paths, sample_equations=False):
 
                                 # Remove NaN or empty equations
                                 equation_counts = {eq: cnt for eq, cnt in equation_counts.items() if pd.notna(eq) and eq != ''}
-
-                                if sample_equations and len(equation_counts) >= 10:
-                                    # Filter equation_counts to keep the top 10 most frequent equations
-                                    equation_counts = dict(sorted(equation_counts.items(), key=lambda item: item[1], reverse=True)[:10])
 
                                 # Remove target from equations if present (e.g., "y: <equation>")
                                 cleaned_equation_counts = {}
@@ -218,41 +240,19 @@ def get_exp_from_path(paths, sample_equations=False):
                                     else:
                                         cleaned_equation_counts[cleaned_eq] = cnt
 
-                                # Compute complexity for each unique equation
+                                # sum the complexities
                                 total_complexity = 0
-                                total_count = 0
-                                for equation_str, count in tqdm(cleaned_equation_counts.items(), desc=f"Computing complexity ({d['dataset']}/{d['model']}/seed{d['seed']})", leave=False):
-                                    try:
-                                        # Convert string to sympy expression
-                                        # Create proper symbols for all variables to avoid conflicts with built-in names
-                                        symbol_dict = {v: symbols(v) for v in vars}
-                                        equation = sympify(equation_str, locals=symbol_dict)
-                                        
-                                        # Compute complexity
-                                        complexity = compute_complexity(equation, metric='visitation_length')
-                                        
-                                        # Weight by occurrence count
-                                        total_complexity += complexity * count
-                                        total_count += count
-                                    except Exception as e:
-                                        print(f"Error processing equation '{equation_str}': {e}")
-                                        continue
-
-                                if total_count > 0:
-                                    # Compute weighted average complexity
-                                    d['complexity'] = total_complexity / total_count
-                                    d['n_equations'] = total_count
+                                for eq, _ in tqdm(cleaned_equation_counts.items(), desc=f"Complexity, {d['model']}, {d['dataset']}", leave=False):
+                                    sympy_eq = sympify(eq, locals={var: symbols(var) for var in vars})
+                                    complexity = compute_complexity(sympy_eq, metric='visitation_length')
+                                    total_complexity += complexity
+                                
+                                d['complexity'] = total_complexity
                         except Exception as e:
                             print(f"Error computing complexity for {exp}: {e}")
                 else:
                     # Store NaN for blackbox and cem models
                     d['complexity'] = np.nan
-                    d['n_equations'] = np.nan
-                
-                if d['model'] == 'linear_symbolic_cbm' and d['seed']==1:
-                    expl_dict = d.copy()
-                    expl_dict['path'] = exp
-                    lmr_paths.append(expl_dict)
 
                 performance = pd.concat([performance, pd.DataFrame([d])], ignore_index=True)
         except Exception as e:
@@ -260,11 +260,9 @@ def get_exp_from_path(paths, sample_equations=False):
             print(f"Skipping this experiment: {d}")
             continue
 
-    return performance, lmr_paths
+    return performance
 
 def get_intervention_from_path(paths, model_styles=None, custom_order=None, apply_filter=False, fixed_memory=None, selected_memory_size=2):
-
-    memory_models = ['cmr', 'linear_symbolic_cbm', 'sr_symbolic_cbm', 'prior_symbolic_cbm', 'memory_cbm']
 
     if apply_filter:
         # Eliminate Feynman datasets from custom_order
@@ -277,7 +275,7 @@ def get_intervention_from_path(paths, model_styles=None, custom_order=None, appl
             for dataset in custom_order:
                 if dataset not in fixed_memory.keys():
                     for model in model_styles.keys():
-                        if model in memory_models:
+                        if model in MEMORY_MODELS_LIST:
                             filtered_exps.append({
                                 'dataset': dataset,
                                 'model': model,
@@ -285,7 +283,7 @@ def get_intervention_from_path(paths, model_styles=None, custom_order=None, appl
                             })
                 else:
                     for model in model_styles.keys():
-                        if model in memory_models:
+                        if model in MEMORY_MODELS_LIST:
                             mem_size = fixed_memory[dataset]
                             filtered_exps.append({
                                 'dataset': dataset,
@@ -295,7 +293,7 @@ def get_intervention_from_path(paths, model_styles=None, custom_order=None, appl
         else:          
             for dataset in custom_order:
                 for model in model_styles.keys():
-                    if model in memory_models:
+                    if model in MEMORY_MODELS_LIST:
                         filtered_exps.append({
                         'dataset': dataset,
                         'model': model,
@@ -306,7 +304,6 @@ def get_intervention_from_path(paths, model_styles=None, custom_order=None, appl
 
     # Collect all the experiments in the given paths
     exps_path = []
-    lmr_paths = []
     
     for path in paths:
         if os.path.exists(path):
@@ -695,6 +692,14 @@ def plot_memory_ablation(performance, model_styles, title_font, label_font, tick
 
     performance = compute_avg_and_uncertainty(performance, custom_order)
 
+    # Replace memory_size=500 with max_memory_size + 1 for proper tick positioning
+    for dataset in performance['dataset'].unique():
+        dataset_data = performance[performance['dataset'] == dataset]
+        memory_sizes = dataset_data['memory_size'].unique()
+        max_non_infinity = max([s for s in memory_sizes if s != 500]) if any(s != 500 for s in memory_sizes) else 0
+        if 500 in memory_sizes:
+            performance.loc[(performance['dataset'] == dataset) & (performance['memory_size'] == 500), 'memory_size'] = max_non_infinity + 1
+
     # Separate datasets by task type
     classification_datasets = performance[performance['task_type'] == 'classification']['dataset'].unique()
     found_regression_datasets = performance[performance['task_type'] == 'regression']['dataset'].unique()
@@ -801,14 +806,15 @@ def plot_memory_ablation(performance, model_styles, title_font, label_font, tick
             ax.set_ylabel(ylabel, fontdict=label_font)
         
         # Set x-axis to log scale
-        ax.set_xscale('log')
-        ax.set_yscale('log')
+        # ax.set_xscale('log')
+        # ax.set_yscale('log')
         
-        # Set x-axis ticks and labels with infinity symbol for memory_size=500
+        # Set x-axis ticks and labels with infinity symbol for adjusted memory_size
         ax.set_xticks(distinct_memory_sizes)
         x_labels = []
         for size in distinct_memory_sizes:
-            if size == 500:
+            # Check if this was originally 500 (now max+1) by checking if it's the max value
+            if size == max(distinct_memory_sizes) and size > 2:
                 x_labels.append('$\dots\infty$')
             else:
                 x_labels.append(str(int(size)))
@@ -1003,7 +1009,7 @@ def filter_pareto_models(df: pd.DataFrame, fixed_memory: dict = None, custom_ord
 
     return filtered.reset_index(drop=True)
 
-def plot_pareto_front(performance, model_styles, title_font, label_font, tick_font, custom_order, complexity_type=False):
+def plot_pareto_front(performance, model_styles, title_font, label_font, tick_font, custom_order):
     """
     Plot Pareto front for model complexity vs accuracy.
     
@@ -1069,42 +1075,41 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         data = data.copy()
         data['has_infinity'] = False  # Initialize the column
         
-        if complexity_type == 'oc' and 'mean_complexity' in data.columns:
-            # Use the 'complexity' column directly from the dataframe
-            # Mark dcr and licem as having infinity complexity
-            data['has_infinity'] = data['model'].isin(['dcr', 'licem'])
-            # Find max finite complexity to set infinity value appropriately
-            finite_complexities = data.loc[~data['has_infinity'], 'mean_complexity']
-            finite_complexities = finite_complexities[finite_complexities.notna() & (finite_complexities > 0)]
-            
-            if len(finite_complexities) > 0:
-                max_finite = finite_complexities.max()
-                infinity_value = max_finite * 100  # Use 100x the max as "infinity"
-            else:
-                # Fallback if no valid finite complexities exist
-                infinity_value = 1000.0
-            
-            data.loc[data['has_infinity'], 'mean_complexity'] = infinity_value
-        elif complexity_type == 'composed' and 'mean_complexity' in data.columns:
-            # Compute complexity as memory_size * operational_complexity from dataframe column
-            data['mean_complexity'] = data['memory_size'] * data['mean_complexity']
-            # Mark dcr and licem as having infinity complexity, then replace with large finite value
-            data['has_infinity'] = data['model'].isin(['dcr', 'licem'])
-            # Find max finite complexity to set infinity value appropriately
-            # Filter out NaN and negative values when finding max
-            finite_complexities = data.loc[~data['has_infinity'], 'mean_complexity']
-            finite_complexities = finite_complexities[finite_complexities.notna() & (finite_complexities > 0)]
-            
-            if len(finite_complexities) > 0:
-                max_finite = finite_complexities.max()
-                infinity_value = max_finite * 100  # Use 100x the max as "infinity"
-            else:
-                # Fallback if no valid finite complexities exist
-                infinity_value = 1000.0
-            
-            data.loc[data['has_infinity'], 'mean_complexity'] = infinity_value
+        # Use the 'complexity' column directly from the dataframe
+        # Mark dcr and licem as having infinity complexity
+        data['has_infinity'] = data['model'].isin(['dcr', 'licem'])
+        # Find max finite complexity to set infinity value appropriately
+        finite_complexities = data.loc[~data['has_infinity'], 'mean_complexity']
+        finite_complexities = finite_complexities[finite_complexities.notna() & (finite_complexities > 0)]
+        
+        if len(finite_complexities) > 0:
+            max_finite = finite_complexities.max()
+            infinity_value = max_finite * 100  # Use 100x the max as "infinity"
         else:
-            raise ValueError("Either complexity_type is not supported or required columns are missing in the dataframe.")
+            # Fallback if no valid finite complexities exist
+            infinity_value = 100000.0
+        
+        data.loc[data['has_infinity'], 'mean_complexity'] = infinity_value
+        # elif complexity_type == 'composed' and 'mean_complexity' in data.columns:
+        #     # Compute complexity as memory_size * operational_complexity from dataframe column
+        #     data['mean_complexity'] = data['memory_size'] * data['mean_complexity']
+        #     # Mark dcr and licem as having infinity complexity, then replace with large finite value
+        #     data['has_infinity'] = data['model'].isin(['dcr', 'licem'])
+        #     # Find max finite complexity to set infinity value appropriately
+        #     # Filter out NaN and negative values when finding max
+        #     finite_complexities = data.loc[~data['has_infinity'], 'mean_complexity']
+        #     finite_complexities = finite_complexities[finite_complexities.notna() & (finite_complexities > 0)]
+            
+        #     if len(finite_complexities) > 0:
+        #         max_finite = finite_complexities.max()
+        #         infinity_value = max_finite * 100  # Use 100x the max as "infinity"
+        #     else:
+        #         # Fallback if no valid finite complexities exist
+        #         infinity_value = 1000.0
+            
+        #     data.loc[data['has_infinity'], 'mean_complexity'] = infinity_value
+        # else:
+        #     raise ValueError("Either complexity_type is not supported or required columns are missing in the dataframe.")
 
         # Filter out rows with NaN or non-positive complexity values
         # BUT keep blackbox and cem models even if they have NaN complexity (they'll be plotted as horizontal lines)
@@ -1142,22 +1147,6 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                 y_errors = model_data['se_task']
             
             if model in ['cem', 'blackbox']:
-                # Plot as horizontal dotted lines for cem and blackbox
-                xlim = ax.get_xlim() if ax.get_xlim() != (0.0, 1.0) else (1, 100000)  # Default range if not set
-                y_val = y_values.iloc[0]
-                
-                ax.axhline(y=y_val, color=model_styles[model]['color'], 
-                            linestyle='-.', linewidth=2.5, alpha=0.8,
-                            label=model_styles[model]['name'])
-                
-                # add uncertainty shading for blackbox and cem
-                y_err = y_errors.iloc[0]
-                ax.fill_between(xlim,
-                                y_val - y_err,
-                                y_val + y_err,
-                                color=model_styles[model]['color'],
-                                alpha=0.2)
-                
                 # Track that this style was plotted
                 all_plotted_styles.add(model)
                 
@@ -1258,6 +1247,41 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         
         # Set x-axis to log scale
         ax.set_xscale('log')
+        
+        # Set xlim to maximum complexity value
+        if distinct_complexities:
+            max_complexity = max(distinct_complexities)
+            if has_infinity_models and infinity_complexity.size > 0:
+                max_complexity = max(max_complexity, infinity_complexity[0])
+            ax.set_xlim(right=max_complexity * 1.1)  # Add 10% padding
+        
+        # Plot horizontal lines for cem and blackbox after xlim is set
+        for model in data['model'].unique():
+            if model in ['cem', 'blackbox']:
+                model_data = data[data['model'] == model]
+                
+                # For accuracy metrics, plot 1-accuracy (error rate)
+                if metric_type == 'accuracy':
+                    y_values = 100 - model_data['mean_task']
+                    y_errors = model_data['se_task']
+                else:
+                    y_values = model_data['mean_task']
+                    y_errors = model_data['se_task']
+                
+                xlim = ax.get_xlim()
+                y_val = y_values.iloc[0]
+                
+                ax.axhline(y=y_val, color=model_styles[model]['color'], 
+                            linestyle='-.', linewidth=2.5, alpha=0.8,
+                            label=model_styles[model]['name'])
+                
+                # add uncertainty shading for blackbox and cem
+                y_err = y_errors.iloc[0]
+                ax.fill_between(xlim,
+                                y_val - y_err,
+                                y_val + y_err,
+                                color=model_styles[model]['color'],
+                                alpha=0.2)
 
         # Set x-axis ticks to 5 equally spaced values
         if distinct_complexities:
@@ -1274,26 +1298,39 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                 
                 # Generate 5 equally spaced ticks in log space
                 if has_infinity_models and infinity_complexity.size > 0:
-                    # Calculate equal log spacing across all 5 ticks including infinity
-                    # Infinity tick should be at the actual inf_value position
+                    # Generate 3 equally spaced finite ticks + infinity
                     log_min = np.log10(min_c)
-                    log_inf = np.log10(inf_value)
-                    log_spacing = (log_inf - log_min) / 4  # 4 intervals for 5 ticks
+                    log_max = np.log10(max_c)
+                    log_spacing = (log_max - log_min) / 2  # 2 intervals for 3 ticks
                     
-                    # Generate 5 equally spaced ticks in log space (4 finite + 1 infinity)
-                    tick_values = [10 ** (log_min + i * log_spacing) for i in range(5)]
-                    tick_labels = [str(int(c)) for c in tick_values[:4]] + ['$\infty$']
+                    # Generate 3 equally spaced ticks in log space
+                    tick_values = [10 ** (log_min + i * log_spacing) for i in range(3)]
+                    # Format labels with K notation for values >= 1000
+                    tick_labels = []
+                    for c in tick_values:
+                        if c >= 1000:
+                            tick_labels.append(f'{int(c/1000)}K')
+                        else:
+                            tick_labels.append(str(int(c)))
                     
-                    # Set the last tick value to actual infinity position
-                    tick_values[4] = inf_value
+                    # Add infinity tick at max_c * 1.8 to keep it close
+                    inf_tick_position = max_c * 1.8
+                    tick_values.append(inf_tick_position)
+                    tick_labels.append('$\infty$')
                     
-                    # Set x-axis limits to show all ticks with some padding
-                    ax.set_xlim(min_c * 0.5, inf_value * 1.5)
+                    # Set xlim to show all ticks
+                    ax.set_xlim(min_c * 0.5, inf_tick_position * 1.2)
                 else:
                     log_min = np.log10(min_c)
                     log_max = np.log10(max_c)
-                    tick_values = np.logspace(log_min, log_max, 5)
-                    tick_labels = [str(int(c)) for c in tick_values]
+                    tick_values = np.logspace(log_min, log_max, 3)
+                    # Format labels with K notation for values >= 1000
+                    tick_labels = []
+                    for c in tick_values:
+                        if c >= 1000:
+                            tick_labels.append(f'{int(c/1000)}K')
+                        else:
+                            tick_labels.append(str(int(c)))
                 
                 ax.set_xticks(tick_values)
                 # Use FixedFormatter to ensure our custom labels are preserved
@@ -1356,7 +1393,7 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
 
     plt.tight_layout()
     
-    plt.savefig(os.path.join(result_figs, f'pareto_front_{complexity_type}.pdf'))
+    plt.savefig(os.path.join(result_figs, f'pareto_front.pdf'))
 
 #############################################
 ########## Latex Table Creation Utils #######
@@ -1524,7 +1561,7 @@ def show_symbolic_regression_results(
     create_latex_tables_from_csv(f'{table_dir}/sr_ablation_performance.csv', output_dir=table_dir)
 
 
-def compute_ted_metrics_for_sr_ablation(paths, MEMORY_MODELS_LIST=['linear_symbolic_cbm', 'kan_symbolic_cbm','prior_symbolic_cbm']):
+def compute_ted_metrics_for_sr_ablation(paths):
     """Compute Tree Edit Distance (TED) metrics for symbolic regression ablation experiments."""
     
     import dill

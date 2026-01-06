@@ -243,7 +243,7 @@ class TrainableEquation(nn.Module):
         for param_name, param_value in param_values.items():
             expr = expr.subs(sympy.Symbol(param_name), param_value)
         # Simplify the expression before converting to string
-        expr = simplify(expr)
+        # expr = simplify(expr)
         return str(expr)
 
 

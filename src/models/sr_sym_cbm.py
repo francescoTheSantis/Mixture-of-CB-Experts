@@ -111,40 +111,55 @@ class SymbolicRegressorCBM(BaseModel):
             activation=nn.Identity(), # we will later apply a sigmoid if the concept is boolean
         )
 
+        # Shared PySR parameters
+        self.pysr_params = {
+            'optimizer_iterations': 8, 
+            'populations': 40,
+            'population_size': 60,
+            'niterations': 100,
+            'ncycles_per_iteration': 380
+        }
+
         # PySR parameters
         if self.task == 'classification':
-            size = len(self.c_names) * 4 + 2 # At least we allow to find a linear equation over all concepts.
-            self.pysr_params = {
-                # For the classification task we use only basic operators since 
-                # there are only binary concepts and the target is binary as well.
-                'binary_operators': ['*', '+', '-'],
-                'elementwise_loss': "loss(prediction, target) = (1 - prediction * target)^2",
-                'maxdepth': size,
-                'maxsize': size,   
-                # Initial guess: linear equations over single concepts
-                # 'guesses': [' + '.join([f'1 * x{i}' for i in range(len(self.c_names))]) + ' + 1'], 
-                # Select the equation with the highes accuracy
-                'model_selection' : 'accuracy',
-            }
+            size = len(self.c_names) * 5 # At least we allow to find a linear equation over all concepts.
+            self.pysr_params['binary_operators'] = ['*', '+', '-']
+            self.pysr_params['elementwise_loss'] = "loss(prediction, target) = (1 - prediction * target)^2"
+            self.pysr_params['maxdepth'] = size
+            self.pysr_params['maxsize'] = size
+            self.pysr_params['early_stop_condition'] = 1e-5
+
+            # Initial guess: linear equations over single concepts
+            # self.pysr_params['guesses'] = [' + '.join([f'1 * x{i}' for i in range(len(self.c_names))]) + ' + 1']
+
+            # Select the equation with the highes accuracy
+            self.pysr_params['model_selection'] = 'accuracy'
+
+            # Timeout for classification tasks
+            self.pysr_params['timeout_in_seconds'] = 60 * 2 # 2 minutes per equation
+
+            # Force multiplication to only operate on constants and variables
+            # (1, 1) means both left and right operands must have complexity 1
+            # self.pysr_params['constraints'] = {
+            #     '*': (1, 1)  # This prevents x1*x2, (x1+x2)*x3, etc.
+            # }
+            
+            # Optionally, prevent nested multiplications entirely
+            # self.pysr_params['nested_constraints'] = {
+            #     '*': {'*': 0}  # No multiplication within multiplication
+            # }
+
+            # Probability of optimizing the constants during a single iteration of the evolutionary algorithm.
+            # self.pysr_params['optimize_probability'] = 0.5
 
         else:
             size = 40 # Default size for regression tasks
-            self.pysr_params = {
-                'binary_operators': binary_operators,
-                'unary_operators': unary_operators,
-                'extra_sympy_mappings': extra_functions,
-                'elementwise_loss': "loss(prediction, target) = (prediction - target)^2",
-                'maxdepth': size,
-                'maxsize': size,  
-            }
-
-        # Shared PySR parameters
-        self.pysr_params['early_stop_condition'] = 1e-5
-        self.pysr_params['optimizer_iterations'] = 8 # Optimizer steps for constants
-        self.pysr_params['populations'] = 40
-        self.pysr_params['population_size'] = 60
-        self.pysr_params['niterations'] = 100
-        self.pysr_params['ncycles_per_iteration'] = 380
+            self.pysr_params['binary_operators'] = binary_operators
+            self.pysr_params['unary_operators'] = unary_operators
+            self.pysr_params['extra_sympy_mappings'] = extra_functions
+            self.pysr_params['elementwise_loss'] = "loss(prediction, target) = (prediction - target)^2"
+            self.pysr_params['maxdepth'] = size
+            self.pysr_params['maxsize'] = size
         
         # Override with user-defined params
         if pysr_params is not None:
@@ -157,6 +172,7 @@ class SymbolicRegressorCBM(BaseModel):
             output_size=self.output_size,
             activation=activation,
             latent_size=latent_size,
+            linear=(self.task=='classification')
         )
 
     ###### Forward and loss methods ######
@@ -177,7 +193,7 @@ class SymbolicRegressorCBM(BaseModel):
         ## Equation execution block ##
         if self.predictor is None:
             raise ValueError("Predictor not initialized.")
-        
+
         predictor_output = self.predictor(selector_probs, input_concepts)
 
         return {

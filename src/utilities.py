@@ -15,11 +15,6 @@ warnings.filterwarnings("ignore")
 import re
 from scipy.spatial.distance import cdist
 
-# DO NOT import PySRRegressor at module level - it will be imported lazily when needed
-# from pysr import PySRRegressor
-
-# warnings.filterwarnings("ignore")
-
 def set_matmul_precision():
     """
     Set float32 matmul precision for better performance on CUDA devices with Tensor Cores.
@@ -612,19 +607,10 @@ def symbolic_regression(
                 all_equations[memory_idx][output_name] = sp.sympify("0")
                 continue
             
-            # NOTE: Subsample if needed using input space coverage
-            subsample_size = 10000
+            subsample_size = 5000 # 5000
             if n_samples_for_memory > subsample_size:
                 print(f"Subsampling to {subsample_size} for PySR using input space coverage (memory {memory_idx}, output '{output_name}').")
                 
-                # TODO: still to define if it is better to use random subsampling or Kmeans-based subsampling
-                # if task == 'regression':
-                #     # Random subsampling
-                #     indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
-                # else:
-                #     # Kmeans-based subsampling
-                #     indices = subsample_for_input_coverage(X_memory, subsample_size)
-
                 if task == 'classification':
                     # If all the elements in X_memory are either 0 or 1
                     if bool((torch.where(X_memory==1,1,0) + torch.where(X_memory==0,1,0)).sum() == X_memory.numel()):
@@ -656,11 +642,22 @@ def symbolic_regression(
             print(f"\nFitting PySR for output '{output_name}' (memory slot {memory_idx})...")
             print(f"  Input shape: {X_memory_clean.shape}, Target shape: {y_target.shape}")
             
+            if task == 'classification':
+                if bool((torch.where(X_memory==1,1,0) + torch.where(X_memory==0,1,0)).sum() == X_memory.numel()):
+                    noise_level = 0.10  # 10% noise
+                    n_noisy_samples = int(noise_level * X_memory_clean.shape[0])
+                    for _ in range(n_noisy_samples):
+                        sample_idx = np.random.randint(0, X_memory_clean.shape[0])
+                        feature_idx = np.random.randint(0, X_memory_clean.shape[1])
+                        original_value = X_memory_clean[sample_idx, feature_idx].item()
+                        new_value = 1 - original_value  
+                        X_memory_clean[sample_idx, feature_idx] = new_value
+
             try:
 
                 model = PySRRegressor(
                     **pysr_params,
-                    verbosity=1,  # Reduce verbosity to avoid Julia output issues
+                    verbosity=1,  
                     progress=True,
                 )
 

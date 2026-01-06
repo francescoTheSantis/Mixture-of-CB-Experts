@@ -148,6 +148,9 @@ class Trainer:
 
         model_name = self.cfg.model.metadata.name
 
+        # Set allow symbolic flag in the model
+        self.model.model.allow_symbolic = True
+
         # Load the best checkpoint from initial training (best_model.ckpt)
         ckpt_path = f"{self.checkpoint_dir}/best_model.ckpt"
         
