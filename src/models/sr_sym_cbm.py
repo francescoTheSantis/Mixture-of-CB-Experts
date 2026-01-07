@@ -136,7 +136,7 @@ class SymbolicRegressorCBM(BaseModel):
             self.pysr_params['model_selection'] = 'accuracy'
 
             # Timeout for classification tasks
-            self.pysr_params['timeout_in_seconds'] = 60 * 2 # 2 minutes per equation
+            self.pysr_params['timeout_in_seconds'] = 90 
 
             # Force multiplication to only operate on constants and variables
             # (1, 1) means both left and right operands must have complexity 1

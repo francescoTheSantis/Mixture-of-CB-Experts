@@ -255,7 +255,8 @@ class Trainer:
                 y_names=self.model.model.y_names,
                 device=self.cfg.gpus[0],
                 pysr_params=self.model.model.pysr_params,
-                task=self.cfg.dataset.metadata.task
+                task=self.cfg.dataset.metadata.task,
+                disjoint_training=self.cfg.disjoint_training
             )
 
             # Run symbolic substitution to create the SymbolicPredictor
