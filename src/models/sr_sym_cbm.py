@@ -59,6 +59,7 @@ class SymbolicRegressorCBM(BaseModel):
                  concept_penalty=1.0,
                  device='cpu',
                  pysr_params=None,
+                 use_affine_parameters=False,
                  **kwargs
                 ):
 
@@ -94,6 +95,7 @@ class SymbolicRegressorCBM(BaseModel):
         self.device = device
         self.mc_approx = mc_approx
         self.memory_size = memory_size
+        self.use_affine_parameters = use_affine_parameters
 
         # Instantiate the selector
         self.classifier_selector = SelectorModel(
@@ -124,34 +126,34 @@ class SymbolicRegressorCBM(BaseModel):
         if self.task == 'classification':
             size = len(self.c_names) * 5 # At least we allow to find a linear equation over all concepts.
             self.pysr_params['binary_operators'] = ['*', '+', '-']
-            self.pysr_params['elementwise_loss'] = "loss(prediction, target) = (1 - prediction * target)^2"
+            self.pysr_params['elementwise_loss'] = "loss(prediction, target) = (prediction - target)^2"
             self.pysr_params['maxdepth'] = size
             self.pysr_params['maxsize'] = size
             self.pysr_params['early_stop_condition'] = 1e-5
+            self.pysr_params['timeout_in_seconds'] = 30
 
-            # Initial guess: linear equations over single concepts
+            # # Initial guess: linear equations over single concepts
             # self.pysr_params['guesses'] = [' + '.join([f'1 * x{i}' for i in range(len(self.c_names))]) + ' + 1']
-
-            # Select the equation with the highes accuracy
-            self.pysr_params['model_selection'] = 'accuracy'
-
-            # Timeout for classification tasks
-            self.pysr_params['timeout_in_seconds'] = 90 
-
-            # Force multiplication to only operate on constants and variables
-            # (1, 1) means both left and right operands must have complexity 1
+            # # Force multiplication to only operate on constants and variables
+            # # (1, 1) means both left and right operands must have complexity 1
             # self.pysr_params['constraints'] = {
             #     '*': (1, 1)  # This prevents x1*x2, (x1+x2)*x3, etc.
             # }
-            
-            # Optionally, prevent nested multiplications entirely
+            # # Optionally, prevent nested multiplications entirely
             # self.pysr_params['nested_constraints'] = {
             #     '*': {'*': 0}  # No multiplication within multiplication
             # }
-
-            # Probability of optimizing the constants during a single iteration of the evolutionary algorithm.
+            # # Probability of optimizing the constants during a single iteration of the evolutionary algorithm.
             # self.pysr_params['optimize_probability'] = 0.5
-
+            # # Constant optimization as mutation (default: off)
+            # self.pysr_params['weight_optimize'] = 0.5
+            # # Increase the number of optimization steps for the constants
+            # self.pysr_params['optimizer_iterations'] = 20
+            # # Whether to numerically optimize constants at the end of each iteration.
+            # self.pysr_params['should_optimize_constants'] = False
+            # # Avoid simplifying the equations at the end of the search
+            # self.pysr_params['should_simplify'] = False
+            
         else:
             size = 40 # Default size for regression tasks
             self.pysr_params['binary_operators'] = binary_operators
@@ -296,7 +298,7 @@ class SymbolicRegressorCBM(BaseModel):
         """
         
         # Apply affine transformation to each equation
-        if self.task == 'classification':
+        if self.task == 'classification' and self.use_affine_parameters:
             # Create input variables from concept names (as a set for O(1) lookups)
             input_vars_set = {Symbol(name) for name in self.c_names}
             transformed_equations = {}
@@ -321,6 +323,10 @@ class SymbolicRegressorCBM(BaseModel):
             equations=transformed_equations,
             c_names=self.c_names,
         )
+
+        # Freeze all model parameters except those of the predictor
+        for p in self.parameters():
+            p.requires_grad = False
 
         for p in self.predictor.parameters():
             p.requires_grad = True

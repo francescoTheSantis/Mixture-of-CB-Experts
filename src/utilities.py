@@ -475,6 +475,90 @@ def subsample_for_input_coverage(X, subsample_size, random_state=42):
 
     return indices
 
+def subsample_based_on_y_hat(y_target, subsample_size):
+    """
+    Perform density-aware subsampling for continuous target values.
+    Uses stratified sampling based on binning to ensure good coverage across the distribution.
+    
+    Args:
+        y_target: Target values of shape (n_samples,) with continuous values
+        subsample_size: Number of samples to select
+    Returns:
+        indices: Array of indices to keep from the original dataset
+    """
+    # Convert to numpy if needed
+    if torch.is_tensor(y_target):
+        y_np = y_target.cpu().numpy().flatten()
+    else:
+        y_np = np.array(y_target).flatten()
+    
+    n_samples = len(y_np)
+    
+    # If subsample_size >= n_samples, return all indices
+    if subsample_size >= n_samples:
+        return np.arange(n_samples)
+    
+    # Determine number of bins using Freedman-Diaconis rule
+    q75, q25 = np.percentile(y_np, [75, 25])
+    iqr = q75 - q25
+    if iqr > 0:
+        bin_width = 2 * iqr / (n_samples ** (1/3))
+        n_bins = max(10, min(100, int((y_np.max() - y_np.min()) / bin_width)))
+    else:
+        n_bins = 20  # Default if IQR is 0
+    
+    # Bin the target values
+    bin_edges = np.linspace(y_np.min(), y_np.max(), n_bins + 1)
+    bin_indices = np.digitize(y_np, bin_edges) - 1
+    bin_indices = np.clip(bin_indices, 0, n_bins - 1)  # Ensure within bounds
+    
+    # Count samples in each bin
+    bin_counts = np.bincount(bin_indices, minlength=n_bins)
+    
+    # Calculate proportional samples per bin
+    bin_proportions = bin_counts / n_samples
+    samples_per_bin = np.floor(bin_proportions * subsample_size).astype(int)
+    
+    # Ensure at least one sample per non-empty bin if possible
+    non_empty_bins = bin_counts > 0
+    samples_per_bin[non_empty_bins] = np.maximum(samples_per_bin[non_empty_bins], 1)
+    
+    selected_indices = []
+    
+    # Sample from each bin
+    for bin_idx in range(n_bins):
+        # Find all indices in this bin
+        bin_mask = bin_indices == bin_idx
+        bin_sample_indices = np.where(bin_mask)[0]
+        
+        if len(bin_sample_indices) == 0:
+            continue
+        
+        n_to_select = min(samples_per_bin[bin_idx], len(bin_sample_indices))
+        
+        if n_to_select > 0:
+            # Randomly select from this bin
+            selected = np.random.choice(bin_sample_indices, size=n_to_select, replace=False)
+            selected_indices.extend(selected)
+    
+    # If we haven't reached subsample_size, randomly sample more from remaining pool
+    if len(selected_indices) < subsample_size:
+        remaining_needed = subsample_size - len(selected_indices)
+        all_indices = set(range(n_samples))
+        remaining_indices = list(all_indices - set(selected_indices))
+        
+        if len(remaining_indices) > 0:
+            additional = np.random.choice(remaining_indices, 
+                                        size=min(remaining_needed, len(remaining_indices)), 
+                                        replace=False)
+            selected_indices.extend(additional)
+    
+    # If we have selected more than subsample_size due to rounding, randomly trim
+    if len(selected_indices) > subsample_size:
+        selected_indices = np.random.choice(selected_indices, size=subsample_size, replace=False)
+    
+    return np.array(selected_indices)
+
 def proportional_subsampling(X_memory, subsample_size):
     """
     Perform proportional subsampling for binary input features.
@@ -531,7 +615,8 @@ def symbolic_regression(
         y_names,
         device,
         pysr_params,
-        task
+        task,
+        disjoint_training
     ):
 
     """
@@ -607,18 +692,16 @@ def symbolic_regression(
                 all_equations[memory_idx][output_name] = sp.sympify("0")
                 continue
             
-            subsample_size = 5000 # 5000
+            subsample_size = 5000
             if n_samples_for_memory > subsample_size:
                 print(f"Subsampling to {subsample_size} for PySR using input space coverage (memory {memory_idx}, output '{output_name}').")
                 
                 if task == 'classification':
-                    # If all the elements in X_memory are either 0 or 1
-                    if bool((torch.where(X_memory==1,1,0) + torch.where(X_memory==0,1,0)).sum() == X_memory.numel()):
+                    if disjoint_training:
                         indices = proportional_subsampling(X_memory, subsample_size)
                     else:
-                        indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
+                        indices = subsample_based_on_y_hat(y_target, subsample_size)
                 else:
-                    # Random subsampling
                     indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
 
                 X_memory = X_memory[indices]
@@ -642,16 +725,16 @@ def symbolic_regression(
             print(f"\nFitting PySR for output '{output_name}' (memory slot {memory_idx})...")
             print(f"  Input shape: {X_memory_clean.shape}, Target shape: {y_target.shape}")
             
-            if task == 'classification':
-                if bool((torch.where(X_memory==1,1,0) + torch.where(X_memory==0,1,0)).sum() == X_memory.numel()):
-                    noise_level = 0.10  # 10% noise
-                    n_noisy_samples = int(noise_level * X_memory_clean.shape[0])
-                    for _ in range(n_noisy_samples):
-                        sample_idx = np.random.randint(0, X_memory_clean.shape[0])
-                        feature_idx = np.random.randint(0, X_memory_clean.shape[1])
-                        original_value = X_memory_clean[sample_idx, feature_idx].item()
-                        new_value = 1 - original_value  
-                        X_memory_clean[sample_idx, feature_idx] = new_value
+            # if task == 'classification':
+            #     if bool((torch.where(X_memory==1,1,0) + torch.where(X_memory==0,1,0)).sum() == X_memory.numel()):
+            #         noise_level = 0.10  # 10% noise
+            #         n_noisy_samples = int(noise_level * X_memory_clean.shape[0])
+            #         for _ in range(n_noisy_samples):
+            #             sample_idx = np.random.randint(0, X_memory_clean.shape[0])
+            #             feature_idx = np.random.randint(0, X_memory_clean.shape[1])
+            #             original_value = X_memory_clean[sample_idx, feature_idx].item()
+            #             new_value = 1 - original_value  
+            #             X_memory_clean[sample_idx, feature_idx] = new_value
 
             try:
 
@@ -667,8 +750,17 @@ def symbolic_regression(
                 equations_df = model.equations_
                 print(f"  Pareto front has {len(equations_df)} equations")
                 
-                # Select the best equation by score
-                best_eq_row = equations_df.nlargest(1, 'score').iloc[0]
+                # # Select the best equation by score
+                # best_eq_row = equations_df.nlargest(1, 'score').iloc[0]
+                # sympy_eq = best_eq_row['sympy_format']
+                
+                # Select the best equation based on task type
+                if task == 'classification':
+                    # For classification: select lowest loss (best accuracy)
+                    best_eq_row = equations_df.nsmallest(1, 'loss').iloc[0]
+                else:
+                    # For regression: select highest score (balance loss and complexity)
+                    best_eq_row = equations_df.nlargest(1, 'score').iloc[0]
                 sympy_eq = best_eq_row['sympy_format']
                 
                 # Rename variables from x0, x1, ... to concept names

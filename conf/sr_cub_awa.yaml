@@ -10,11 +10,12 @@ hydra:
   sweeper:
     grid_params:
       model: sr_sym_cbm
-      memory_size: 1, 2, 3
-      seed: 1, 2, 3 # 1, 2, 3, 4, 5
+      memory_size: 1, 2
+      seed: 1, 2 # 1, 2, 3, 4, 5
 
     list_params:
       dataset: 
+        # - mnist_addition
         - cub
         # - cub_incomplete
         - awa2
@@ -22,6 +23,7 @@ hydra:
         # - cifar10
         # - cifar100
       img_backbone_name: 
+        # - facebook/dinov2-base
         - facebook/dinov2-base
         # - facebook/dinov2-base
         - facebook/dinov2-base
@@ -29,8 +31,9 @@ hydra:
         # - google/vit-base-patch32-224-in21k
         # - google/vit-base-patch32-224-in21k
 
-disjoint_training: True
+disjoint_training: False
+hard_concepts: False
 
-gpus: [1]
+gpus: [3]
 
 note: "Memory-cls" 

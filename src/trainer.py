@@ -187,6 +187,7 @@ class Trainer:
             stored_concepts = []
             stored_targets = []
             stored_selector_probs = []
+            stored_true_concepts = []
             with torch.no_grad():
                 for batch in tqdm(train_dataloader, desc="Storing training data"):
                     x, c, y = self.model.unpack_batch(batch)
@@ -201,28 +202,20 @@ class Trainer:
                     # Forward pass with storage enabled
                     output = self.model.model.forward(inputs, store_for_finetuning=True)
 
-                    # Add to lists
-                    # if the problem is regression, learn the true targets, if classification, learn the logits (y_hat)
                     if self.cfg.dataset.metadata.task == 'regression':
                         stored_targets.append(y.detach().cpu())
                     else:
-                        # stored_targets.append(output['y_hat'].detach().cpu())
-                        
-                        # For classification, store the true labels as targets
-                        # The true labels need to be reshaped to (bsz, n_classes) one-hot encoding
-                        n_classes = output['y_hat'].shape[1]
-                        y_one_hot = torch.zeros(y.size(0), n_classes)
-                        y_one_hot.scatter_(1, y.to('cpu').view(-1, 1).long(), 1)
-
-                        # From [0,1] to [-1,1]
-                        y_one_hot = y_one_hot * 2 - 1
-
-                        stored_targets.append(y_one_hot.detach().cpu())
+                        # If there is a third dimension of size 1, remove it
+                        if output['y_hat'].dim() == 3 and output['y_hat'].shape[2] == 1:
+                            output['y_hat'] = output['y_hat'].squeeze(2)
+                        stored_targets.append(output['y_hat'].detach().cpu())
 
                     # If the training is disjoint use the true concepts for SR algorithm, otherwise use the predicted concepts.
                     concepts_for_sr_algorithm = c if self.cfg.disjoint_training else output['c_hat']
+
                     stored_concepts.append(concepts_for_sr_algorithm.detach().cpu())
                     stored_selector_probs.append(output['sampled_memory_idxs'].detach().cpu())
+                    stored_true_concepts.append(c.detach().cpu())
 
                     # Clear GPU memory
                     del x, c, y, inputs
@@ -233,7 +226,12 @@ class Trainer:
             concatenated_concepts = torch.cat(stored_concepts, dim=0)
             concatenated_targets = torch.cat(stored_targets, dim=0)
             concatenated_selector_probs = torch.cat(stored_selector_probs, dim=0)
-            
+            concatenated_true_concepts = torch.cat(stored_true_concepts, dim=0)
+
+            if self.model.model.task == 'classification' and not self.cfg.disjoint_training:
+                int_map = (np.random.rand(*concatenated_true_concepts.shape) < self.cfg.int_prob)
+                concatenated_concepts[int_map] = concatenated_true_concepts[int_map]
+
             # Scale concepts and targets if scale_variables is True and task is regression
             if self.cfg.dataset.metadata.task == 'regression' and self.scale_variables:
                 # Scale targets
