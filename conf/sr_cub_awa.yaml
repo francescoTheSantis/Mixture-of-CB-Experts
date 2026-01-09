@@ -6,7 +6,7 @@ defaults:
 hydra:
   mode: MULTIRUN
   sweep:
-      dir: output/memory_cls/${now:%Y-%m-%d_%H-%M-%S} 
+      dir: test/memory_cls/${now:%Y-%m-%d_%H-%M-%S} 
   sweeper:
     grid_params:
       model: sr_sym_cbm
@@ -16,24 +16,28 @@ hydra:
     list_params:
       dataset: 
         # - mnist_addition
-        - cub
-        # - cub_incomplete
-        - awa2
-        # - awa2_incomplete
-        # - cifar10
+        # - cub
+        - cub_incomplete
+        # - awa2
+        - awa2_incomplete
+        - cifar10
         # - cifar100
       img_backbone_name: 
         # - facebook/dinov2-base
-        - facebook/dinov2-base
         # - facebook/dinov2-base
         - facebook/dinov2-base
         # - facebook/dinov2-base
-        # - google/vit-base-patch32-224-in21k
+        - facebook/dinov2-base
+        - google/vit-base-patch32-224-in21k
         # - google/vit-base-patch32-224-in21k
 
 disjoint_training: False
 hard_concepts: False
 
-gpus: [3]
+gpus: [1]
 
 note: "Memory-cls" 
+
+wandb:
+  project: null
+  entity: null

@@ -262,6 +262,73 @@ def get_exp_from_path(paths):
 
     return performance
 
+def compute_pareto_knee(complexity, accuracy):
+    """
+    Compute the knee point of a Pareto front using the maximum distance to chord method.
+    
+    Args:
+        complexity: Array-like of complexity values (to be minimized)
+        accuracy: Array-like of accuracy values (to be maximized)
+    
+    Returns:
+        knee_index: Index of the knee point in the input arrays
+    """
+    complexity = np.array(complexity)
+    accuracy = np.array(accuracy)
+    
+    # Handle edge cases
+    if len(complexity) <= 2:
+        return 0  # Return first point if only 1-2 points
+    
+    # Step 1: Normalize the axes to [0, 1]
+    complexity_min, complexity_max = complexity.min(), complexity.max()
+    accuracy_min, accuracy_max = accuracy.min(), accuracy.max()
+    
+    # Avoid division by zero
+    if complexity_max == complexity_min:
+        complexity_norm = np.zeros_like(complexity)
+    else:
+        complexity_norm = (complexity - complexity_min) / (complexity_max - complexity_min)
+    
+    if accuracy_max == accuracy_min:
+        accuracy_norm = np.zeros_like(accuracy)
+    else:
+        accuracy_norm = (accuracy - accuracy_min) / (accuracy_max - accuracy_min)
+    
+    # Step 2: Define the chord endpoints
+    # A: point with minimum normalized complexity
+    # B: point with maximum normalized accuracy
+    a_idx = np.argmin(complexity_norm)
+    b_idx = np.argmax(accuracy_norm)
+    
+    A = np.array([complexity_norm[a_idx], accuracy_norm[a_idx]])
+    B = np.array([complexity_norm[b_idx], accuracy_norm[b_idx]])
+    
+    # Step 3: Compute distance to the chord for each point
+    distances = []
+    chord_vector = B - A
+    chord_length = np.linalg.norm(chord_vector)
+    
+    # Avoid division by zero if A and B are the same point
+    if chord_length == 0:
+        return 0
+    
+    for i in range(len(complexity_norm)):
+        P = np.array([complexity_norm[i], accuracy_norm[i]])
+        AP = A - P
+        
+        # Compute perpendicular distance using cross product
+        # In 2D, cross product gives scalar: (Bx - Ax)(Ay - Py) - (By - Ay)(Ax - Px)
+        cross_product = chord_vector[0] * AP[1] - chord_vector[1] * AP[0]
+        distance = abs(cross_product) / chord_length
+        distances.append(distance)
+    
+    # Step 4: Select the knee point (maximum distance)
+    knee_index = np.argmax(distances)
+    
+    return knee_index
+
+
 def get_intervention_from_path(paths, model_styles=None, custom_order=None, apply_filter=False, fixed_memory=None, selected_memory_size=2):
 
     if apply_filter:
@@ -330,8 +397,77 @@ def get_intervention_from_path(paths, model_styles=None, custom_order=None, appl
     if apply_filter is False:
         return performance
     else:
-        # Keep only the experiments in filtered_exps
-        criteria = pd.DataFrame(filtered_exps)
+        # For classification datasets with multiple memory sizes, compute Pareto knee
+        # First, load the full performance data to compute complexity and accuracy
+        performance_with_metrics = get_exp_from_path_cached(paths, cache_name='memory_ablation', output_path='output')
+        
+        # Create the filtered_exps with Pareto knee selection for classification datasets
+        filtered_exps_with_knee = []
+        
+        for dataset in custom_order:
+            # Check if it's a classification dataset (not in regression_datasets)
+            is_classification = dataset not in regression_datasets
+            
+            for model in model_styles.keys():
+                if model in MEMORY_MODELS_LIST:
+                    # Check if dataset has fixed memory or should use Pareto knee
+                    if dataset in fixed_memory.keys():
+                        # Use fixed memory size for this dataset
+                        mem_size = fixed_memory[dataset]
+                        filtered_exps_with_knee.append({
+                            'dataset': dataset,
+                            'model': model,
+                            'memory_size': mem_size
+                        })
+                    elif is_classification:
+                        # For classification datasets without fixed memory, compute Pareto knee
+                        # Filter experiments for this dataset and model
+                        model_data = performance_with_metrics[
+                            (performance_with_metrics['dataset'] == dataset) & 
+                            (performance_with_metrics['model'] == model)
+                        ]
+                        
+                        if len(model_data) > 0:
+                            # Group by memory_size and compute mean accuracy and complexity
+                            grouped = model_data.groupby('memory_size').agg({
+                                'task_acc': 'mean',
+                                'complexity': 'mean'
+                            }).reset_index()
+                            
+                            # Only compute knee if we have multiple memory sizes
+                            if len(grouped) > 1:
+                                # Compute knee point
+                                knee_idx = compute_pareto_knee(
+                                    complexity=grouped['complexity'].values,
+                                    accuracy=grouped['task_acc'].values
+                                )
+                                knee_memory_size = grouped.iloc[knee_idx]['memory_size']
+                            else:
+                                # Only one memory size available, use it
+                                knee_memory_size = grouped.iloc[0]['memory_size']
+                            
+                            filtered_exps_with_knee.append({
+                                'dataset': dataset,
+                                'model': model,
+                                'memory_size': knee_memory_size
+                            })
+                        else:
+                            # No data found, use default selected_memory_size
+                            filtered_exps_with_knee.append({
+                                'dataset': dataset,
+                                'model': model,
+                                'memory_size': selected_memory_size
+                            })
+                    else:
+                        # For regression datasets without fixed memory, use selected_memory_size
+                        filtered_exps_with_knee.append({
+                            'dataset': dataset,
+                            'model': model,
+                            'memory_size': selected_memory_size
+                        })
+        
+        # Keep only the experiments in filtered_exps_with_knee
+        criteria = pd.DataFrame(filtered_exps_with_knee)
         filtered_performance = performance.merge(criteria, on=criteria.columns.tolist(), how="inner")
 
         # If the model belong to cmb_linear, licem, dcr, cem, blackbox, add them to performance
@@ -678,7 +814,7 @@ def plot_intervention_results(
         )
 
     plt.tight_layout()
-    str_store = str(unique_noises[0]).replace('.', '')
+    str_store = str(unique_noises[0]).replace('.', '') if len(unique_noises) == 1 else 'all_noises'
     suffix = 'relative_accuracy_difference' if relative_accuracy else 'absolute_accuracy'
     os.makedirs(f'{out_dir}/intervention/{suffix}', exist_ok=True)
     plt.savefig(f'{out_dir}/intervention/{suffix}/{str_store}.pdf')
@@ -1313,12 +1449,12 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                         else:
                             tick_labels.append(str(int(c)))
                     
-                    # Add infinity tick at max_c * 1.8 to keep it close
-                    inf_tick_position = max_c * 1.8
+                    # Add infinity tick at the actual infinity value position
+                    inf_tick_position = inf_value
                     tick_values.append(inf_tick_position)
                     tick_labels.append('$\infty$')
                     
-                    # Set xlim to show all ticks
+                    # Set xlim to show all ticks including infinity
                     ax.set_xlim(min_c * 0.5, inf_tick_position * 1.2)
                 else:
                     log_min = np.log10(min_c)

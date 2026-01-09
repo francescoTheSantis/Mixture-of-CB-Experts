@@ -131,29 +131,22 @@ class SymbolicRegressorCBM(BaseModel):
             self.pysr_params['maxsize'] = size
             self.pysr_params['early_stop_condition'] = 1e-5
             self.pysr_params['timeout_in_seconds'] = 30
-
-            # # Initial guess: linear equations over single concepts
-            # self.pysr_params['guesses'] = [' + '.join([f'1 * x{i}' for i in range(len(self.c_names))]) + ' + 1']
-            # # Force multiplication to only operate on constants and variables
-            # # (1, 1) means both left and right operands must have complexity 1
-            # self.pysr_params['constraints'] = {
-            #     '*': (1, 1)  # This prevents x1*x2, (x1+x2)*x3, etc.
-            # }
-            # # Optionally, prevent nested multiplications entirely
-            # self.pysr_params['nested_constraints'] = {
-            #     '*': {'*': 0}  # No multiplication within multiplication
-            # }
-            # # Probability of optimizing the constants during a single iteration of the evolutionary algorithm.
+            # Initial guess: linear equations over single concepts
+            self.pysr_params['guesses'] = [' + '.join([f'1 * x{i}' for i in range(len(self.c_names))]) + ' + 1']
+            # # Force multiplication to only operate on constants and variables (1, 1) means both left and right operands must have complexity 1
+            self.pysr_params['constraints'] = {
+                '*': (1, 1)  # This prevents x1*x2, (x1+x2)*x3, etc.
+            }
+            # Prevent nested multiplications entirely
+            self.pysr_params['nested_constraints'] = {
+                '*': {'*': 0}  # No multiplication within multiplication
+            }
+            # Probability of optimizing the constants during a single iteration of the evolutionary algorithm.
             # self.pysr_params['optimize_probability'] = 0.5
             # # Constant optimization as mutation (default: off)
             # self.pysr_params['weight_optimize'] = 0.5
             # # Increase the number of optimization steps for the constants
             # self.pysr_params['optimizer_iterations'] = 20
-            # # Whether to numerically optimize constants at the end of each iteration.
-            # self.pysr_params['should_optimize_constants'] = False
-            # # Avoid simplifying the equations at the end of the search
-            # self.pysr_params['should_simplify'] = False
-            
         else:
             size = 40 # Default size for regression tasks
             self.pysr_params['binary_operators'] = binary_operators

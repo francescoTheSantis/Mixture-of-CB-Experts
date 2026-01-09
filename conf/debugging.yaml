@@ -9,13 +9,13 @@ hydra:
   sweeper:
     params:
       seed: 1
-      dataset: awa2 #, awa2_incomplete, awa2, cub, cub_incomplete 
-      model: sr_sym_cbm 
+      dataset: cifar10 #, awa2_incomplete, awa2, cub, cub_incomplete 
+      model: cbm_linear 
       memory_size: 1
     
-gpus: [3]
+gpus: [0]
 
-# img_backbone_name: resnet18
+img_backbone_name: resnet18
 
 # NOTE: check this variable before running experiments 
 disjoint_training: False
@@ -24,7 +24,7 @@ hard_concepts: False
 L1_coeff: 1e-5
 threshold: 1e-6
 
-max_epochs: 20
+max_epochs: 200
 patience: 50
 
 use_stored_dataset: True

@@ -152,7 +152,7 @@ def main():
         # Compute equation complexity metrics
         print("\nComputing equation complexity metrics...")
 
-        complexity_results = performance[['dataset', 'model', 'seed', 'complexity', 'n_equations']].copy()
+        complexity_results = performance[['dataset', 'model', 'seed', 'complexity']].copy()
         complexity_csv_path = os.path.join(table_path, 'sr_ablation', 'complexity_metrics.csv')
         complexity_results.to_csv(complexity_csv_path, index=False)
         print(f"Complexity metrics saved to {complexity_csv_path}")
@@ -177,18 +177,21 @@ def main():
         performance = performance[performance['model'].isin(model_styles.keys()) & \
                                 performance['dataset'].isin(custom_order)]
 
-        # Plot intervention results with noise=0.0
-        plot_intervention_results(performance, 
-                                    metric='accuracy', 
-                                    unique_noises=[0.0], 
-                                    title_font=title_font, 
-                                    label_font=label_font, 
-                                    tick_font=tick_font, 
-                                    legend_font=legend_font,
-                                    custom_order=custom_order,
-                                    model_styles=model_styles,
-                                    relative_accuracy=False,
-                                    out_dir=f'{result_figs}/sr_ablation')
+
+
+        # Plot intervention results
+        for noise in performance['noise'].unique():
+            plot_intervention_results(performance, 
+                                        metric='accuracy', 
+                                        unique_noises=[noise], 
+                                        title_font=title_font, 
+                                        label_font=label_font, 
+                                        tick_font=tick_font, 
+                                        legend_font=legend_font,
+                                        custom_order=custom_order,
+                                        model_styles=model_styles,
+                                        relative_accuracy=False,
+                                        out_dir=f'{result_figs}/sr_ablation')
 
     except Exception as e:
         print(f"Error occurred while plotting Symbolic Regression ablation results: {e}")
@@ -218,6 +221,7 @@ def main():
         f"{output_path}/memory_reg",
         f"{output_path}/memory_less_reg",
         f"{output_path}/prior_reg",
+        "test/memory_cls",
     ]
 
     try:
@@ -273,8 +277,7 @@ def main():
             model_styles=model_styles, 
             custom_order=custom_order, 
             apply_filter=True,
-            fixed_memory=fixed_memory, 
-            selected_memory_size=2
+            fixed_memory=fixed_memory
         )
 
         ########## Intervention plots ##########
