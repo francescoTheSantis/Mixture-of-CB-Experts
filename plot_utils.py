@@ -580,7 +580,22 @@ def plot_intervention_results(
     model_styles=None,
     relative_accuracy=True,
     out_dir=None,
+    ranges=None,
 ):
+    """
+    Plot intervention results across datasets.
+    
+    Parameters:
+    -----------
+    ranges : list, optional
+        Y-axis range specification for classification datasets (bottom row) only.
+        Each element corresponds to a classification subplot by index.
+        Formats:
+        - [y_min, y_max]: Single continuous axis
+        - [[y_low_min, y_low_max], [y_high_min, y_high_max]]: Broken/stacked axis
+        If None or shorter than needed, uses matplotlib auto-scale for missing entries.
+        Regression datasets always use continuous y-axis (ranges not applied).
+    """
 
     unique_datasets = [d for d in df['dataset'].unique()]
 
@@ -628,6 +643,22 @@ def plot_intervention_results(
     else:
         axes = np.array(axes)
     
+    # Validate and set defaults for ranges parameter
+    # ranges applies only to classification datasets (bottom row)
+    n_classification = len(classification_datasets)
+    if ranges is None:
+        ranges = [None] * n_classification  # Default: let matplotlib auto-scale
+    else:
+        # Extend ranges with None for missing entries (auto-scale)
+        if len(ranges) < n_classification:
+            ranges = list(ranges) + [None] * (n_classification - len(ranges))
+    
+    # Track which subplots need broken axes (to apply after tight_layout)
+    broken_axes_specs = {}
+    
+    # Store plot data for broken axes reconstruction
+    plot_data_for_broken_axes = {}
+    
     for idx, dataset in enumerate(organized_datasets):
         # Determine row and column based on layout
         if has_classification and not has_regression:
@@ -649,6 +680,42 @@ def plot_intervention_results(
         
         # Access the axis consistently
         ax = axes[row][col]
+        
+        # Handle broken/stacked axes for classification datasets only
+        use_broken_axis = False
+        
+        if has_classification and not has_regression:
+            # Only classification datasets
+            if idx < len(organized_datasets):
+                is_classification = True
+                class_idx = organized_datasets.index(dataset) if dataset in classification_datasets else -1
+        elif has_regression and not has_classification:
+            # Only regression datasets
+            is_classification = False
+            class_idx = -1
+        else:
+            # Both types exist
+            is_classification = dataset in classification_datasets
+            class_idx = list(classification_datasets).index(dataset) if is_classification else -1
+        
+        if is_classification and class_idx >= 0 and class_idx < len(ranges):
+            range_spec = ranges[class_idx]
+            
+            # Check if this is a broken axis specification
+            if (range_spec is not None and isinstance(range_spec, list) and len(range_spec) == 2 and 
+                isinstance(range_spec[0], list) and isinstance(range_spec[1], list)):
+                # Mark for broken axis creation after tight_layout
+                use_broken_axis = True
+                broken_axes_specs[(row, col)] = {
+                    'ax': ax,
+                    'y_low_range': range_spec[0],
+                    'y_high_range': range_spec[1],
+                    'dataset': dataset
+                }
+            elif range_spec is not None:
+                # Regular single axis: set y-limits based on range_spec
+                if isinstance(range_spec, list) and len(range_spec) == 2:
+                    ax.set_ylim(range_spec)
         
         for noise in unique_noises:
             data = df[(df['noise'] == noise) & (df['dataset'] == dataset)]
@@ -698,6 +765,25 @@ def plot_intervention_results(
                                model_data['mean_metric'] + model_data['se_metric'],
                                color=style['color'],
                                alpha=0.2)
+                
+                # Store plot data for broken axes reconstruction
+                if use_broken_axis:
+                    if (row, col) not in plot_data_for_broken_axes:
+                        plot_data_for_broken_axes[(row, col)] = []
+                    plot_data_for_broken_axes[(row, col)].append({
+                        'type': 'plot_with_fill',
+                        'x': model_data['p_int'].values,
+                        'y': model_data['mean_metric'].values,
+                        'se': model_data['se_metric'].values,
+                        'marker': style['marker'],
+                        'color': style['color'],
+                        'markersize': style['size'],
+                        'label': style['name'],
+                        'markeredgecolor': 'black',
+                        'markeredgewidth': 0.1,
+                        'alpha': 0.8,
+                        'linestyle': '-'
+                    })
         
         # Set x-axis ticks and labels
         ax.set_xticks([0, 0.25, 0.5, 0.75, 1])
@@ -814,6 +900,117 @@ def plot_intervention_results(
         )
 
     plt.tight_layout()
+    
+    # Create broken axes after tight_layout to get correct positions
+    for (row, col), spec in broken_axes_specs.items():
+        original_ax = spec['ax']
+        y_low_range = spec['y_low_range']
+        y_high_range = spec['y_high_range']
+        dataset = spec['dataset']
+        
+        # Get the final position after tight_layout
+        pos = original_ax.get_position()
+        
+        # Create two stacked axes with precise dimensions
+        # Bottom 60%, gap ~1.5%, top ~38.5% to sum to 100%
+        height_ratio_bottom = 0.60
+        height_ratio_top = 0.385
+        gap_ratio = 0.015
+        
+        # Calculate absolute heights
+        bottom_height = pos.height * height_ratio_bottom
+        gap_height = pos.height * gap_ratio
+        top_height = pos.height * height_ratio_top
+        
+        # Hide the original axis
+        original_ax.set_visible(False)
+        
+        # Bottom axis
+        ax_bottom = fig.add_axes([pos.x0, pos.y0, pos.width, bottom_height])
+        ax_bottom.set_ylim(y_low_range)
+        
+        # Top axis
+        ax_top = fig.add_axes([pos.x0, pos.y0 + bottom_height + gap_height, pos.width, top_height])
+        ax_top.set_ylim(y_high_range)
+        
+        # Replay stored plot commands on both axes
+        if (row, col) in plot_data_for_broken_axes:
+            for plot_cmd in plot_data_for_broken_axes[(row, col)]:
+                for target_ax in [ax_bottom, ax_top]:
+                    if plot_cmd['type'] == 'plot_with_fill':
+                        # Plot line with markers
+                        target_ax.plot(
+                            plot_cmd['x'],
+                            plot_cmd['y'],
+                            marker=plot_cmd['marker'],
+                            color=plot_cmd['color'],
+                            markersize=plot_cmd['markersize'],
+                            label=plot_cmd['label'] if target_ax == ax_bottom else "",
+                            markeredgecolor=plot_cmd['markeredgecolor'],
+                            markeredgewidth=plot_cmd['markeredgewidth'],
+                            alpha=plot_cmd['alpha'],
+                            linestyle=plot_cmd['linestyle']
+                        )
+                        
+                        # Add fill_between for uncertainty
+                        target_ax.fill_between(
+                            plot_cmd['x'],
+                            plot_cmd['y'] - plot_cmd['se'],
+                            plot_cmd['y'] + plot_cmd['se'],
+                            color=plot_cmd['color'],
+                            alpha=0.2
+                        )
+        
+        # Configure x-axis: hide labels on top, show on bottom
+        # IMPORTANT: Copy x-axis ticks to BOTH axes to ensure alignment
+        tick_positions = original_ax.get_xticks()
+        tick_labels = [t.get_text() for t in original_ax.get_xticklabels()]
+        
+        ax_bottom.set_xticks(tick_positions)
+        ax_bottom.set_xticklabels(tick_labels)
+        
+        ax_top.set_xticks(tick_positions)
+        ax_top.set_xticklabels([])  # Hide labels on top axis
+        ax_top.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        
+        # Add diagonal break markers
+        d = 0.015
+        kwargs = dict(transform=ax_top.transAxes, color='k', clip_on=False, linewidth=1)
+        ax_top.plot((-d, +d), (-d, +d), **kwargs)
+        ax_top.plot((1 - d, 1 + d), (-d, +d), **kwargs)
+        
+        kwargs = dict(transform=ax_bottom.transAxes, color='k', clip_on=False, linewidth=1)
+        ax_bottom.plot((-d, +d), (1 - d, 1 + d), **kwargs)
+        ax_bottom.plot((1 - d, 1 + d), (1 - d, 1 + d), **kwargs)
+        
+        # Copy styling
+        for target_ax in [ax_bottom, ax_top]:
+            target_ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
+            target_ax.minorticks_off()
+            target_ax.grid(True, alpha=0.3, zorder=0)
+            target_ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{x:.2f}'))
+        
+        # Set title on top axis
+        ax_top.set_title(f'{get_df_name(dataset)}', fontsize=label_font['size'])
+        
+        # Set xlabel on bottom axis
+        ax_bottom.set_xlabel(original_ax.get_xlabel(), fontdict={'size': label_font['size']})
+        
+        # Set ylabel centered on the full subplot
+        if col == 0:
+            ylabel = original_ax.get_ylabel()
+            ax_bottom.yaxis.label.set_visible(False)
+            fig.text(pos.x0 - 0.08,
+                    pos.y0 + pos.height / 2,
+                    ylabel,
+                    fontdict={'size': label_font['size']},
+                    rotation=90,
+                    va='center',
+                    ha='center')
+        
+        # Update axes array reference
+        axes[row][col] = ax_bottom
+    
     str_store = str(unique_noises[0]).replace('.', '') if len(unique_noises) == 1 else 'all_noises'
     suffix = 'relative_accuracy_difference' if relative_accuracy else 'absolute_accuracy'
     os.makedirs(f'{out_dir}/intervention/{suffix}', exist_ok=True)
@@ -1145,15 +1342,20 @@ def filter_pareto_models(df: pd.DataFrame, fixed_memory: dict = None, custom_ord
 
     return filtered.reset_index(drop=True)
 
-def plot_pareto_front(performance, model_styles, title_font, label_font, tick_font, custom_order):
+def plot_pareto_front(performance, model_styles, title_font, label_font, tick_font, custom_order, ranges=None):
     """
     Plot Pareto front for model complexity vs accuracy.
     
     Parameters:
     -----------
-    use_complexity_column : bool, default=False
-        If True, use the 'complexity' column directly from the dataframe.
-        If False, compute complexity as memory_size * operational_complexity.
+    ranges : list, optional
+        Y-axis range specification for classification datasets (bottom row) only.
+        Each element corresponds to a classification subplot by index.
+        Formats:
+        - [y_min, y_max]: Single continuous axis
+        - [[y_low_min, y_low_max], [y_high_min, y_high_max]]: Broken/stacked axis
+        If None or shorter than needed, defaults to [0, 1] for missing entries.
+        Regression datasets always use continuous y-axis (ranges not applied).
     """
     performance = compute_avg_and_uncertainty(performance, custom_order)
 
@@ -1184,8 +1386,24 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
     elif n_cols == 1:
         axes = [[ax] for ax in axes]
 
+    # Validate and set defaults for ranges parameter
+    # ranges applies only to classification datasets (bottom row)
+    n_classification = len(classification_datasets)
+    if ranges is None:
+        ranges = [None] * n_classification  # Default: let matplotlib auto-scale
+    else:
+        # Extend ranges with None for missing entries (auto-scale)
+        if len(ranges) < n_classification:
+            ranges = list(ranges) + [None] * (n_classification - len(ranges))
+    
     # Track which model styles are actually plotted across all subplots
     all_plotted_styles = set()
+    
+    # Track which subplots need broken axes (to apply after tight_layout)
+    broken_axes_specs = {}
+    
+    # Store plot data for broken axes reconstruction
+    plot_data_for_broken_axes = {}
 
     for idx, dataset in enumerate(organized_datasets):
         # Determine row based on task type
@@ -1200,6 +1418,32 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
             ax = axes[col] if n_cols > 1 else axes[0]
         else:
             ax = axes[row][col] if n_cols > 1 else axes[row][0] if col == 0 else axes[row][col]
+        
+        # Handle broken/stacked axes for classification datasets only
+        use_broken_axis = False
+        ax_bottom = None
+        ax_top = None
+        
+        if row == 1:  # Classification dataset
+            class_idx = list(classification_datasets).index(dataset)
+            range_spec = ranges[class_idx]
+            
+            # Check if this is a broken axis specification (nested list with 2 elements)
+            if (range_spec is not None and isinstance(range_spec, list) and len(range_spec) == 2 and 
+                isinstance(range_spec[0], list) and isinstance(range_spec[1], list)):
+                # Mark for broken axis creation after tight_layout
+                use_broken_axis = True
+                broken_axes_specs[(row, col)] = {
+                    'ax': ax,
+                    'y_low_range': range_spec[0],
+                    'y_high_range': range_spec[1],
+                    'dataset': dataset
+                }
+            elif range_spec is not None:
+                # Regular single axis: set y-limits based on range_spec
+                if isinstance(range_spec, list) and len(range_spec) == 2:
+                    ax.set_ylim(range_spec)
+            # If range_spec is None, let matplotlib auto-scale (do nothing)
             
         data = performance[performance['dataset'] == dataset]
         metric_type = data['metric_type'].iloc[0]
@@ -1220,32 +1464,12 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         
         if len(finite_complexities) > 0:
             max_finite = finite_complexities.max()
-            infinity_value = max_finite * 100  # Use 100x the max as "infinity"
+            infinity_value = max_finite * 5  # Set infinity value higher than max
         else:
             # Fallback if no valid finite complexities exist
             infinity_value = 100000.0
         
         data.loc[data['has_infinity'], 'mean_complexity'] = infinity_value
-        # elif complexity_type == 'composed' and 'mean_complexity' in data.columns:
-        #     # Compute complexity as memory_size * operational_complexity from dataframe column
-        #     data['mean_complexity'] = data['memory_size'] * data['mean_complexity']
-        #     # Mark dcr and licem as having infinity complexity, then replace with large finite value
-        #     data['has_infinity'] = data['model'].isin(['dcr', 'licem'])
-        #     # Find max finite complexity to set infinity value appropriately
-        #     # Filter out NaN and negative values when finding max
-        #     finite_complexities = data.loc[~data['has_infinity'], 'mean_complexity']
-        #     finite_complexities = finite_complexities[finite_complexities.notna() & (finite_complexities > 0)]
-            
-        #     if len(finite_complexities) > 0:
-        #         max_finite = finite_complexities.max()
-        #         infinity_value = max_finite * 100  # Use 100x the max as "infinity"
-        #     else:
-        #         # Fallback if no valid finite complexities exist
-        #         infinity_value = 1000.0
-            
-        #     data.loc[data['has_infinity'], 'mean_complexity'] = infinity_value
-        # else:
-        #     raise ValueError("Either complexity_type is not supported or required columns are missing in the dataframe.")
 
         # Filter out rows with NaN or non-positive complexity values
         # BUT keep blackbox and cem models even if they have NaN complexity (they'll be plotted as horizontal lines)
@@ -1314,7 +1538,7 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                         [complexity], 
                         [y_val],
                         yerr=[y_err],
-                        label=label, 
+                        label=label,
                         marker=plot_style['marker'], 
                         color=plot_style['color'], 
                         markersize=plot_style['size'],
@@ -1325,8 +1549,29 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                         alpha=0.8,
                         linestyle='none'  # No line connecting dots
                     )
+                    
+                    # Store plot data for broken axes reconstruction
+                    if use_broken_axis:
+                        if (row, col) not in plot_data_for_broken_axes:
+                            plot_data_for_broken_axes[(row, col)] = []
+                        plot_data_for_broken_axes[(row, col)].append({
+                            'type': 'errorbar',
+                            'x': [complexity],
+                            'y': [y_val],
+                            'yerr': [y_err],
+                            'label': label,
+                            'marker': plot_style['marker'],
+                            'color': plot_style['color'],
+                            'markersize': plot_style['size'],
+                            'markeredgecolor': 'black',
+                            'markeredgewidth': 0.1,
+                            'capsize': 3,
+                            'capthick': 1.5,
+                            'alpha': 0.8,
+                            'linestyle': 'none'
+                        })
         
-        # Calculate and draw Pareto front (excluding cem and blackbox)
+        # Calculate and draw Pareto front (excluding cem, blackbox, and prior_symbolic_cbm)
         if all_points:
             # Sort points by complexity
             all_points.sort(key=lambda x: x[0])
@@ -1336,10 +1581,18 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
             for point in all_points:
                 complexity, y_val, y_err, model, memory_size = point
                 is_pareto = True
+
+                # Skip prior_symbolic_cbm from Pareto front
+                if model == 'prior_symbolic_cbm':
+                    continue
                 
                 # For each point, check if it's dominated by any other point
                 for other_point in all_points:
                     other_complexity, other_y_val, other_y_err, other_model, other_memory_size = other_point
+                    
+                    # Skip prior_symbolic_cbm when checking dominance
+                    if other_model == 'prior_symbolic_cbm':
+                        continue
                     
                     # A point is dominated if another point has both:
                     # - Lower or equal complexity AND lower performance metric (better)
@@ -1358,6 +1611,22 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                 pareto_x, pareto_y = zip(*pareto_points)
                 ax.plot(pareto_x, pareto_y, 'gray', linestyle='--', alpha=0.7, linewidth=2, zorder=0)
                 
+                # Store for broken axes
+                if use_broken_axis and (row, col) not in plot_data_for_broken_axes:
+                    plot_data_for_broken_axes[(row, col)] = []
+                if use_broken_axis:
+                    plot_data_for_broken_axes[(row, col)].append({
+                        'type': 'plot',
+                        'x': pareto_x,
+                        'y': pareto_y,
+                        'color': 'gray',
+                        'linestyle': '--',
+                        'linewidth': 2,
+                        'alpha': 0.7,
+                        'label': '',
+                        'zorder': 0
+                    })
+                
                 # Create shadowed area above and to the right of the Pareto front
                 # Get axis limits to extend the shaded area
                 xlim = ax.get_xlim()
@@ -1370,10 +1639,24 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                 # Add shaded area above the Pareto front
                 ax.fill(extended_x, extended_y, color='gray', alpha=0.1, zorder=0, 
                         label='Dominated Region' if idx == 0 else "")
+                
+                # Store for broken axes
+                if use_broken_axis:
+                    plot_data_for_broken_axes[(row, col)].append({
+                        'type': 'fill',
+                        'x': extended_x,
+                        'y': extended_y,
+                        'color': 'gray',
+                        'alpha': 0.1,
+                        'zorder': 0,
+                        'label': 'Dominated Region' if idx == 0 else ""
+                    })
             
+        # Set title on top axis if broken, otherwise on regular axis
         ax.set_title(get_df_name(dataset), fontdict=title_font)
 
-        if row==1:
+        # Set xlabel on bottom axis (only for bottom row)
+        if row == 1:
             ax.set_xlabel('Complexity', fontdict=label_font)
         
         # Set y-label only for the leftmost subplot in each row
@@ -1404,20 +1687,37 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                     y_values = model_data['mean_task']
                     y_errors = model_data['se_task']
                 
-                xlim = ax.get_xlim()
                 y_val = y_values.iloc[0]
+                y_err = y_errors.iloc[0]
+                
+                xlim = ax.get_xlim()
+                xlim = (0, xlim[1])
                 
                 ax.axhline(y=y_val, color=model_styles[model]['color'], 
                             linestyle='-.', linewidth=2.5, alpha=0.8,
                             label=model_styles[model]['name'])
                 
                 # add uncertainty shading for blackbox and cem
-                y_err = y_errors.iloc[0]
                 ax.fill_between(xlim,
                                 y_val - y_err,
                                 y_val + y_err,
                                 color=model_styles[model]['color'],
                                 alpha=0.2)
+                
+                # Store for broken axes
+                if use_broken_axis:
+                    if (row, col) not in plot_data_for_broken_axes:
+                        plot_data_for_broken_axes[(row, col)] = []
+                    plot_data_for_broken_axes[(row, col)].append({
+                        'type': 'axhline',
+                        'y': y_val,
+                        'yerr': y_err,
+                        'color': model_styles[model]['color'],
+                        'linestyle': '-.',
+                        'linewidth': 2.5,
+                        'alpha': 0.8,
+                        'label': model_styles[model]['name']
+                    })
 
         # Set x-axis ticks to 5 equally spaced values
         if distinct_complexities:
@@ -1468,6 +1768,7 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                         else:
                             tick_labels.append(str(int(c)))
                 
+                # Apply ticks to axis
                 ax.set_xticks(tick_values)
                 # Use FixedFormatter to ensure our custom labels are preserved
                 from matplotlib.ticker import FixedFormatter
@@ -1481,6 +1782,7 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                 ax.xaxis.set_major_formatter(FixedFormatter(['$\infty$']))
                 ax.set_xlim(inf_value * 0.5, inf_value * 1.5)
         
+        # Apply tick params and grid
         ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
         ax.minorticks_off()
         ax.grid(True, alpha=0.3, zorder=0)
@@ -1528,6 +1830,163 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         fig.legend(handles=custom_handles, loc='lower center', ncol=len(custom_handles), fontsize=tick_font['size'], frameon=True, bbox_to_anchor=(0.5, -0.15), columnspacing=1.0, handletextpad=0.5)
 
     plt.tight_layout()
+    
+    # Create broken axes after tight_layout to get correct positions
+    for (row, col), spec in broken_axes_specs.items():
+        original_ax = spec['ax']
+        y_low_range = spec['y_low_range']
+        y_high_range = spec['y_high_range']
+        dataset = spec['dataset']
+        
+        # Get the final position after tight_layout
+        pos = original_ax.get_position()
+        
+        # Create two stacked axes with precise dimensions
+        # Bottom 60%, gap ~1.5%, top ~38.5% to sum to 100%
+        height_ratio_bottom = 0.60
+        height_ratio_top = 0.385
+        gap_ratio = 0.015
+        
+        # Calculate absolute heights
+        bottom_height = pos.height * height_ratio_bottom
+        gap_height = pos.height * gap_ratio
+        top_height = pos.height * height_ratio_top
+        
+        # Hide the original axis
+        original_ax.set_visible(False)
+        
+        # Bottom axis
+        ax_bottom = fig.add_axes([pos.x0, pos.y0, pos.width, bottom_height])
+        ax_bottom.set_ylim(y_low_range)
+        
+        # Top axis
+        ax_top = fig.add_axes([pos.x0, pos.y0 + bottom_height + gap_height, pos.width, top_height])
+        ax_top.set_ylim(y_high_range)
+        
+        # Replay stored plot commands on both axes
+        if (row, col) in plot_data_for_broken_axes:
+            for plot_cmd in plot_data_for_broken_axes[(row, col)]:
+                for target_ax in [ax_bottom, ax_top]:
+                    if plot_cmd['type'] == 'errorbar':
+                        target_ax.errorbar(
+                            plot_cmd['x'],
+                            plot_cmd['y'],
+                            yerr=plot_cmd['yerr'],
+                            label=plot_cmd['label'] if target_ax == ax_bottom else "",
+                            marker=plot_cmd['marker'],
+                            color=plot_cmd['color'],
+                            markersize=plot_cmd['markersize'],
+                            markeredgecolor=plot_cmd['markeredgecolor'],
+                            markeredgewidth=plot_cmd['markeredgewidth'],
+                            capsize=plot_cmd['capsize'],
+                            capthick=plot_cmd['capthick'],
+                            alpha=plot_cmd['alpha'],
+                            linestyle=plot_cmd['linestyle']
+                        )
+                    elif plot_cmd['type'] == 'plot':
+                        target_ax.plot(
+                            plot_cmd['x'],
+                            plot_cmd['y'],
+                            color=plot_cmd['color'],
+                            linestyle=plot_cmd['linestyle'],
+                            linewidth=plot_cmd['linewidth'],
+                            marker=plot_cmd.get('marker'),
+                            markersize=plot_cmd.get('markersize'),
+                            markeredgecolor=plot_cmd.get('markeredgecolor'),
+                            markeredgewidth=plot_cmd.get('markeredgewidth'),
+                            alpha=plot_cmd.get('alpha'),
+                            label=plot_cmd['label'] if target_ax == ax_bottom else "",
+                            zorder=plot_cmd.get('zorder', 0)
+                        )
+                    elif plot_cmd['type'] == 'axhline':
+                        xlim = target_ax.get_xlim()
+                        target_ax.axhline(
+                            y=plot_cmd['y'],
+                            color=plot_cmd['color'],
+                            linestyle=plot_cmd['linestyle'],
+                            linewidth=plot_cmd['linewidth'],
+                            alpha=plot_cmd['alpha'],
+                            label=plot_cmd['label'] if target_ax == ax_bottom else ""
+                        )
+                        target_ax.fill_between(
+                            xlim,
+                            plot_cmd['y'] - plot_cmd['yerr'],
+                            plot_cmd['y'] + plot_cmd['yerr'],
+                            color=plot_cmd['color'],
+                            alpha=0.2
+                        )
+                    elif plot_cmd['type'] == 'fill':
+                        target_ax.fill(
+                            plot_cmd['x'],
+                            plot_cmd['y'],
+                            color=plot_cmd['color'],
+                            alpha=plot_cmd['alpha'],
+                            zorder=plot_cmd['zorder'],
+                            label=plot_cmd['label'] if target_ax == ax_bottom else ""
+                        )
+        
+        # Configure x-axis: hide labels on top, show on bottom
+        # IMPORTANT: Set xscale and xlim FIRST before setting ticks
+        ax_bottom.set_xscale(original_ax.get_xscale())
+        ax_bottom.set_xlim(original_ax.get_xlim())
+        ax_top.set_xscale(original_ax.get_xscale())
+        ax_top.set_xlim(original_ax.get_xlim())
+        
+        # Copy x-axis ticks to BOTH axes to ensure alignment
+        tick_positions = original_ax.get_xticks()
+        tick_labels = [t.get_text() for t in original_ax.get_xticklabels()]
+        
+        ax_bottom.set_xticks(tick_positions)
+        ax_bottom.set_xticklabels(tick_labels)
+        
+        ax_top.set_xticks(tick_positions)
+        ax_top.set_xticklabels([])  # Hide labels on top axis
+        ax_top.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        
+        # Add diagonal break markers
+        d = 0.015
+        kwargs = dict(transform=ax_top.transAxes, color='k', clip_on=False, linewidth=1)
+        ax_top.plot((-d, +d), (-d, +d), **kwargs)
+        ax_top.plot((1 - d, 1 + d), (-d, +d), **kwargs)
+        
+        kwargs = dict(transform=ax_bottom.transAxes, color='k', clip_on=False, linewidth=1)
+        ax_bottom.plot((-d, +d), (1 - d, 1 + d), **kwargs)
+        ax_bottom.plot((1 - d, 1 + d), (1 - d, 1 + d), **kwargs)
+        
+        # Copy styling
+        for target_ax in [ax_bottom, ax_top]:
+            target_ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
+            target_ax.minorticks_off()
+            target_ax.grid(True, alpha=0.3, zorder=0)
+        
+        # Set title on top axis
+        ax_top.set_title(get_df_name(dataset), fontdict=title_font)
+        
+        # Set xlabel on bottom axis
+        ax_bottom.set_xlabel(original_ax.get_xlabel(), fontdict=label_font)
+        
+        # Set ylabel centered on the full subplot (not just bottom axis)
+        if col == 0:
+            ylabel = original_ax.get_ylabel()
+            # Set temporary ylabel to get proper x-position, then replace with fig.text
+            ax_bottom.set_ylabel(ylabel, fontdict=label_font)
+            # Get the label position
+            ax_bottom.yaxis.label.set_visible(False)
+            # Position ylabel at vertical center of full original subplot
+            # Use labelpad to match the automatic positioning
+            fig.text(pos.x0 - 0.025,  # Adjust x-position to match ylabel distance
+                    pos.y0 + pos.height / 2,
+                    ylabel, 
+                    fontdict=label_font, 
+                    rotation=90, 
+                    va='center', 
+                    ha='center')
+        
+        # Update axes array reference
+        if n_cols > 1:
+            axes[row][col] = ax_bottom
+        else:
+            axes[row][0] = ax_bottom
     
     plt.savefig(os.path.join(result_figs, f'pareto_front.pdf'))
 
@@ -1697,7 +2156,7 @@ def show_symbolic_regression_results(
     create_latex_tables_from_csv(f'{table_dir}/sr_ablation_performance.csv', output_dir=table_dir)
 
 
-def compute_ted_metrics_for_sr_ablation(paths):
+def compute_ted_metrics(paths):
     """Compute Tree Edit Distance (TED) metrics for symbolic regression ablation experiments."""
     
     import dill
@@ -1753,8 +2212,9 @@ def compute_ted_metrics_for_sr_ablation(paths):
             dataset_name = config['dataset']['metadata']['name']
             model_name = config['model']['metadata']['name']
             seed = config['seed']
+            memory_size = config.get('memory_size', None)
             
-            key = (dataset_name, seed)
+            key = (dataset_name, seed, memory_size)
             if key not in exp_groups:
                 exp_groups[key] = {}
             exp_groups[key][model_name] = exp_path
@@ -1762,12 +2222,12 @@ def compute_ted_metrics_for_sr_ablation(paths):
             continue
     
     # Process each experiment group
-    for (dataset_name, seed), models in tqdm(exp_groups.items(), desc="Processing experiment groups"):
+    for (dataset_name, seed, memory_size), models in tqdm(exp_groups.items(), desc="Processing experiment groups"):
         # Find the prior_symbolic_cbm model for this dataset/seed (ground truth)
         prior_model_path = models.get('prior_symbolic_cbm')
         
         if prior_model_path is None:
-            print(f"Warning: No prior_symbolic_cbm found for dataset={dataset_name}, seed={seed}")
+            print(f"Warning: No prior_symbolic_cbm found for dataset={dataset_name}, seed={seed}, memory_size={memory_size}")
             continue
         
         # Load true equations from prior model's predictions CSV
@@ -1906,14 +2366,18 @@ def compute_ted_metrics_for_sr_ablation(paths):
                 # Compute average TED for the optimal assignment
                 assigned_teds = [ted_matrix[i, j] for i, j in zip(row_ind, col_ind)]
                 avg_ted = np.mean(assigned_teds) if assigned_teds else np.nan
+                # compute standard error
+                se_ted = 1.96 * np.std(assigned_teds) / np.sqrt(len(assigned_teds)) if assigned_teds else np.nan
                 
                 results.append({
                     'dataset': dataset_name,
                     'model': model_name,
                     'seed': seed,
                     'avg_ted': avg_ted,
+                    'se_ted': se_ted,
                     'n_learned': n_learned,
-                    'n_true': n_true
+                    'n_true': n_true,
+                    'memory_size': memory_size
                 })
                 
             except Exception as e:
@@ -1936,7 +2400,7 @@ def compute_ted_metrics_for_sr_ablation(paths):
             print(f"\nSelected seed {selected_seed} for equation collection")
             
             # Collect equations for the selected seed
-            for (dataset_name, seed), models in exp_groups.items():
+            for (dataset_name, seed, memory_size), models in exp_groups.items():
                 if seed != selected_seed:
                     continue
                 
@@ -1978,3 +2442,83 @@ def compute_ted_metrics_for_sr_ablation(paths):
     equations_df = pd.DataFrame(equations_data)
     
     return results_df, equations_df
+
+def csv_to_table(
+    path,
+    df,
+    dataset_col="dataset",
+    model_col="model",
+    mean_col="mean",
+    std_col="std",
+    custom_order=None,
+    model_styles=None,
+    float_fmt="{:.2f}",
+    missing="--"
+):
+    """
+    Store a string containing LaTeX tabular code.
+    """
+
+    # Filter only the datasetsin custom order and sort the df accordingly
+    if custom_order is not None:
+        df[dataset_col] = pd.Categorical(df[dataset_col], categories=custom_order, ordered=True)
+        df = df.sort_values(by=[dataset_col, model_col])
+    # Filter only the models to include
+    models_to_include = list(model_styles.keys()) if model_styles is not None else None
+    if models_to_include is not None:
+        df = df[df[model_col].isin(models_to_include)]
+    # Substitute the models' names according to model_styles[model]['name']
+    if model_styles is not None:
+        df[model_col] = df[model_col].apply(lambda x: model_styles[x]['name'] if x in model_styles else x)
+
+    datasets = df[dataset_col].unique().dropna()
+    datasets = [get_df_name(d) for d in datasets]
+    models = sorted(df[model_col].unique())
+    
+    # substitue datasets' names to df
+    df[dataset_col] = df[dataset_col].apply(get_df_name)
+
+    col_format = "l" + "c" * len(datasets)
+
+    lines = []
+
+    lines.append(r"\begin{table}[t]")
+    lines.append(r"\centering")
+    lines.append(r"\resizebox{\columnwidth}{!}{%")
+    lines.append(r"\begin{tabular}{" + col_format + r"}")
+    lines.append(r"\toprule")
+
+    # Header (FIXED: Model & ...)
+    header = "Model & " + " & ".join(datasets) + r" \\"
+    lines.append(header)
+    lines.append(r"\midrule")
+
+    for model in models:
+        row = [model.replace("_", r"\_")]
+
+        for dataset in datasets:
+            sub = df[
+                (df[model_col] == model) &
+                (df[dataset_col] == dataset)
+            ]
+
+            if len(sub) == 0:
+                cell = missing
+            else:
+                mean = float_fmt.format(sub.iloc[0][mean_col])
+                std = float_fmt.format(sub.iloc[0][std_col])
+                cell = rf"${mean} \scriptscriptstyle{{\pm {std}}}$"
+
+            row.append(cell)
+
+        lines.append(" & ".join(row) + r" \\")
+
+    lines.append(r"\bottomrule")
+    lines.append(r"\end{tabular}")
+    lines.append(r"}")  # end resizebox
+
+    lines.append(r"\end{table}")
+
+    table = "\n".join(lines)
+    with open(path, "w") as f:
+        f.write(table)

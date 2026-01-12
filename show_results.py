@@ -43,8 +43,8 @@ custom_order = [
     'mawps',
 ]
 
-# Regression datasets
-# NOTE: keep in mind to update this list if you add new regression datasets
+# Regression datasets
+# NOTE: update this list if you add new regression datasets
 regression_datasets = [
     'feynman_I_6_2',
     'feynman_I_9_18',
@@ -84,16 +84,16 @@ model_styles = {
     # =========================
     # BASELINE but VERIFIABLE
     # =========================
-    'cmr': {'marker': 'P', 'name': 'CMR', 'color': 'black', 'size': marker_size, 'fillstyle': 'full'},
+    'cmr': {'marker': 'P', 'name': 'CMR', 'color': 'yellow', 'size': marker_size, 'fillstyle': 'none'},
     'cbm_linear': {'marker': '^', 'name': 'CBM', 'color': 'tab:orange', 'size': marker_size, 'fillstyle': 'none'},
     # =========================
     # PROPOSED MODELS (verifiable)
     # =========================
-    'memory_cbm': {'marker': 'X', 'name': 'MLP-Mem-CBM', 'color': 'tab:blue', 'size': marker_size, 'fillstyle': 'full'},
-    'prior_symbolic_cbm': {'marker': '*', 'name': 'Prior-Mem-CBM', 'color': 'tab:cyan', 'size': marker_size, 'fillstyle': 'full'},
-    'sr_symbolic_cbm': {'marker': 'h', 'name': 'Sym-Mem-CBM', 'color': 'tab:green', 'size': marker_size, 'fillstyle': 'full'},
-    'linear_symbolic_cbm': {'marker': '8', 'name': 'Lin-Mem-CBM', 'color': 'tab:olive', 'size': marker_size, 'fillstyle': 'full'},
-    'kan_symbolic_cbm': {'marker': 'p', 'name': 'Kan-Mem-CBM', 'color': 'tab:teal', 'size': marker_size, 'fillstyle': 'full'},
+    'memory_cbm': {'marker': 'X', 'name': 'MLP-Mem-CBM', 'color': 'tab:blue', 'size': marker_size, 'fillstyle': 'none'},
+    'prior_symbolic_cbm': {'marker': '*', 'name': 'Prior-Mem-CBM', 'color': 'tab:cyan', 'size': marker_size, 'fillstyle': 'none'},
+    'sr_symbolic_cbm': {'marker': 'h', 'name': 'Sym-Mem-CBM', 'color': 'tab:green', 'size': marker_size, 'fillstyle': 'none'},
+    'linear_symbolic_cbm': {'marker': '8', 'name': 'Lin-Mem-CBM', 'color': 'tab:olive', 'size': marker_size, 'fillstyle': 'none'},
+    'kan_symbolic_cbm': {'marker': 'p', 'name': 'Kan-Mem-CBM', 'color': 'tab:teal', 'size': marker_size, 'fillstyle': 'none'},
 }
 
 
@@ -132,10 +132,6 @@ def main():
     ###### Visualize the results of the symbolic regression ablation ######
     #######################################################################
 
-    # 1. show the accuracy results of symbolic regression tasks in tabular format
-    # 2. plot the intervention curves
-    # 3. compute the similarity between the learned expressions and the ground truth ones
-
     paths = [
         f"{output_path}/sr_ablation",
         f"{output_path}/prior_reg",
@@ -160,7 +156,7 @@ def main():
 
         # Compute Tree Edit Distance (TED) metrics
         print("\nComputing Tree Edit Distance (TED) metrics...")
-        ted_results, equations_df = compute_ted_metrics_for_sr_ablation(paths)
+        ted_results, equations_df = compute_ted_metrics(paths)
         ted_csv_path = os.path.join(table_path, 'sr_ablation', 'ted_metrics.csv')
         ted_results.to_csv(ted_csv_path, index=False)
         print(f"TED metrics saved to {ted_csv_path}")
@@ -176,8 +172,6 @@ def main():
         # and datasets in custom_order.
         performance = performance[performance['model'].isin(model_styles.keys()) & \
                                 performance['dataset'].isin(custom_order)]
-
-
 
         # Plot intervention results
         for noise in performance['noise'].unique():
@@ -209,7 +203,7 @@ def main():
         # Plot the results on the concept size ablation
         plot_concept_size_ablation(performance, model_styles, title_font, label_font, tick_font)
     except Exception as e:
-        print(f"Error occurred while plotting memory ablation results: {e}")    
+        print(f"Error occurred while plotting concept size ablation results: {e}")    
 
     ##################################################
     ######### Visualize performance results ##########
@@ -257,9 +251,42 @@ def main():
             title_font, 
             label_font, 
             tick_font, 
-            refined_custom_order 
+            refined_custom_order,
+            ranges=[
+                [[1.5,4.5], [60,86]], # awa2
+                [[2,3.5], [7,28]], # awa2 incomplete
+                [[15,33], [75,102]], # cub
+                [16,43], # cub incomplete
+                [[12,13.5], [63,100]], # cifar10
+            ]
         )
-        
+
+        # Compute TED metric for regression datasets (datasets for which we know the ground truth expressions/mechanisms)
+        ted_paths = [
+            f"{output_path}/memory_reg",
+            f"{output_path}/memory_less_reg",
+            f"{output_path}/prior_reg",
+        ]
+        print("\nComputing Tree Edit Distance (TED) metrics...")
+        ted_results, _ = compute_ted_metrics(ted_paths)
+        # Filter prior and models which did not match the number of true mechanisms
+        ted_results = ted_results[(ted_results['memory_size']==ted_results['n_true']) & (ted_results['model']!='prior_symbolic_cbm')]
+        ted_csv_path = os.path.join(table_path, 'ted_metrics.csv')
+        ted_results.to_csv(ted_csv_path, index=False)
+        ted_tex_path = os.path.join(table_path, 'ted_metrics.txt')
+        csv_to_table(
+            path=ted_tex_path,
+            df=ted_results, 
+            dataset_col='dataset',
+            model_col='model',
+            mean_col='avg_ted',
+            std_col='se_ted',
+            custom_order=refined_custom_order,
+            model_styles=model_styles,
+        )
+        print(f"TED metrics saved to {ted_csv_path}")
+        print(f"TED results summary:\n{ted_results.groupby(['dataset', 'model'])['avg_ted'].agg(['mean', 'std', 'count'])}")
+
     except Exception as e:
         print(f"Error occurred while plotting memory ablation results: {e}")
 
@@ -295,6 +322,13 @@ def main():
                 model_styles=model_styles,
                 relative_accuracy=False,
                 out_dir=f'{result_figs}',
+                ranges=[
+                    [[-0.3,4], [72,76]], # awa2
+                    [[0,4], [23,26]], # awa2 incomplete
+                    [[-0.4,40], [70,101]], # cub
+                    [-0.4,44], # cub incomplete
+                    [[5,18], [81,100]], # cifar10
+                ]
             )
             
     except Exception as e:
