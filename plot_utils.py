@@ -329,7 +329,14 @@ def compute_pareto_knee(complexity, accuracy):
     return knee_index
 
 
-def get_intervention_from_path(paths, model_styles=None, custom_order=None, apply_filter=False, fixed_memory=None, selected_memory_size=2):
+def get_intervention_from_path(
+        paths, 
+        model_styles=None, 
+        custom_order=None, 
+        apply_filter=False, 
+        fixed_memory=None, 
+        selected_memory_size=2
+):
 
     if apply_filter:
         # Eliminate Feynman datasets from custom_order
@@ -420,44 +427,12 @@ def get_intervention_from_path(paths, model_styles=None, custom_order=None, appl
                             'memory_size': mem_size
                         })
                     elif is_classification:
-                        # For classification datasets without fixed memory, compute Pareto knee
-                        # Filter experiments for this dataset and model
-                        model_data = performance_with_metrics[
-                            (performance_with_metrics['dataset'] == dataset) & 
-                            (performance_with_metrics['model'] == model)
-                        ]
-                        
-                        if len(model_data) > 0:
-                            # Group by memory_size and compute mean accuracy and complexity
-                            grouped = model_data.groupby('memory_size').agg({
-                                'task_acc': 'mean',
-                                'complexity': 'mean'
-                            }).reset_index()
-                            
-                            # Only compute knee if we have multiple memory sizes
-                            if len(grouped) > 1:
-                                # Compute knee point
-                                knee_idx = compute_pareto_knee(
-                                    complexity=grouped['complexity'].values,
-                                    accuracy=grouped['task_acc'].values
-                                )
-                                knee_memory_size = grouped.iloc[knee_idx]['memory_size']
-                            else:
-                                # Only one memory size available, use it
-                                knee_memory_size = grouped.iloc[0]['memory_size']
-                            
-                            filtered_exps_with_knee.append({
-                                'dataset': dataset,
-                                'model': model,
-                                'memory_size': knee_memory_size
-                            })
-                        else:
-                            # No data found, use default selected_memory_size
-                            filtered_exps_with_knee.append({
-                                'dataset': dataset,
-                                'model': model,
-                                'memory_size': selected_memory_size
-                            })
+                        # For classification datasets without fixed memory, use memory_size=2
+                        filtered_exps_with_knee.append({
+                            'dataset': dataset,
+                            'model': model,
+                            'memory_size': selected_memory_size
+                        })
                     else:
                         # For regression datasets without fixed memory, use selected_memory_size
                         filtered_exps_with_knee.append({
@@ -572,6 +547,8 @@ def plot_intervention_results(
     df, 
     metric='accuracy', 
     unique_noises=[0.0], 
+    classification_noise=None,
+    regression_noise=None,
     title_font=None, 
     label_font=None, 
     tick_font=None, 
@@ -587,6 +564,12 @@ def plot_intervention_results(
     
     Parameters:
     -----------
+    unique_noises : list, optional
+        Default noise level(s) to use if classification_noise and regression_noise are not specified.
+    classification_noise : float, optional
+        Noise level to use for classification datasets. If None, uses unique_noises.
+    regression_noise : float, optional
+        Noise level to use for regression datasets. If None, uses unique_noises.
     ranges : list, optional
         Y-axis range specification for classification datasets (bottom row) only.
         Each element corresponds to a classification subplot by index.
@@ -717,7 +700,19 @@ def plot_intervention_results(
                 if isinstance(range_spec, list) and len(range_spec) == 2:
                     ax.set_ylim(range_spec)
         
-        for noise in unique_noises:
+        # Determine which noise level to use based on dataset type
+        if dataset in found_regression_datasets:
+            if regression_noise is not None:
+                dataset_noises = [regression_noise] if not isinstance(regression_noise, list) else regression_noise
+            else:
+                dataset_noises = unique_noises
+        else:
+            if classification_noise is not None:
+                dataset_noises = [classification_noise] if not isinstance(classification_noise, list) else classification_noise
+            else:
+                dataset_noises = unique_noises
+        
+        for noise in dataset_noises:
             data = df[(df['noise'] == noise) & (df['dataset'] == dataset)]
             if dataset in found_regression_datasets:
                 metric = 'mae'
@@ -1011,7 +1006,7 @@ def plot_intervention_results(
         # Update axes array reference
         axes[row][col] = ax_bottom
     
-    str_store = str(unique_noises[0]).replace('.', '') if len(unique_noises) == 1 else 'all_noises'
+    str_store = str(unique_noises[0]).replace('.', '') + str(classification_noise).replace('.', '') + str(regression_noise).replace('.', '')
     suffix = 'relative_accuracy_difference' if relative_accuracy else 'absolute_accuracy'
     os.makedirs(f'{out_dir}/intervention/{suffix}', exist_ok=True)
     plt.savefig(f'{out_dir}/intervention/{suffix}/{str_store}.pdf')

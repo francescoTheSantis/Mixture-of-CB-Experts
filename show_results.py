@@ -313,7 +313,9 @@ def main():
             plot_intervention_results(
                 performance, 
                 metric='accuracy', 
-                unique_noises=[noise], 
+                # unique_noises=[noise], 
+                classification_noise=[noise],
+                regression_noise=[0.0],
                 title_font=title_font, 
                 label_font=label_font, 
                 tick_font=tick_font, 
