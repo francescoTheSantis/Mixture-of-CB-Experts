@@ -105,6 +105,7 @@ tick_font = {'size': 28}
 
 # Number of mechanisms of each dataset for which those are known
 fixed_memory={
+    # regression datasets
     'feynman_I_6_2': 1,
     'feynman_I_9_18': 1,
     'feynman_I_12_1': 1,
@@ -116,6 +117,12 @@ fixed_memory={
     'dsprites_complex': 3,
     'pendulum': 1,
     'mawps': 4,
+    # classification datasets
+    'awa2': 1,
+    'awa2_incomplete': 1,
+    'cub': 1, 
+    'cub_incomplete': 1,
+    'cifar10': 1,
 }
 
 def main():
@@ -215,7 +222,6 @@ def main():
         f"{output_path}/memory_reg",
         f"{output_path}/memory_less_reg",
         f"{output_path}/prior_reg",
-        "test/memory_cls",
     ]
 
     try:
@@ -253,11 +259,11 @@ def main():
             tick_font, 
             refined_custom_order,
             ranges=[
-                [[1.5,4.5], [60,86]], # awa2
-                [[2,3.5], [7,28]], # awa2 incomplete
-                [[15,33], [75,102]], # cub
-                [16,43], # cub incomplete
-                [[12,13.5], [63,100]], # cifar10
+                [0,100], # awa2
+                [0,100], # awa2 incomplete
+                [0,100], # cub
+                [0,100], # cub incomplete
+                [0,100], # cifar10
             ]
         )
 
@@ -325,11 +331,11 @@ def main():
                 relative_accuracy=False,
                 out_dir=f'{result_figs}',
                 ranges=[
-                    [[-0.3,4], [72,76]], # awa2
-                    [[0,4], [23,26]], # awa2 incomplete
-                    [[-0.4,40], [70,101]], # cub
-                    [-0.4,44], # cub incomplete
-                    [[5,18], [81,100]], # cifar10
+                    [0,100], # awa2
+                    [0,100], # awa2 incomplete
+                    [0,100], # cub
+                    [0,100], # cub incomplete
+                    [0,100], # cifar10
                 ]
             )
             

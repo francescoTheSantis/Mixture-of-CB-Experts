@@ -13,7 +13,7 @@ class LinearEncoder(BaseEncoder):
         activation (str): Activation function to use in the encoder.
     """
 
-    def __init__(self, input_size, output_size, input_transform=None, activation='ReLU'):
+    def __init__(self, input_size, output_size, input_transform=None, activation='Identity'):
         super().__init__(input_size, output_size, input_transform)
         if input_transform is not None:
             self.input_transform.flatten = True
@@ -25,10 +25,13 @@ class LinearEncoder(BaseEncoder):
 
             self.activation = getattr(nn, activation)()
 
+    # def forward(self, x):
+    #     if self.input_transform is not None:
+    #         x = self.input_transform(x)
+    #     return self.activation(self.linear(x))
+    
     def forward(self, x):
-        if self.input_transform is not None:
-            x = self.input_transform(x)
-        return self.activation(self.linear(x))
+        return self.linear(x)
     
     def to_symbolic(self):
         """

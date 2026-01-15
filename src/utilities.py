@@ -559,14 +559,12 @@ def subsample_based_on_y_hat(y_target, subsample_size):
     
     return np.array(selected_indices)
 
-def proportional_subsampling(X_memory, subsample_size):
+def subsampling(X_memory):
     """
-    Perform proportional subsampling for binary input features.
-    Ensures that the subsample maintains the same proportion of unique binary patterns as the original data.
+    Perform subsampling by selecting exactly one sample per unique pattern.
     
     Args:
         X_memory: Input tensor of shape (n_samples, n_features) with binary features (0 or 1)
-        subsample_size: Number of samples to select
     Returns:
         indices: Array of indices to keep from the original dataset
     """
@@ -576,32 +574,19 @@ def proportional_subsampling(X_memory, subsample_size):
     else:
         X_np = X_memory
     
-    # Find unique rows and their counts
-    unique_rows, counts = np.unique(X_np, axis=0, return_counts=True)
-    total_count = counts.sum()
-    
-    # Calculate the number of samples to select for each unique row
-    proportions = counts / total_count
-    samples_per_unique = np.floor(proportions * subsample_size).astype(int)
-    
-    # Ensure at least one sample for each unique row if possible
-    samples_per_unique = np.maximum(samples_per_unique, 1)
+    # Find unique rows
+    unique_rows = np.unique(X_np, axis=0)
     
     selected_indices = []
     
-    for i, unique_row in enumerate(unique_rows):
+    # Select exactly one sample for each unique row
+    for unique_row in unique_rows:
         # Find all indices in the original data that match this unique row
         matching_indices = np.where((X_np == unique_row).all(axis=1))[0]
         
-        n_to_select = min(samples_per_unique[i], len(matching_indices))
-        
-        # Randomly select the required number of indices
-        selected = np.random.choice(matching_indices, size=n_to_select, replace=False)
+        # Randomly select one index
+        selected = np.random.choice(matching_indices, size=1, replace=False)
         selected_indices.extend(selected)
-    
-    # If we have selected more than subsample_size due to rounding, randomly trim
-    if len(selected_indices) > subsample_size:
-        selected_indices = np.random.choice(selected_indices, size=subsample_size, replace=False)
     
     return np.array(selected_indices)
 
@@ -692,20 +677,33 @@ def symbolic_regression(
                 all_equations[memory_idx][output_name] = sp.sympify("0")
                 continue
             
-            subsample_size = 5000
-            if n_samples_for_memory > subsample_size:
-                print(f"Subsampling to {subsample_size} for PySR using input space coverage (memory {memory_idx}, output '{output_name}').")
-                
-                if task == 'classification':
-                    if disjoint_training:
-                        indices = proportional_subsampling(X_memory, subsample_size)
-                    else:
-                        indices = subsample_based_on_y_hat(y_target, subsample_size)
-                else:
-                    indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
+            subsample_size = 2000
+            if task == 'classification' and disjoint_training:
+                indices = subsampling(X_memory)
+            elif task == 'classification' and not disjoint_training and n_samples_for_memory > subsample_size:
+                indices = subsample_based_on_y_hat(y_target, subsample_size)
+            elif task == 'regression' and n_samples_for_memory > subsample_size:
+                indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
+            else:
+                indices = None
 
+            if indices is not None:
                 X_memory = X_memory[indices]
                 y_target = y_target[indices]
+
+            # if n_samples_for_memory > subsample_size:
+            #     print(f"Subsampling to {subsample_size} for PySR using input space coverage (memory {memory_idx}, output '{output_name}').")
+                
+            #     if task == 'classification':
+            #         if disjoint_training:
+            #             indices = subsampling(X_memory)
+            #         else:
+            #             indices = subsample_based_on_y_hat(y_target, subsample_size)
+            #     else:
+            #         indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
+
+                # X_memory = X_memory[indices]
+                # y_target = y_target[indices]
             
             # Validate data: check for NaN and Inf values
             if np.isnan(X_memory).sum()>0 or np.isinf(X_memory).sum()>0:

@@ -184,10 +184,10 @@ class Trainer:
             epochs = self.cfg.max_epochs
             self.model.eval()
             self.model = self.model.to(self.cfg.gpus[0])
+            
             stored_concepts = []
             stored_targets = []
             stored_selector_probs = []
-            stored_true_concepts = []
             with torch.no_grad():
                 for batch in tqdm(train_dataloader, desc="Storing training data"):
                     x, c, y = self.model.unpack_batch(batch)
@@ -215,7 +215,6 @@ class Trainer:
 
                     stored_concepts.append(concepts_for_sr_algorithm.detach().cpu())
                     stored_selector_probs.append(output['sampled_memory_idxs'].detach().cpu())
-                    stored_true_concepts.append(c.detach().cpu())
 
                     # Clear GPU memory
                     del x, c, y, inputs
@@ -226,11 +225,6 @@ class Trainer:
             concatenated_concepts = torch.cat(stored_concepts, dim=0)
             concatenated_targets = torch.cat(stored_targets, dim=0)
             concatenated_selector_probs = torch.cat(stored_selector_probs, dim=0)
-            concatenated_true_concepts = torch.cat(stored_true_concepts, dim=0)
-
-            if self.model.model.task == 'classification' and not self.cfg.disjoint_training:
-                int_map = (np.random.rand(*concatenated_true_concepts.shape) < self.cfg.int_prob)
-                concatenated_concepts[int_map] = concatenated_true_concepts[int_map]
 
             # Scale concepts and targets if scale_variables is True and task is regression
             if self.cfg.dataset.metadata.task == 'regression' and self.scale_variables:

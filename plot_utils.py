@@ -335,7 +335,7 @@ def get_intervention_from_path(
         custom_order=None, 
         apply_filter=False, 
         fixed_memory=None, 
-        selected_memory_size=2
+        selected_memory_size=1
 ):
 
     if apply_filter:

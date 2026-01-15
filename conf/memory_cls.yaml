@@ -9,7 +9,7 @@ hydra:
       dir: output/memory_cls/${now:%Y-%m-%d_%H-%M-%S} 
   sweeper:
     grid_params:
-      model: lin_sym_cbm, cmr, memory_cbm #, sr_sym_cbm
+      model: lin_sym_cbm, cmr #, memory_cbm, sr_sym_cbm
       memory_size: 1, 2, 3, 4, 5 
       seed: 1, 2, 3, 4, 5
 
@@ -26,10 +26,12 @@ hydra:
         - facebook/dinov2-base
         - facebook/dinov2-base
         - facebook/dinov2-base
-        - google/vit-base-patch32-224-in21k
-        # - google/vit-base-patch32-224-in21k
+        - resnet18
+        # - resnet18
 
-disjoint_training: False 
-hard_concepts: False
+disjoint_training: True
+hard_concepts: True
+
+gpus: [0]
 
 note: "Memory-cls" 

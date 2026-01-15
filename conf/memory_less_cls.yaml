@@ -25,8 +25,8 @@ hydra:
         - facebook/dinov2-base
         - facebook/dinov2-base
         - facebook/dinov2-base
-        - google/vit-base-patch32-224-in21k
-        # - google/vit-base-patch32-224-in21k
+        - resnet18
+        # - resnet18
 
 disjoint_training: False 
 hard_concepts: False
