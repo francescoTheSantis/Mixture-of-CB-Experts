@@ -240,19 +240,26 @@ def get_exp_from_path(paths):
                                     else:
                                         cleaned_equation_counts[cleaned_eq] = cnt
 
-                                # sum the complexities
-                                total_complexity = 0
+                                # Compute all complexity metrics
+                                complexity_metrics = ['node_count', 'depth', 'visitation_length', 'operation_count', 'variables_count']
+                                complexity_totals = {metric: 0 for metric in complexity_metrics}
+                                
                                 for eq, _ in tqdm(cleaned_equation_counts.items(), desc=f"Complexity, {d['model']}, {d['dataset']}", leave=False):
                                     sympy_eq = sympify(eq, locals={var: symbols(var) for var in vars})
-                                    complexity = compute_complexity(sympy_eq, metric='visitation_length')
-                                    total_complexity += complexity
+                                    for metric in complexity_metrics:
+                                        complexity_totals[metric] += compute_complexity(sympy_eq, metric=metric)
                                 
-                                d['complexity'] = total_complexity
+                                # Store all complexity metrics
+                                for metric in complexity_metrics:
+                                    d[f'complexity_{metric}'] = complexity_totals[metric]
+                        
                         except Exception as e:
                             print(f"Error computing complexity for {exp}: {e}")
                 else:
                     # Store NaN for blackbox and cem models
-                    d['complexity'] = np.nan
+                    complexity_metrics = ['node_count', 'depth', 'visitation_length', 'operation_count', 'variables_count']
+                    for metric in complexity_metrics:
+                        d[f'complexity_{metric}'] = np.nan
 
                 performance = pd.concat([performance, pd.DataFrame([d])], ignore_index=True)
         except Exception as e:
@@ -454,8 +461,19 @@ def get_intervention_from_path(
 ######## Data Processing #################
 ##########################################
 
-def compute_avg_and_uncertainty(performance, custom_order):
-
+def compute_avg_and_uncertainty(performance, custom_order, complexity_metric='visitation_length'):
+    """
+    Compute average and uncertainty metrics for performance data.
+    
+    Args:
+        performance: DataFrame with performance data
+        custom_order: List of datasets in desired order
+        complexity_metric: Complexity metric to use ('node_count', 'depth', 'visitation_length', 
+                          'operation_count', 'variables_count'). Default: 'visitation_length'
+    
+    Returns:
+        DataFrame with averaged metrics and standard errors
+    """
     # Sort the points in the order of memory_size.
     performance = performance.sort_values(by=['dataset', 'memory_size'])
 
@@ -469,6 +487,12 @@ def compute_avg_and_uncertainty(performance, custom_order):
     if 'task_acc' in performance.columns:
         performance['task_acc'] = performance['task_acc'] * 100
 
+    # Determine which complexity column to use
+    complexity_col = f'complexity_{complexity_metric}'
+    if complexity_col not in performance.columns:
+        # Fallback to 'complexity' if specific metric not found
+        complexity_col = 'complexity'
+
     # Avg over the seeds for the performance metrics
     if 'task_acc' in performance.columns and 'task_mae' in performance.columns:
         # Handle both accuracy and MSE/MAE metrics
@@ -479,9 +503,9 @@ def compute_avg_and_uncertainty(performance, custom_order):
             'std_concept': ('concept_acc', 'std'),
             'task_type': ('task_type', 'first')
         }
-        if 'complexity' in performance.columns:
-            agg_dict_acc['mean_complexity'] = ('complexity', 'mean')
-            agg_dict_acc['std_complexity'] = ('complexity', 'std')
+        if complexity_col in performance.columns:
+            agg_dict_acc['mean_complexity'] = (complexity_col, 'mean')
+            agg_dict_acc['std_complexity'] = (complexity_col, 'std')
         
         performance_acc = performance.dropna(subset=['task_acc']).groupby(['dataset', 'memory_size', 'model']).agg(
             **agg_dict_acc
@@ -495,9 +519,9 @@ def compute_avg_and_uncertainty(performance, custom_order):
             'std_concept': ('concept_mae', 'std'),
             'task_type': ('task_type', 'first')
         }
-        if 'complexity' in performance.columns:
-            agg_dict_mae['mean_complexity'] = ('complexity', 'mean')
-            agg_dict_mae['std_complexity'] = ('complexity', 'std')
+        if complexity_col in performance.columns:
+            agg_dict_mae['mean_complexity'] = (complexity_col, 'mean')
+            agg_dict_mae['std_complexity'] = (complexity_col, 'std')
         
         performance_mae = performance.dropna(subset=['task_mae']).groupby(['dataset', 'memory_size', 'model']).agg(
             **agg_dict_mae
@@ -516,9 +540,9 @@ def compute_avg_and_uncertainty(performance, custom_order):
             'std_concept': (concept_col, 'std'),
             'task_type': ('task_type', 'first')
         }
-        if 'complexity' in performance.columns:
-            agg_dict_fallback['mean_complexity'] = ('complexity', 'mean')
-            agg_dict_fallback['std_complexity'] = ('complexity', 'std')
+        if complexity_col in performance.columns:
+            agg_dict_fallback['mean_complexity'] = (complexity_col, 'mean')
+            agg_dict_fallback['std_complexity'] = (complexity_col, 'std')
         
         performance = performance.groupby(['dataset', 'memory_size', 'model']).agg(
             **agg_dict_fallback
@@ -1337,12 +1361,15 @@ def filter_pareto_models(df: pd.DataFrame, fixed_memory: dict = None, custom_ord
 
     return filtered.reset_index(drop=True)
 
-def plot_pareto_front(performance, model_styles, title_font, label_font, tick_font, custom_order, ranges=None):
+def plot_pareto_front(performance, model_styles, title_font, label_font, tick_font, custom_order, complexity_metric='visitation_length', ranges=None):
     """
     Plot Pareto front for model complexity vs accuracy.
     
     Parameters:
     -----------
+    complexity_metric : str
+        The complexity metric to use for the x-axis. Options: 'node_count', 'depth', 
+        'visitation_length', 'operation_count', 'variables_count'. Default: 'visitation_length'
     ranges : list, optional
         Y-axis range specification for classification datasets (bottom row) only.
         Each element corresponds to a classification subplot by index.
@@ -1352,7 +1379,7 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         If None or shorter than needed, defaults to [0, 1] for missing entries.
         Regression datasets always use continuous y-axis (ranges not applied).
     """
-    performance = compute_avg_and_uncertainty(performance, custom_order)
+    performance = compute_avg_and_uncertainty(performance, custom_order, complexity_metric=complexity_metric)
 
     # save the performance as csv
     performance.to_csv(os.path.join(table_path, 'memory_ablation_performance.csv'), index=False)
@@ -1450,7 +1477,9 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         data = data.copy()
         data['has_infinity'] = False  # Initialize the column
         
-        # Use the 'complexity' column directly from the dataframe
+        # Note: mean_complexity is already set by compute_avg_and_uncertainty based on complexity_metric
+        # No need to reselect the complexity column here
+        
         # Mark dcr and licem as having infinity complexity
         data['has_infinity'] = data['model'].isin(['dcr', 'licem'])
         # Find max finite complexity to set infinity value appropriately
@@ -1983,7 +2012,9 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         else:
             axes[row][0] = ax_bottom
     
-    plt.savefig(os.path.join(result_figs, f'pareto_front.pdf'))
+    # Save the figure with complexity metric in the filename
+    save_path = os.path.join(result_figs, f'pareto_front_{complexity_metric}.pdf')
+    plt.savefig(save_path)
 
 #############################################
 ########## Latex Table Creation Utils #######
@@ -2517,3 +2548,348 @@ def csv_to_table(
     table = "\n".join(lines)
     with open(path, "w") as f:
         f.write(table)
+
+def generate_performance_tables(
+    performance,
+    custom_order,
+    model_styles,
+    regression_datasets,
+    output_path
+):
+    """
+    Generate LaTeX tables for classification and regression datasets showing
+    performance metrics and all complexity metrics.
+    
+    Args:
+        performance: DataFrame with performance data including complexity metrics
+        custom_order: List of datasets in desired order
+        model_styles: Dictionary with model styling information
+        regression_datasets: List of regression dataset names
+        output_path: Directory path to save the tables
+    """
+    # Filter and prepare performance data
+    perf_filtered = performance[performance['dataset'].isin(custom_order)].copy()
+    
+    # Separate classification and regression datasets
+    classification_datasets = [d for d in custom_order if d not in regression_datasets]
+    
+    # Complexity metrics to include
+    complexity_metrics = ['node_count', 'depth', 'visitation_length', 'operation_count', 'variables_count']
+    
+    # Create table for classification datasets
+    if len(classification_datasets) > 0:
+        print("\nGenerating classification performance table...")
+        cls_data = perf_filtered[perf_filtered['dataset'].isin(classification_datasets)].copy()
+
+        if cls_data.empty:
+            pass
+        else:
+            # Aggregate by dataset and model
+            cls_grouped = cls_data.groupby(['dataset', 'model']).agg({
+                'task_acc': ['mean', 'std'],
+                'task_f1': ['mean', 'std'],
+                **{f'complexity_{metric}': ['mean', 'std'] for metric in complexity_metrics}
+            }).reset_index()
+            
+            # Flatten column names
+            cls_grouped.columns = ['_'.join(col).strip('_') if col[1] else col[0] 
+                                for col in cls_grouped.columns.values]
+            
+            # Create LaTeX table for classification
+            _create_performance_latex_table(
+                cls_grouped,
+                classification_datasets,
+                model_styles,
+                complexity_metrics,
+                task_type='classification',
+                output_path=output_path
+            )
+    
+    # Create table for regression datasets
+    if len(regression_datasets) > 0:
+        print("\nGenerating regression performance table...")
+        reg_data = perf_filtered[perf_filtered['dataset'].isin(regression_datasets)].copy()
+        
+        if reg_data.empty:
+            pass
+        else:
+            # Aggregate by dataset and model
+            reg_grouped = reg_data.groupby(['dataset', 'model']).agg({
+                'task_mae': ['mean', 'std'],
+                'task_mse': ['mean', 'std'],
+                **{f'complexity_{metric}': ['mean', 'std'] for metric in complexity_metrics}
+            }).reset_index()
+            
+            # Flatten column names
+            reg_grouped.columns = ['_'.join(col).strip('_') if col[1] else col[0] 
+                                for col in reg_grouped.columns.values]
+            
+            # Create LaTeX table for regression
+            _create_performance_latex_table(
+                reg_grouped,
+                [d for d in custom_order if d in regression_datasets],
+                model_styles,
+                complexity_metrics,
+                task_type='regression',
+                output_path=output_path
+            )
+
+
+def _create_performance_latex_table(
+    df,
+    datasets,
+    model_styles,
+    complexity_metrics,
+    task_type='classification',
+    output_path='results/tabs'
+):
+    """
+    Helper function to create LaTeX table with performance and complexity metrics.
+    
+    Args:
+        df: DataFrame with aggregated performance data
+        datasets: List of dataset names to include
+        model_styles: Dictionary with model styling information
+        complexity_metrics: List of complexity metric names
+        task_type: 'classification' or 'regression'
+        output_path: Directory path to save the table
+    """
+    os.makedirs(output_path, exist_ok=True)
+    
+    # Filter datasets
+    df = df[df['dataset'].isin(datasets)].copy()
+    
+    # Map model names
+    if model_styles is not None:
+        df['model_name'] = df['model'].apply(
+            lambda x: model_styles[x]['name'] if x in model_styles else x
+        )
+    else:
+        df['model_name'] = df['model']
+    
+    # Map dataset names
+    df['dataset_name'] = df['dataset'].apply(get_df_name)
+    
+    # Get unique models and datasets
+    models = sorted(df['model_name'].unique())
+    dataset_names = [get_df_name(d) for d in datasets if d in df['dataset'].unique()]
+    
+    # Define metric columns based on task type
+    if task_type == 'classification':
+        perf_metrics = [
+            ('Accuracy', 'task_acc_mean', 'task_acc_std', '{:.2f}'),
+            ('F1', 'task_f1_mean', 'task_f1_std', '{:.2f}')
+        ]
+    else:  # regression
+        perf_metrics = [
+            ('MAE', 'task_mae_mean', 'task_mae_std', '{:.4f}'),
+            ('MSE', 'task_mse_mean', 'task_mse_std', '{:.4f}')
+        ]
+    
+    # Add complexity metrics
+    complexity_metric_names = {
+        'node_count': 'Nodes',
+        'depth': 'Depth',
+        'visitation_length': 'Visit-Len',
+        'operation_count': 'Ops',
+        'variables_count': 'Vars'
+    }
+    
+    for metric in complexity_metrics:
+        metric_name = complexity_metric_names.get(metric, metric)
+        perf_metrics.append((
+            metric_name,
+            f'complexity_{metric}_mean',
+            f'complexity_{metric}_std',
+            '{:.1f}'
+        ))
+    
+    # Build LaTeX table for each dataset
+    for dataset in dataset_names:
+        dataset_key = [d for d in datasets if get_df_name(d) == dataset][0]
+        dataset_df = df[df['dataset'] == dataset_key].copy()
+        
+        if len(dataset_df) == 0:
+            continue
+        
+        lines = []
+        lines.append(r"\begin{table}[t]")
+        lines.append(r"\centering")
+        lines.append(r"\caption{Performance and Complexity Metrics for " + dataset.replace("_", r"\_") + r"}")
+        lines.append(r"\label{tab:" + task_type + "_" + dataset_key + r"}")
+        
+        # Column format: Model + one column per metric
+        n_cols = len(perf_metrics) + 1
+        col_format = "l" + "c" * len(perf_metrics)
+        
+        lines.append(r"\resizebox{\columnwidth}{!}{%")
+        lines.append(r"\begin{tabular}{" + col_format + r"}")
+        lines.append(r"\toprule")
+        
+        # Header
+        metric_headers = [name for name, _, _, _ in perf_metrics]
+        header = "Model & " + " & ".join(metric_headers) + r" \\"
+        lines.append(header)
+        lines.append(r"\midrule")
+        
+        # Data rows
+        for model in models:
+            model_data = dataset_df[dataset_df['model_name'] == model]
+            
+            if len(model_data) == 0:
+                continue
+            
+            row = [model.replace("_", r"\_")]
+            
+            for _, mean_col, std_col, fmt in perf_metrics:
+                if mean_col in model_data.columns and not pd.isna(model_data.iloc[0][mean_col]):
+                    mean_val = model_data.iloc[0][mean_col]
+                    std_val = model_data.iloc[0][std_col] if std_col in model_data.columns else 0
+                    
+                    # Format based on metric type
+                    if 'task_acc' in mean_col or 'task_f1' in mean_col:
+                        # Convert to percentage
+                        mean_val *= 100
+                        std_val *= 100
+                    
+                    mean_str = fmt.format(mean_val)
+                    std_str = fmt.format(std_val)
+                    cell = rf"${mean_str} \scriptscriptstyle{{\pm {std_str}}}$"
+                else:
+                    cell = "--"
+                
+                row.append(cell)
+            
+            lines.append(" & ".join(row) + r" \\")
+        
+        lines.append(r"\bottomrule")
+        lines.append(r"\end{tabular}")
+        lines.append(r"}")
+        lines.append(r"\end{table}")
+        
+        # Save table
+        table_content = "\n".join(lines)
+        filename = os.path.join(output_path, f'{task_type}_{dataset_key}_performance_table.txt')
+        with open(filename, 'w') as f:
+            f.write(table_content)
+        
+        print(f"Table saved to: {filename}")
+    
+    # Also create a combined table with all datasets
+    _create_combined_performance_table(df, datasets, models, perf_metrics, task_type, output_path)
+
+
+def _create_combined_performance_table(
+    df,
+    datasets,
+    models,
+    perf_metrics,
+    task_type,
+    output_path
+):
+    """
+    Create a combined table with all datasets as columns and models as rows.
+    """
+    dataset_names = [get_df_name(d) for d in datasets if d in df['dataset'].unique()]
+    
+    lines = []
+    lines.append(r"\begin{table*}[t]")
+    lines.append(r"\centering")
+    lines.append(r"\caption{" + task_type.capitalize() + r" Performance and Complexity Metrics}")
+    lines.append(r"\label{tab:" + task_type + "_combined}")
+    
+    # For combined table, show all metrics
+    if task_type == 'classification':
+        key_metrics = [
+            ('Acc', 'task_acc_mean', 'task_acc_std', '{:.1f}'),
+            ('F1', 'task_f1_mean', 'task_f1_std', '{:.1f}'),
+            ('Nodes', 'complexity_node_count_mean', 'complexity_node_count_std', '{:.0f}'),
+            ('Depth', 'complexity_depth_mean', 'complexity_depth_std', '{:.0f}'),
+            ('Visit-Len', 'complexity_visitation_length_mean', 'complexity_visitation_length_std', '{:.0f}'),
+            ('Ops', 'complexity_operation_count_mean', 'complexity_operation_count_std', '{:.0f}'),
+            ('Vars', 'complexity_variables_count_mean', 'complexity_variables_count_std', '{:.0f}')
+        ]
+    else:
+        key_metrics = [
+            ('MAE', 'task_mae_mean', 'task_mae_std', '{:.3f}'),
+            ('MSE', 'task_mse_mean', 'task_mse_std', '{:.3f}'),
+            ('Nodes', 'complexity_node_count_mean', 'complexity_node_count_std', '{:.0f}'),
+            ('Depth', 'complexity_depth_mean', 'complexity_depth_std', '{:.0f}'),
+            ('Visit-Len', 'complexity_visitation_length_mean', 'complexity_visitation_length_std', '{:.0f}'),
+            ('Ops', 'complexity_operation_count_mean', 'complexity_operation_count_std', '{:.0f}'),
+            ('Vars', 'complexity_variables_count_mean', 'complexity_variables_count_std', '{:.0f}')
+        ]
+    
+    # Multi-column header
+    n_metrics = len(key_metrics)
+    col_format = "l" + ("c" * n_metrics) * len(dataset_names)
+    
+    lines.append(r"\resizebox{\textwidth}{!}{%")
+    lines.append(r"\begin{tabular}{" + col_format + r"}")
+    lines.append(r"\toprule")
+    
+    # Top header with dataset names spanning multiple columns
+    # Model column should span 2 rows
+    top_header = r"\multirow{2}{*}{Model}"
+    for dataset_name in dataset_names:
+        top_header += " & " + r"\multicolumn{" + str(n_metrics) + r"}{c}{" + dataset_name.replace("_", r"\_") + r"}"
+    top_header += r" \\"
+    lines.append(top_header)
+    
+    # Add a line separator after the dataset names
+    lines.append(r"\cmidrule(lr){2-" + str(1 + n_metrics * len(dataset_names)) + r"}")
+    
+    # Second header with metric names repeated for each dataset (no Model column label here)
+    metric_header = ""
+    for _ in dataset_names:
+        for metric_name, _, _, _ in key_metrics:
+            metric_header += " & " + metric_name
+    lines.append(metric_header + r" \\")
+    lines.append(r"\midrule")
+    
+    # Data rows
+    for model in models:
+        row = [model.replace("_", r"\_")]
+        
+        for dataset in datasets:
+            if dataset not in df['dataset'].unique():
+                row.extend(["--"] * n_metrics)
+                continue
+            
+            model_data = df[(df['model_name'] == model) & (df['dataset'] == dataset)]
+            
+            if len(model_data) == 0:
+                row.extend(["--"] * n_metrics)
+                continue
+            
+            for _, mean_col, std_col, fmt in key_metrics:
+                if mean_col in model_data.columns and not pd.isna(model_data.iloc[0][mean_col]):
+                    mean_val = model_data.iloc[0][mean_col]
+                    std_val = model_data.iloc[0][std_col] if std_col in model_data.columns else 0
+                    
+                    # Convert accuracy/F1 to percentage
+                    if 'task_acc' in mean_col or 'task_f1' in mean_col:
+                        mean_val *= 100
+                        std_val *= 100
+                    
+                    mean_str = fmt.format(mean_val)
+                    std_str = fmt.format(std_val)
+                    cell = rf"$\scriptstyle{{{mean_str} \pm {std_str}}}$"
+                else:
+                    cell = "--"
+                
+                row.append(cell)
+        
+        lines.append(" & ".join(row) + r" \\")
+    
+    lines.append(r"\bottomrule")
+    lines.append(r"\end{tabular}")
+    lines.append(r"}")
+    lines.append(r"\end{table*}")
+    
+    table_content = "\n".join(lines)
+    filename = os.path.join(output_path, f'{task_type}_combined_performance_table.txt')
+    with open(filename, 'w') as f:
+        f.write(table_content)
+    
+    print(f"Combined table saved to: {filename}")

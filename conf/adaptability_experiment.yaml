@@ -1,0 +1,47 @@
+# Configuration for multi-constraint symbolic regression experiments
+defaults:
+  - common
+  - _self_
+  - override hydra/sweeper: list
+
+# Enable multi-constraint experiment mode
+multi_constraint_experiment: true
+
+# Define multiple constraint sets to test
+# Each constraint set will override the model's pysr_params
+constraint_sets:
+  # Constraint Set 1: Simple expressions only
+  - name: "simple"
+    binary_operators: ['+', '-']
+  
+  # Constraint Set 2: Medium complexity
+  - name: "medium"
+    binary_operators: ['+', '-', '*', '/']
+  
+  # Constraint Set 3: High complexity (unrestricted)
+  # use default pysr_params
+  - name: "complex"
+
+# Hydra sweep configuration
+hydra:
+  mode: MULTIRUN
+  sweep:
+    dir: output/adaptability_experiment/${now:%Y-%m-%d_%H-%M-%S}
+  sweeper:
+    grid_params:
+      model: sr_sym_cbm
+      seed: 1, 2, 3
+    
+    list_params:
+      dataset: 
+        - pendulum
+        - mawps
+
+
+# Override common parameters as needed
+gpus: [1]
+
+disjoint_training: true
+hard_concepts: True
+
+note: "adaptability_experiment"

@@ -9,7 +9,7 @@ hydra:
       dir: output/memory_cls/${now:%Y-%m-%d_%H-%M-%S} 
   sweeper:
     grid_params:
-      model: lin_sym_cbm, cmr #, memory_cbm, sr_sym_cbm
+      model: memory_cbm #, lin_sym_cbm, cmr, sr_sym_cbm
       memory_size: 1, 2, 3, 4, 5 
       seed: 1, 2, 3, 4, 5
 

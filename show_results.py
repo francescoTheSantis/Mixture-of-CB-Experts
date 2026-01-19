@@ -155,11 +155,29 @@ def main():
         # Compute equation complexity metrics
         print("\nComputing equation complexity metrics...")
 
-        complexity_results = performance[['dataset', 'model', 'seed', 'complexity']].copy()
+        # Include all complexity metrics in the results
+        complexity_cols = ['dataset', 'model', 'seed']
+        complexity_metrics = ['node_count', 'depth', 'visitation_length', 'operation_count', 'variables_count']
+        for metric in complexity_metrics:
+            col_name = f'complexity_{metric}'
+            if col_name in performance.columns:
+                complexity_cols.append(col_name)
+        
+        complexity_results = performance[complexity_cols].copy()
         complexity_csv_path = os.path.join(table_path, 'sr_ablation', 'complexity_metrics.csv')
         complexity_results.to_csv(complexity_csv_path, index=False)
         print(f"Complexity metrics saved to {complexity_csv_path}")
-        print(f"Complexity results summary:\n{complexity_results}")
+        print(f"Complexity results summary:\n{complexity_results.describe()}")
+        
+        # Generate LaTeX tables for SR ablation with all complexity metrics
+        print("\nGenerating SR ablation performance tables with all complexity metrics...")
+        generate_performance_tables(
+            performance,
+            [d for d in custom_order if d in performance['dataset'].unique()],
+            model_styles,
+            regression_datasets,
+            os.path.join(table_path, 'sr_ablation')
+        )
 
         # Compute Tree Edit Distance (TED) metrics
         print("\nComputing Tree Edit Distance (TED) metrics...")
@@ -250,21 +268,35 @@ def main():
             refined_custom_order
         )
 
-        # Composed Complexity vs accuracy
-        plot_pareto_front(
-            performance, 
-            model_styles, 
-            title_font, 
-            label_font, 
-            tick_font, 
+        # Composed Complexity vs accuracy - Plot for each complexity metric
+        complexity_metrics = ['node_count', 'depth', 'visitation_length', 'operation_count', 'variables_count']
+        for metric in complexity_metrics:
+            print(f"\nPlotting Pareto front for complexity metric: {metric}")
+            plot_pareto_front(
+                performance, 
+                model_styles, 
+                title_font, 
+                label_font, 
+                tick_font, 
+                refined_custom_order,
+                complexity_metric=metric,
+                ranges=[
+                    [0,100], # awa2
+                    [0,100], # awa2 incomplete
+                    [0,100], # cub
+                    [0,100], # cub incomplete
+                    [0,100], # cifar10
+                ]
+            )
+        
+        # Generate performance tables for classification and regression datasets
+        print("\nGenerating performance tables with all complexity metrics...")
+        generate_performance_tables(
+            performance,
             refined_custom_order,
-            ranges=[
-                [0,100], # awa2
-                [0,100], # awa2 incomplete
-                [0,100], # cub
-                [0,100], # cub incomplete
-                [0,100], # cifar10
-            ]
+            model_styles,
+            regression_datasets,
+            table_path
         )
 
         # Compute TED metric for regression datasets (datasets for which we know the ground truth expressions/mechanisms)
