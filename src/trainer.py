@@ -333,6 +333,229 @@ class Trainer:
         self.trainer.fit(self.model, train_dataloader, val_dataloader)
         
         return f"{self.checkpoint_dir}/best_model.ckpt"
+    
+    def run_multiple_symbolic_regressions(self, train_dataloader, constraint_configs, ckpt_path=None):
+        """
+        Run symbolic regression multiple times with different PySR configurations.
+        
+        This method collects training data once and performs symbolic regression
+        for each constraint configuration in a single session to avoid PySR instability.
+        
+        Args:
+            train_dataloader: DataLoader for training data
+            constraint_configs: List of dictionaries, each containing PySR parameters
+            ckpt_path: Path to checkpoint to load (optional)
+            
+        Returns:
+            List of equation sets, one per configuration
+        """
+        from src.utilities import multiple_symbolic_regression
+        
+        model_name = self.cfg.model.metadata.name
+        
+        if model_name != 'sr_symbolic_cbm':
+            raise ValueError(f"run_multiple_symbolic_regressions only supports 'sr_symbolic_cbm'. Got: {model_name}")
+        
+        # Load checkpoint if provided
+        if ckpt_path is not None:
+            print(f"Loading checkpoint from: {ckpt_path}")
+            checkpoint = torch.load(ckpt_path)
+            self.model.load_state_dict(checkpoint['state_dict'])
+        
+        print("\n" + "="*70)
+        print("COLLECTING TRAINING DATA FOR SYMBOLIC REGRESSION")
+        print("="*70)
+        
+        # Set model to evaluation mode
+        self.model.eval()
+        self.model = self.model.to(self.cfg.gpus[0])
+        
+        stored_concepts = []
+        stored_targets = []
+        stored_selector_probs = []
+        
+        with torch.no_grad():
+            for batch in tqdm(train_dataloader, desc="Storing training data"):
+                x, c, y = self.model.unpack_batch(batch)
+                # Move the data to the GPU
+                if isinstance(x, dict):
+                    x = {k: v.to(self.cfg.gpus[0]) for k, v in x.items()}
+                else:  
+                    x = x.to(self.cfg.gpus[0])
+                c = c.to(self.cfg.gpus[0])
+                y = y.to(self.cfg.gpus[0])
+                inputs = {'x': x, 'c': c, 'y': y}
+                # Forward pass with storage enabled
+                output = self.model.model.forward(inputs, store_for_finetuning=True)
+
+                if self.cfg.dataset.metadata.task == 'regression':
+                    stored_targets.append(y.detach().cpu())
+                else:
+                    # If there is a third dimension of size 1, remove it
+                    if output['y_hat'].dim() == 3 and output['y_hat'].shape[2] == 1:
+                        output['y_hat'] = output['y_hat'].squeeze(2)
+                    stored_targets.append(output['y_hat'].detach().cpu())
+
+                # If the training is disjoint use the true concepts for SR algorithm, otherwise use the predicted concepts.
+                concepts_for_sr_algorithm = c if self.cfg.disjoint_training else output['c_hat']
+
+                stored_concepts.append(concepts_for_sr_algorithm.detach().cpu())
+                stored_selector_probs.append(output['sampled_memory_idxs'].detach().cpu())
+
+                # Clear GPU memory
+                del x, c, y, inputs
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+        # Concatenate stored data
+        concatenated_concepts = torch.cat(stored_concepts, dim=0)
+        concatenated_targets = torch.cat(stored_targets, dim=0)
+        concatenated_selector_probs = torch.cat(stored_selector_probs, dim=0)
+
+        # Scale concepts and targets if scale_variables is True and task is regression
+        if self.cfg.dataset.metadata.task == 'regression' and self.scale_variables:
+            # Scale targets
+            concatenated_targets = self.model.y_scaler.transform(concatenated_targets)
+            
+            # Scale concepts (one by one using per-concept scalers)
+            for i, c_scaler in enumerate(self.model.c_scalers):
+                concatenated_concepts[:, i:i+1] = c_scaler.transform(concatenated_concepts[:, i:i+1])
+        
+        print(f"✓ Data collection completed")
+        print(f"  Concepts shape: {concatenated_concepts.shape}")
+        print(f"  Targets shape: {concatenated_targets.shape}")
+        print(f"  Selector probs shape: {concatenated_selector_probs.shape}")
+        
+        # Prepare PySR parameters list from constraint configs
+        pysr_params_list = []
+        for constraint_config in constraint_configs:
+            # Start with model's default parameters
+            pysr_params = self.model.model.pysr_params.copy()
+            # Update with constraint-specific parameters
+            constraint_params = {k: v for k, v in constraint_config.items() if k != 'name'}
+            pysr_params.update(constraint_params)
+            pysr_params_list.append(pysr_params)
+        
+        print(f"\n✓ Running symbolic regression for {len(constraint_configs)} configurations...")
+        
+        # Run multiple symbolic regressions
+        all_equation_sets = multiple_symbolic_regression(
+            stored_concepts=concatenated_concepts,
+            stored_targets=concatenated_targets,
+            stored_selector_probs=concatenated_selector_probs,
+            memory_size=self.model.model.memory_size,
+            output_size=self.model.model.output_size,
+            c_names=self.model.model.c_names,
+            y_names=self.model.model.y_names,
+            device=self.cfg.gpus[0],
+            pysr_params_list=pysr_params_list,
+            task=self.cfg.dataset.metadata.task,
+            disjoint_training=self.cfg.disjoint_training
+        )
+        
+        return all_equation_sets
+    
+    def substitute_symbolic_equations(self, equations, train_dataloader, val_dataloader):
+        """
+        Substitute symbolic equations into the model and fine-tune.
+        
+        Args:
+            equations: Dictionary of equations {memory_idx: {output_name: sympy_equation}}
+            train_dataloader: Training data loader
+            val_dataloader: Validation data loader
+            
+        Returns:
+            Path to the best checkpoint after fine-tuning
+        """
+        model_name = self.cfg.model.metadata.name
+        
+        if model_name != 'sr_symbolic_cbm':
+            raise ValueError(f"substitute_symbolic_equations only supports 'sr_symbolic_cbm'. Got: {model_name}")
+        
+        print("\n" + "="*70)
+        print("SUBSTITUTING SYMBOLIC EQUATIONS")
+        print("="*70)
+        
+        # Run symbolic substitution to create the SymbolicPredictor
+        self.model.model.symbolic_substitution(equations)
+        
+        print("✓ Symbolic equations substituted successfully")
+        
+        # Set fine-tuning mode to change metric names
+        self.model.fine_tuning = True
+        self.model.fine_tuning_stage = 'allow_symbolic'
+        self.model._set_metrics()
+        
+        # Higher LR for SR-Sym-CBM as there only few parameters in the predictor
+        fine_tune_lr = self.cfg.dataset.metadata.lr * 5
+        
+        # Recreate optimizer to include new SymbolicPredictor parameters
+        trainable_params = [p for p in self.model.parameters() if p.requires_grad]
+        print(f"Number of trainable parameters after symbolic substitution: {sum(p.numel() for p in trainable_params)}")
+        self.optimizer = AdamW(trainable_params, lr=fine_tune_lr)
+        
+        # Create new scheduler
+        LR_on_plateau = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, 
+            mode='min', 
+            factor=self.cfg.gamma, 
+            patience=self.cfg.lr_patience, 
+            verbose=True
+        )
+        self.scheduler = {
+            'scheduler': LR_on_plateau,
+            'monitor': 'allow_symbolic/val_loss',
+            'interval': 'epoch',
+            'frequency': 1
+        }
+        
+        # Update optimizer and scheduler in model
+        self.model.optimizer = self.optimizer
+        self.model.scheduler = self.scheduler
+        
+        # Rebuild trainer with new configuration for fine-tuning
+        early_stopping = EarlyStopping(
+            monitor='allow_symbolic/val_loss',
+            patience=self.cfg.patience, 
+            verbose=True,
+            mode='min'
+        )
+
+        checkpoint_callback = ModelCheckpoint(
+            dirpath=self.checkpoint_dir,
+            monitor='allow_symbolic/val_loss',
+            filename='best_model', 
+            save_top_k=1, 
+            mode='min', 
+            verbose=True,
+            save_last=False,
+            enable_version_counter=False
+        )
+
+        lr_monitor = LearningRateMonitor(logging_interval='step')
+
+        loggers = [self.wandb_logger, self.csv_logger] if self.wandb_logger is not None else self.csv_logger
+
+        self.trainer = pl.Trainer(
+            max_epochs=self.cfg.max_epochs,
+            callbacks=[early_stopping, checkpoint_callback, lr_monitor],
+            logger=loggers,
+            devices=self.cfg.gpus,  
+            accelerator="auto",
+            enable_progress_bar=True,
+        )
+        
+        print("\n" + "="*70)
+        print("FINE-TUNING WITH SYMBOLIC EQUATIONS")
+        print("="*70)
+        
+        # Fine-tune
+        self.trainer.fit(self.model, train_dataloader, val_dataloader)
+        
+        print(f"\n✓ Fine-tuning completed!")
+        print(f"  Best model saved at: {self.checkpoint_dir}/best_model.ckpt")
+        
+        return f"{self.checkpoint_dir}/best_model.ckpt"
 
     def fine_tune(self, 
                   train_dataloader, 

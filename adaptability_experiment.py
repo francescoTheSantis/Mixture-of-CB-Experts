@@ -6,6 +6,7 @@ import os
 from tqdm.auto import tqdm
 import copy
 from pathlib import Path
+from pytorch_lightning.loggers import CSVLogger
 
 from src.trainer import Trainer
 from src.utilities import set_seed, set_loggers, update_config_from_data, \
@@ -130,13 +131,22 @@ def main(cfg: DictConfig) -> None:
     trainer = Trainer(model, cfg, wandb_logger, csv_logger)
     trainer.build_trainer()
     
+    # Store original pysr_params to restore later
+    if hasattr(model.model, 'pysr_params'):
+        original_pysr_params = copy.deepcopy(model.model.pysr_params)
+    else:
+        original_pysr_params = None
+
     # Train the model
     trainer.train(loaded_train, loaded_val)
+        
+    # Store scalers if they exist
+    initial_y_scaler = trainer.model.y_scaler if hasattr(trainer.model, 'y_scaler') else None
+    initial_c_scalers = trainer.model.c_scalers if hasattr(trainer.model, 'c_scalers') else None
     
     # Save the initial trained checkpoint with a protected name
-    # Copy best_model.ckpt to initial_model.ckpt to prevent overwriting
     original_checkpoint = f"{base_log_dir}/best_model.ckpt"
-    initial_checkpoint_path = f"{base_log_dir}/initial_model.ckpt"
+    initial_checkpoint_path = os.path.join(base_log_dir, "initial_model.ckpt")
     
     if os.path.exists(original_checkpoint):
         import shutil
@@ -145,80 +155,84 @@ def main(cfg: DictConfig) -> None:
     else:
         raise FileNotFoundError(f"Expected checkpoint not found at: {original_checkpoint}")
     
-        
-    # Test the model with current symbolic equations
-    test_checkpoint = f"{constraint_log_dir}/best_model.ckpt"
-    trainer.test(loaded_test, ckpt_path=test_checkpoint)
-    
-    ###### Save Constraint-Specific Results ######
-    print(f"\nSaving results for blackbox")
-    
-    # Perform interventions if applicable
-    if model.model.has_concepts:
-        intervention_df = trainer.interventions(loaded_test)
-        intervention_df.to_csv(
-            f"{constraint_log_dir}/interventions.csv", 
-            index=False
-        )
+    # test the initial model
+    trainer.test(loaded_test)
+    intervention_df = trainer.interventions(loaded_test)
+    intervention_df.to_csv(f"{base_log_dir}/interventions.csv", index=False)
 
-    ###### LOOP OVER CONSTRAINT SETS ######
-    all_results = []
+    ###### PHASE 1: Run Multiple Symbolic Regressions ######
+    print("\n" + "="*70)
+    print("PHASE 1: RUNNING MULTIPLE SYMBOLIC REGRESSIONS")
+    print("="*70)
     
-    for constraint_idx, constraint_config in enumerate(constraint_sets):
+    # Run all symbolic regressions at once to avoid PySR instability
+    all_equation_sets = trainer.run_multiple_symbolic_regressions(
+        train_dataloader=loaded_train,
+        constraint_configs=constraint_sets,
+        ckpt_path=initial_checkpoint_path
+    )
+    
+    print(f"\n✓ All symbolic regressions completed!")
+    print(f"  Generated {len(all_equation_sets)} equation sets")
+    
+    ###### LOOP OVER EQUATION SETS ######
+    ###### LOOP OVER EQUATION SETS ######
+    
+    for constraint_idx, (constraint_config, equations) in enumerate(zip(constraint_sets, all_equation_sets)):
         print("\n" + "="*70)
-        print(f"CONSTRAINT SET {constraint_idx + 1}/{len(constraint_sets)}")
+        print(f"PROCESSING CONSTRAINT SET {constraint_idx + 1}/{len(constraint_sets)}")
         print("="*70)
         print(f"Constraint configuration: {constraint_config}")
         print("="*70)
         
-        # Create subdirectory for this constraint set
-        # Include constraint name in directory if available
-        constraint_name = constraint_config.get('name', f'{constraint_idx}')
-        constraint_log_dir = os.path.join(base_log_dir, f"constraint_{constraint_idx}_{constraint_name}")
-        os.makedirs(constraint_log_dir, exist_ok=True)
+        # Re-instantiate the model for each constraint set
+        print("\nRe-instantiating model for this constraint set...")
+        model = instantiate(cfg.engine)
         
-        # Reload the model from the initial checkpoint for each constraint
-        print(f"\nReloading model from initial checkpoint: {initial_checkpoint_path}")
+        # Load the initial trained checkpoint
+        print(f"Loading initial checkpoint from: {initial_checkpoint_path}")
         checkpoint = torch.load(initial_checkpoint_path)
         model.load_state_dict(checkpoint['state_dict'])
         
-        # Update the model's pysr_params with the constraint configuration
-        if hasattr(model.model, 'pysr_params'):
-            original_pysr_params = copy.deepcopy(model.model.pysr_params)
-            
-            # Apply constraint overrides
-            print(f"Applying constraints to pysr_params...")
-            for key, value in constraint_config.items():
-                model.model.pysr_params[key] = value
-                print(f"  {key}: {value}")
-            
-            print(f"\nUpdated pysr_params: {model.model.pysr_params}")
-        else:
-            print("Warning: Model does not have pysr_params attribute")
+        # Create subdirectory for this constraint set
+        constraint_log_dir = os.path.join(base_log_dir, f"constraint_{constraint_config['name']}")
+        os.makedirs(constraint_log_dir, exist_ok=True)
         
-        # Update checkpoint directory for this constraint
-        trainer.checkpoint_dir = constraint_log_dir
+        # Create new trainer with fresh model instance
+        csv_logger_constraint = CSVLogger(
+            save_dir=constraint_log_dir,
+            name="",
+            version=""
+        )
         
-        ###### PHASE 1: Symbolic Regression with Current Constraints ######
+        trainer = Trainer(model, cfg, wandb_logger, csv_logger_constraint)
+        trainer.build_trainer()
+        
+        # Restore scalers that were set during initial training
+        if initial_y_scaler is not None:
+            trainer.model.y_scaler = initial_y_scaler
+            trainer.model.model.y_scaler = initial_y_scaler
+        
+        if initial_c_scalers is not None:
+            trainer.model.c_scalers = initial_c_scalers
+            trainer.model.model.c_scalers = initial_c_scalers
+        
+        # Update model's csv_log_dir
+        trainer.model.csv_log_dir = constraint_log_dir
+
+        ###### PHASE 2: Symbolic Substitution and Fine-tuning ######
         print("\n" + "-"*70)
-        print(f"PHASE 1: SYMBOLIC REGRESSION (Constraint Set {constraint_idx + 1})")
+        print(f"PHASE 2: SUBSTITUTION & FINE-TUNING (Constraint Set {constraint_idx + 1})")
         print("-"*70)
         
-        # Run symbolic discovery with current constraints
-        trainer.allow_symbolic(loaded_train, loaded_val)
+        # Substitute symbolic equations and fine-tune
+        trainer.substitute_symbolic_equations(
+            equations=equations,
+            train_dataloader=loaded_train,
+            val_dataloader=loaded_val
+        )
         
-        # For KAN models, perform additional fine-tuning
-        if cfg.model.metadata.name == 'kan_symbolic_cbm':
-            print("\n" + "-"*70)
-            print(f"PHASE 2: FINE-TUNING (Constraint Set {constraint_idx + 1})")
-            print("-"*70)
-            trainer.fine_tune(
-                loaded_train, 
-                loaded_val,
-                log_dir=constraint_log_dir,
-            )
-        
-        ###### PHASE 2: Testing with Current Constraints ######
+        ###### PHASE 3: Testing ######
         print("\n" + "-"*70)
         print(f"PHASE 3: TESTING (Constraint Set {constraint_idx + 1})")
         print("-"*70)
@@ -227,7 +241,7 @@ def main(cfg: DictConfig) -> None:
         test_checkpoint = f"{constraint_log_dir}/best_model.ckpt"
         trainer.test(loaded_test, ckpt_path=test_checkpoint)
         
-        ###### Save Constraint-Specific Results ######
+        ###### PHASE 4: Interventions ######
         print(f"\nSaving results for constraint set {constraint_idx + 1}...")
         
         # Perform interventions if applicable
@@ -238,45 +252,9 @@ def main(cfg: DictConfig) -> None:
                 index=False
             )
         
-        # Save constraint configuration
-        import json
-        with open(f"{constraint_log_dir}/constraint_config.json", 'w') as f:
-            # Convert to regular dict for JSON serialization
-            constraint_dict = dict(constraint_config)
-            json.dump(constraint_dict, f, indent=2)
-        
-        # Store summary results
-        all_results.append({
-            'constraint_idx': constraint_idx,
-            'constraint_config': dict(constraint_config),
-            'log_dir': constraint_log_dir,
-            'checkpoint': test_checkpoint,
-        })
-        
-        # Restore original pysr_params for next iteration
-        if hasattr(model.model, 'pysr_params'):
-            model.model.pysr_params = original_pysr_params
-        
         print(f"\n✓ Constraint set {constraint_idx + 1} completed!")
         print(f"  Results saved in: {constraint_log_dir}")
-    
-    ###### Save Overall Summary ######
-    print("\n" + "="*70)
-    print("ALL CONSTRAINT SETS COMPLETED")
-    print("="*70)
-    
-    # Save summary of all experiments
-    import pandas as pd
-    summary_df = pd.DataFrame(all_results)
-    summary_path = os.path.join(base_log_dir, "constraint_sets_summary.csv")
-    summary_df.to_csv(summary_path, index=False)
-    print(f"\nSummary saved to: {summary_path}")
-    
-    # Print all result directories
-    print("\nResults for each constraint set:")
-    for i, result in enumerate(all_results):
-        print(f"  [{i+1}] {result['log_dir']}")
-    
+
     # Close the wandb logger if it is used
     if wandb_logger is not None:
         wandb_logger.experiment.finish()
@@ -284,7 +262,6 @@ def main(cfg: DictConfig) -> None:
     print("\n" + "="*70)
     print("EXPERIMENT COMPLETED SUCCESSFULLY")
     print("="*70)
-
 
 if __name__ == "__main__":
     main()

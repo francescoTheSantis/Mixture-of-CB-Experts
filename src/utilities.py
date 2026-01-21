@@ -691,20 +691,6 @@ def symbolic_regression(
                 X_memory = X_memory[indices]
                 y_target = y_target[indices]
 
-            # if n_samples_for_memory > subsample_size:
-            #     print(f"Subsampling to {subsample_size} for PySR using input space coverage (memory {memory_idx}, output '{output_name}').")
-                
-            #     if task == 'classification':
-            #         if disjoint_training:
-            #             indices = subsampling(X_memory)
-            #         else:
-            #             indices = subsample_based_on_y_hat(y_target, subsample_size)
-            #     else:
-            #         indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
-
-                # X_memory = X_memory[indices]
-                # y_target = y_target[indices]
-            
             # Validate data: check for NaN and Inf values
             if np.isnan(X_memory).sum()>0 or np.isinf(X_memory).sum()>0:
                 print(f"WARNING: X_memory contains NaN or Inf values for memory {memory_idx}, output '{output_name}'. Cleaning data.")
@@ -722,17 +708,6 @@ def symbolic_regression(
             
             print(f"\nFitting PySR for output '{output_name}' (memory slot {memory_idx})...")
             print(f"  Input shape: {X_memory_clean.shape}, Target shape: {y_target.shape}")
-            
-            # if task == 'classification':
-            #     if bool((torch.where(X_memory==1,1,0) + torch.where(X_memory==0,1,0)).sum() == X_memory.numel()):
-            #         noise_level = 0.10  # 10% noise
-            #         n_noisy_samples = int(noise_level * X_memory_clean.shape[0])
-            #         for _ in range(n_noisy_samples):
-            #             sample_idx = np.random.randint(0, X_memory_clean.shape[0])
-            #             feature_idx = np.random.randint(0, X_memory_clean.shape[1])
-            #             original_value = X_memory_clean[sample_idx, feature_idx].item()
-            #             new_value = 1 - original_value  
-            #             X_memory_clean[sample_idx, feature_idx] = new_value
 
             try:
 
@@ -747,11 +722,7 @@ def symbolic_regression(
                 # Get the best equation (highest score)
                 equations_df = model.equations_
                 print(f"  Pareto front has {len(equations_df)} equations")
-                
-                # # Select the best equation by score
-                # best_eq_row = equations_df.nlargest(1, 'score').iloc[0]
-                # sympy_eq = best_eq_row['sympy_format']
-                
+
                 # Select the best equation based on task type
                 if task == 'classification':
                     # For classification: select lowest loss (best accuracy)
@@ -795,3 +766,213 @@ def symbolic_regression(
                 raise ValueError(f"Missing equation for memory {memory_idx}, output {output_name}")
     
     return all_equations
+
+
+def multiple_symbolic_regression(
+        stored_concepts, 
+        stored_targets, 
+        stored_selector_probs,
+        memory_size,
+        output_size,
+        c_names,
+        y_names,
+        device,
+        pysr_params_list,
+        task,
+        disjoint_training
+    ):
+    """
+    Run symbolic regression multiple times with different PySR configurations.
+    
+    This function addresses the instability of PySRRegressor when instantiated 
+    multiple times by managing Julia initialization carefully and running all
+    symbolic regression tasks in a single session.
+    
+    Args:
+        stored_concepts: Tensor of stored concept predictions
+        stored_targets: Tensor of stored target predictions
+        stored_selector_probs: Tensor of memory selector probabilities
+        memory_size: Number of memory slots
+        output_size: Number of outputs
+        c_names: List of concept names
+        y_names: List of output names
+        device: Device to use for computation
+        pysr_params_list: List of dictionaries, each containing PySR parameters
+        task: 'classification' or 'regression'
+        disjoint_training: Whether disjoint training is used
+        
+    Returns:
+        List of equation dictionaries, one per configuration
+        Each element is: {memory_idx: {output_name: sympy_equation}}
+    """
+    
+    # Lazy import PySR only when this function is called
+    import pysr
+    
+    # Save current CUDA visibility and temporarily hide GPUs from Julia to avoid conflicts
+    original_cuda_visible = os.environ.get('CUDA_VISIBLE_DEVICES', None)
+    os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Hide GPUs from Julia
+    
+    try:
+        # Initialize Julia once at the beginning
+        pysr.julia_helpers.init_julia(julia_project=None, quiet=False)
+        print("✓ Julia initialized successfully")
+    except Exception as e:
+        print(f"Julia initialization warning: {e}")
+        pass  # Already initialized, that's fine
+    
+    from pysr import PySRRegressor
+    
+    # Restore original CUDA visibility
+    if original_cuda_visible is not None:
+        os.environ['CUDA_VISIBLE_DEVICES'] = original_cuda_visible
+    else:
+        os.environ.pop('CUDA_VISIBLE_DEVICES', None)
+    
+    if len(stored_concepts) == 0:
+        raise ValueError("No stored data for symbolic regression. Run forward passes with store_for_finetuning=True first.")
+    
+    # Move all data to CPU and convert to numpy to avoid GPU conflicts with Julia
+    stored_concepts = stored_concepts.cpu()
+    stored_targets = stored_targets.cpu()
+    stored_selector_probs = stored_selector_probs.cpu()
+
+    # Handle different target shapes
+    if stored_targets.ndim == 1:
+        stored_targets = stored_targets.reshape(-1, 1)
+    
+    # List to store equation sets for each configuration
+    all_equation_sets = []
+    
+    # Process each PySR configuration
+    for config_idx, pysr_params in enumerate(pysr_params_list):
+        print("\n" + "="*70)
+        print(f"SYMBOLIC REGRESSION - Configuration {config_idx + 1}/{len(pysr_params_list)}")
+        print("="*70)
+        print(f"Parameters: {pysr_params}")
+        print("="*70 + "\n")
+        
+        # Dictionary to store equations for this configuration
+        # Structure: {memory_idx: {output_name: sympy_equation}}
+        all_equations = {i: {} for i in range(memory_size)}
+        
+        # With independent outputs, stored_selector_probs has shape (batch, memory_size, n_outputs, n_samples)
+        # We need to process each output independently
+        for output_idx in range(output_size):
+            output_name = y_names[output_idx] if output_idx < len(y_names) else f"y_{output_idx}"
+            
+            # For each memory slot, collect samples where this memory was selected for this output
+            for memory_idx in range(memory_size):
+                # Get samples where this memory slot was selected for this specific output
+                output_selector_probs = stored_selector_probs[:, :, output_idx, :]  # (batch, memory_size, n_samples)
+                memory_mask = (output_selector_probs.argmax(dim=1).flatten() == memory_idx).numpy()
+                n_samples_for_memory = memory_mask.sum()
+                
+                # Filter concepts and targets for this memory slot and output
+                X_memory = stored_concepts[memory_mask]  # [n_samples_memory, n_concepts]
+                y_target = stored_targets[memory_mask, output_idx]  # [n_samples_memory]
+                
+                # Skip if no samples for this memory slot
+                if n_samples_for_memory == 0:
+                    print(f"Memory slot {memory_idx}, output '{output_name}' has no samples. Using zero equation.")
+                    all_equations[memory_idx][output_name] = sp.sympify("0")
+                    continue
+                
+                subsample_size = 2000
+                if task == 'classification' and disjoint_training:
+                    indices = subsampling(X_memory)
+                elif task == 'classification' and not disjoint_training and n_samples_for_memory > subsample_size:
+                    indices = subsample_based_on_y_hat(y_target, subsample_size)
+                elif task == 'regression' and n_samples_for_memory > subsample_size:
+                    indices = np.random.choice(n_samples_for_memory, size=subsample_size, replace=False)
+                else:
+                    indices = None
+
+                if indices is not None:
+                    X_memory = X_memory[indices]
+                    y_target = y_target[indices]
+
+                # Validate data: check for NaN and Inf values
+                if np.isnan(X_memory).sum()>0 or np.isinf(X_memory).sum()>0:
+                    print(f"WARNING: X_memory contains NaN or Inf values for memory {memory_idx}, output '{output_name}'. Cleaning data.")
+                    valid_mask = ~(np.isnan(X_memory).any(axis=1) | np.isinf(X_memory).any(axis=1))
+                    X_memory = X_memory[valid_mask]
+                    y_target = y_target[valid_mask]
+                
+                if np.isnan(y_target).sum()>0 or np.isinf(y_target).sum()>0:
+                    print(f"WARNING: y_target contains NaN or Inf values for memory {memory_idx}, output '{output_name}'. Cleaning data.")
+                    valid_mask = ~(np.isnan(y_target) | np.isinf(y_target))
+                    X_memory_clean = X_memory[valid_mask]
+                    y_target = y_target[valid_mask]
+                else:
+                    X_memory_clean = X_memory
+                
+                print(f"\nFitting PySR for output '{output_name}' (memory slot {memory_idx})...")
+                print(f"  Input shape: {X_memory_clean.shape}, Target shape: {y_target.shape}")
+
+                try:
+                    # Create a fresh PySRRegressor for each equation
+                    pysr_model = PySRRegressor(
+                        **pysr_params,
+                        verbosity=1,  
+                        progress=True,
+                    )
+
+                    pysr_model.fit(X_memory_clean.cpu().numpy(), y_target.cpu().numpy())
+
+                    # Get the best equation
+                    equations_df = pysr_model.equations_
+                    print(f"  Pareto front has {len(equations_df)} equations")
+
+                    # Select the best equation based on task type
+                    if task == 'classification':
+                        # For classification: select lowest loss (best accuracy)
+                        best_eq_row = equations_df.nsmallest(1, 'loss').iloc[0]
+                    else:
+                        # For regression: select highest score (balance loss and complexity)
+                        best_eq_row = equations_df.nlargest(1, 'score').iloc[0]
+                    sympy_eq = best_eq_row['sympy_format']
+                    
+                    # Rename variables from x0, x1, ... to concept names
+                    for i, c_name in enumerate(c_names):
+                        sympy_eq = sympy_eq.subs(sp.Symbol(f'x{i}'), sp.Symbol(c_name))
+                    
+                    all_equations[memory_idx][output_name] = sympy_eq
+                    
+                    print(f"  ✓ Best equation: {sympy_eq}")
+                    print(f"    Loss: {best_eq_row['loss']:.6f}")
+                    print(f"    Complexity: {best_eq_row['complexity']}")
+                    print(f"    Score: {best_eq_row['score']:.6f}")
+
+                    # Clean up the model
+                    del pysr_model
+                    
+                except Exception as e:
+                    print(f"  ✗ ERROR fitting PySR for memory {memory_idx}, output '{output_name}':")
+                    print(f"    {type(e).__name__}: {str(e)}")
+                    print(f"    Using fallback constant equation (mean value)")
+                    if len(y_target) == 0:
+                        print(f"    No samples available. Using zero as fallback.")
+                        all_equations[memory_idx][output_name] = sp.sympify("0")
+                    else:
+                        mean_val = float(y_target.mean())
+                        all_equations[memory_idx][output_name] = sp.sympify(str(mean_val))
+                        print(f"    Fallback equation: {mean_val}")
+
+        # Verify all equations are present
+        for memory_idx in range(memory_size):
+            for output_idx in range(output_size):
+                output_name = y_names[output_idx] if output_idx < len(y_names) else f"y_{output_idx}"
+                if output_name not in all_equations[memory_idx]:
+                    raise ValueError(f"Missing equation for memory {memory_idx}, output {output_name}")
+        
+        all_equation_sets.append(all_equations)
+        
+        print(f"\n✓ Configuration {config_idx + 1} completed successfully!")
+    
+    print("\n" + "="*70)
+    print(f"ALL SYMBOLIC REGRESSIONS COMPLETED")
+    print(f"Total configurations processed: {len(all_equation_sets)}")
+    print("="*70 + "\n")
+    
+    return all_equation_sets

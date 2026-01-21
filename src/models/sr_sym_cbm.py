@@ -137,9 +137,10 @@ class SymbolicRegressorCBM(BaseModel):
 
         self.pysr_params['maxsize'] = size
         self.pysr_params['maxdepth'] = size
-        
         # Override with user-defined params
         if pysr_params is not None:
+            # eliminate the name from the configuration
+            pysr_params = {k: v for k, v in pysr_params.items() if k != 'name'}
             self.pysr_params.update(pysr_params)
 
         # Instantiate the predictor

@@ -292,10 +292,9 @@ class Engine(pl.LightningModule):
         
         # Get the selected memory slot index for each sample
         if 'selection_dist' in model_output:
-            # With independent outputs: Shape is (batch_size, n_outputs, memory_size)
+            # With independent outputs: Shape is (bsz, memory_size, n_outputs)
             selection_dist = model_output['selection_dist']
             # Independent outputs: get argmax for each output
-            # Shape: (batch_size, n_outputs)
             selected_memory = torch.argmax(selection_dist, dim=1)
 
         else:

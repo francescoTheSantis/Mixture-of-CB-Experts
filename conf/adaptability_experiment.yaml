@@ -13,11 +13,16 @@ constraint_sets:
   # Constraint Set 1: Simple expressions only
   - name: "simple"
     binary_operators: ['+', '-']
-  
+    unary_operators: null
+    extra_sympy_mappings: null
+    maxsize: 7
+
   # Constraint Set 2: Medium complexity
   - name: "medium"
     binary_operators: ['+', '-', '*', '/']
-  
+    unary_operators: null
+    extra_sympy_mappings: null
+
   # Constraint Set 3: High complexity (unrestricted)
   # use default pysr_params
   - name: "complex"
@@ -39,8 +44,7 @@ hydra:
 
 
 # Override common parameters as needed
-gpus: [1]
-
+gpus: [0]
 disjoint_training: true
 hard_concepts: True
 
