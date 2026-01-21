@@ -534,23 +534,33 @@ if __name__ == "__main__":
     print("=" * 70)
     print("COMPLEXITY COMPARISON SUMMARY")
     print("=" * 70)
-    print("\nComplexity scales with network size:")
-    print("  Linear (3 vars):         node_count =", complexity_report(linear_classifier_expression(3))['node_count'])
-    print("  Boolean AND (3 vars):    node_count =", complexity_report(boolean_and_expression(3))['node_count'])
-    print("  Chain (3 nodes):         node_count =", complexity_report(chain_expression(3))['node_count'])
-    print("  KAN 1 layer:             node_count =", complexity_report(kan_expression([[2, 0], [1, 0]]))['node_count'])
-    print("  KAN mixed aggregation:   node_count =", complexity_report(kan_expression([[2, 0], [1, 1], [1, 0]]))['node_count'])
+    print("\nAll Complexity Metrics:")
     print()
     
-    print("=" * 70)
-    print("COMPLEXITY COMPARISON SUMMARY")
-    print("=" * 70)
-    print("\nComplexity scales with network size:")
-    print("  Linear (3 vars):         visitation_length =", complexity_report(linear_classifier_expression(3))['visitation_length'])
-    print("  Boolean AND (3 vars):    visitation_length =", complexity_report(boolean_and_expression(3))['visitation_length'])
-    print("  Chain (3 nodes):         visitation_length =", complexity_report(chain_expression(3))['visitation_length'])
-    print("  KAN 1 layer:             visitation_length =", complexity_report(kan_expression([[2, 0], [1, 0]]))['visitation_length'])
-    print("  KAN mixed aggregation:   visitation_length =", complexity_report(kan_expression([[2, 0], [1, 1], [1, 0]]))['visitation_length'])
+    # Get complexity reports for all expressions
+    linear_report = complexity_report(linear_classifier_expression(3))
+    bool_report = complexity_report(boolean_and_expression(3))
+    chain_report = complexity_report(chain_expression(3))
+    kan_simple_report = complexity_report(kan_expression([[2, 0], [1, 0]]))
+    kan_mixed_report = complexity_report(kan_expression([[2, 0], [1, 1], [1, 0]]))
+    
+    # Print comparison table
+    expressions = [
+        ("Linear (3 vars)", linear_report),
+        ("Boolean AND (3 vars)", bool_report),
+        ("Chain (3 nodes)", chain_report),
+        ("KAN 1 layer", kan_simple_report),
+        ("KAN mixed aggregation", kan_mixed_report)
+    ]
+    
+    # Get all metric names from first report
+    metrics = list(linear_report.keys())
+    
+    # Print each metric
+    for metric in metrics:
+        print(f"\n{metric}:")
+        for name, report in expressions:
+            print(f"  {name:25} {metric} = {report[metric]}")
     print()
 
     print("=" * 70)

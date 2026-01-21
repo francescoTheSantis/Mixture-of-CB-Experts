@@ -69,6 +69,8 @@ marker_size = 18
 
 MEMORY_MODELS_LIST = ['cmr', 'linear_symbolic_cbm', 'sr_symbolic_cbm', 'prior_symbolic_cbm', 'memory_cbm']
 
+COMPLEXITY_METRICS_LIST = ['node_count', 'depth', 'visitation_length', 'total_variables', 'total_operations', 'weighted_node_count']
+
 # Generate colors from a colormap
 cmap = plt.cm.RdYlGn 
 colors = list(reversed([cmap(i) for i in np.linspace(0, 1, 5)]))
@@ -157,7 +159,7 @@ def main():
 
         # Include all complexity metrics in the results
         complexity_cols = ['dataset', 'model', 'seed']
-        complexity_metrics = ['node_count', 'depth', 'visitation_length', 'operation_count', 'variables_count']
+        complexity_metrics = ['node_count', 'depth', 'visitation_length', 'total_variables', 'total_operations', 'weighted_node_count']
         for metric in complexity_metrics:
             col_name = f'complexity_{metric}'
             if col_name in performance.columns:
@@ -172,6 +174,16 @@ def main():
         # Generate LaTeX tables for SR ablation with all complexity metrics
         print("\nGenerating SR ablation performance tables with all complexity metrics...")
         generate_performance_tables(
+            performance,
+            [d for d in custom_order if d in performance['dataset'].unique()],
+            model_styles,
+            regression_datasets,
+            os.path.join(table_path, 'sr_ablation')
+        )
+
+        # Generate concept metrics table for SR ablation
+        print("\nGenerating SR ablation concept metrics table...")
+        generate_concept_metrics_table(
             performance,
             [d for d in custom_order if d in performance['dataset'].unique()],
             model_styles,
@@ -269,7 +281,7 @@ def main():
         )
 
         # Composed Complexity vs accuracy - Plot for each complexity metric
-        complexity_metrics = ['node_count', 'depth', 'visitation_length', 'operation_count', 'variables_count']
+        complexity_metrics = ['node_count', 'depth', 'visitation_length', 'total_variables', 'total_operations', 'weighted_node_count']
         for metric in complexity_metrics:
             print(f"\nPlotting Pareto front for complexity metric: {metric}")
             plot_pareto_front(
@@ -292,6 +304,16 @@ def main():
         # Generate performance tables for classification and regression datasets
         print("\nGenerating performance tables with all complexity metrics...")
         generate_performance_tables(
+            performance,
+            refined_custom_order,
+            model_styles,
+            regression_datasets,
+            table_path
+        )
+
+        # Generate concept metrics table
+        print("\nGenerating concept metrics table...")
+        generate_concept_metrics_table(
             performance,
             refined_custom_order,
             model_styles,
@@ -327,6 +349,21 @@ def main():
 
     except Exception as e:
         print(f"Error occurred while plotting memory ablation results: {e}")
+
+
+    ##################################################
+    ############## Global verifiability ##############
+    ##################################################
+
+    # global_verifiability_plot(
+    #     paths, 
+    #     dataset='cub',  # Change dataset here
+    #     memory_size=4,     # Change memory size here
+    #     label_font=label_font, 
+    #     tick_font=tick_font, 
+    #     legend_font=legend_font
+    # )
+
 
     ##################################################
     #############  Intervention results ##############
@@ -373,6 +410,57 @@ def main():
             
     except Exception as e:
         print(f"Error occurred while getting intervention results from path: {e}")
+
+
+    ##################################################
+    ######### Adaptability Experiment Results ########
+    ##################################################
+    
+    print("\n" + "="*70)
+    print("ADAPTABILITY EXPERIMENT RESULTS")
+    print("="*70)
+    
+    adaptability_paths = [
+        f"{output_path}/adaptability_experiment",
+    ]
+    
+    # Define constraint configurations from the experiment config
+    constraint_configs = ['simple', 'medium', 'complex']
+    
+    try:
+        performance = get_adaptability_exp_from_path(adaptability_paths, constraint_configs)
+        
+        if not performance.empty:
+            # Get unique datasets from the results
+            datasets_in_results = sorted(performance['dataset'].unique())
+            
+            # Filter to only include datasets that are in custom_order
+            datasets_to_show = [d for d in custom_order if d in datasets_in_results]
+            
+            print(f"\nFound {len(performance)} results across {len(datasets_to_show)} datasets")
+            print(f"Datasets: {datasets_to_show}")
+            print(f"Model configurations: {sorted(performance['model'].unique())}")
+            
+            # Generate adaptability table
+            adaptability_output_path = os.path.join(table_path, 'adaptability_experiment')
+            result_table = generate_adaptability_table(
+                performance, 
+                datasets_to_show, 
+                adaptability_output_path,
+                regression_datasets
+            )
+            
+            print(f"\n✓ Adaptability experiment results processed successfully!")
+            print(f"\nTable preview:")
+            print(result_table.to_string(index=False))
+        else:
+            print("No adaptability experiment results found.")
+            
+    except Exception as e:
+        print(f"Error occurred while processing adaptability experiment results: {e}")
+        import traceback
+        traceback.print_exc()
+
 
 if __name__ == "__main__":
     main()

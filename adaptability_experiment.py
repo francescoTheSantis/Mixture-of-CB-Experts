@@ -145,6 +145,22 @@ def main(cfg: DictConfig) -> None:
     else:
         raise FileNotFoundError(f"Expected checkpoint not found at: {original_checkpoint}")
     
+        
+    # Test the model with current symbolic equations
+    test_checkpoint = f"{constraint_log_dir}/best_model.ckpt"
+    trainer.test(loaded_test, ckpt_path=test_checkpoint)
+    
+    ###### Save Constraint-Specific Results ######
+    print(f"\nSaving results for blackbox")
+    
+    # Perform interventions if applicable
+    if model.model.has_concepts:
+        intervention_df = trainer.interventions(loaded_test)
+        intervention_df.to_csv(
+            f"{constraint_log_dir}/interventions.csv", 
+            index=False
+        )
+
     ###### LOOP OVER CONSTRAINT SETS ######
     all_results = []
     
@@ -156,7 +172,9 @@ def main(cfg: DictConfig) -> None:
         print("="*70)
         
         # Create subdirectory for this constraint set
-        constraint_log_dir = os.path.join(base_log_dir, f"constraint_{constraint_idx}")
+        # Include constraint name in directory if available
+        constraint_name = constraint_config.get('name', f'{constraint_idx}')
+        constraint_log_dir = os.path.join(base_log_dir, f"constraint_{constraint_idx}_{constraint_name}")
         os.makedirs(constraint_log_dir, exist_ok=True)
         
         # Reload the model from the initial checkpoint for each constraint

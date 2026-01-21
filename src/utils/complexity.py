@@ -29,6 +29,9 @@ def compute_complexity(expr: Union[sp.Expr, List[sp.Expr]],
             - 'node_count': Total number of nodes in the expression tree (default)
             - 'depth': Maximum depth of the expression tree
             - 'visitation_length': Sum of sizes of all subtrees (structural complexity)
+            - 'total_variables': Total number of unique variables in the expression
+            - 'total_operations': Total number of operations in the expression
+            - 'weighted_node_count': Node count with custom weights (constants/vars/basic ops=1, others=2)
     
     Returns:
         Complexity score (int)
@@ -47,7 +50,7 @@ def compute_complexity(expr: Union[sp.Expr, List[sp.Expr]],
     # Handle list of expressions
     if isinstance(expr, list):
         return sum(compute_complexity(e, metric) for e in expr)
-    
+
     # Select metric
     if metric == 'node_count':
         return _node_count(expr)
@@ -55,8 +58,14 @@ def compute_complexity(expr: Union[sp.Expr, List[sp.Expr]],
         return _tree_depth(expr)
     elif metric == 'visitation_length':
         return _visitation_length(expr)
+    elif metric == 'total_variables':
+        return _total_variables(expr)
+    elif metric == 'total_operations':
+        return _total_operations(expr)
+    elif metric == 'weighted_node_count':
+        return _weighted_node_count(expr)
     else:
-        raise ValueError(f"Unknown metric: {metric}. Choose from: 'node_count', 'depth', 'visitation_length'")
+        raise ValueError(f"Unknown metric: {metric}. Choose from: 'node_count', 'depth', 'visitation_length', 'total_variables', 'total_operations', 'weighted_node_count'")
 
 
 def _node_count(expr: sp.Expr) -> int:
@@ -159,6 +168,105 @@ def _visitation_length(expr: sp.Expr) -> int:
     return result
 
 
+def _total_variables(expr: sp.Expr) -> int:
+    """
+    Count the total number of unique variables in the expression.
+    
+    Variables are symbolic objects (sp.Symbol) that represent unknowns.
+    This metric counts each unique variable once, regardless of how many
+    times it appears in the expression.
+    
+    Args:
+        expr: SymPy expression
+        
+    Returns:
+        Number of unique variables
+        
+    Example:
+        >>> import sympy as sp
+        >>> x, y = sp.symbols('x y')
+        >>> expr = x**2 + 2*x + y
+        >>> _total_variables(expr)
+        2
+    """
+    return len(expr.free_symbols)
+
+
+def _total_operations(expr: sp.Expr) -> int:
+    """
+    Count the total number of operations in the expression.
+    
+    An operation is any non-atomic node in the expression tree.
+    This includes arithmetic operations (+, -, *, /), functions (sin, cos, exp),
+    and other operators (^, etc.).
+    
+    Args:
+        expr: SymPy expression
+        
+    Returns:
+        Number of operations
+        
+    Example:
+        >>> import sympy as sp
+        >>> x = sp.Symbol('x')
+        >>> expr = x**2 + 2*x + 1
+        >>> _total_operations(expr)  # +, +, **, *
+        4
+    """
+    if expr.is_Atom:
+        return 0
+    
+    count = 1  # Count current operation
+    for arg in expr.args:
+        count += _total_operations(arg)
+    
+    return count
+
+
+def _weighted_node_count(expr: sp.Expr) -> int:
+    """
+    Count nodes with custom weights based on their complexity.
+    
+    Weight rules:
+    - Constants, variables: weight = 1
+    - Basic operations (+, -, *, /): weight = 1
+    - All other operations (exp, sin, cos, ^, etc.): weight = 2
+    
+    This metric penalizes more complex operations to favor simpler expressions.
+    
+    Args:
+        expr: SymPy expression
+        
+    Returns:
+        Weighted node count
+        
+    Example:
+        >>> import sympy as sp
+        >>> x = sp.Symbol('x')
+        >>> expr = sp.sin(x) + x  # sin(x) is weight 2, + is weight 1, x is weight 1
+        >>> _weighted_node_count(expr)
+        4
+    """
+    # Atomic expressions (constants, variables) have weight 1
+    if expr.is_Atom:
+        return 1
+    
+    # Basic operations with weight 1
+    basic_ops = {sp.Add, sp.Mul}
+    
+    # Determine weight for current node
+    if type(expr) in basic_ops:
+        weight = 1
+    else:
+        weight = 2
+    
+    # Recursively compute for children
+    for arg in expr.args:
+        weight += _weighted_node_count(arg)
+    
+    return weight
+
+
 def complexity_report(expr: Union[sp.Expr, List[sp.Expr]]) -> dict:
     """
     Generate a comprehensive complexity report for an expression.
@@ -186,5 +294,8 @@ def complexity_report(expr: Union[sp.Expr, List[sp.Expr]]) -> dict:
     return {
         'node_count': compute_complexity(expr, 'node_count'),
         'depth': compute_complexity(expr, 'depth'),
-        'visitation_length': compute_complexity(expr, 'visitation_length')
+        'visitation_length': compute_complexity(expr, 'visitation_length'),
+        'total_variables': compute_complexity(expr, 'total_variables'),
+        'total_operations': compute_complexity(expr, 'total_operations'),
+        'weighted_node_count': compute_complexity(expr, 'weighted_node_count')
     }
