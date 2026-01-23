@@ -10,7 +10,7 @@ import yaml
 import signal
 from contextlib import contextmanager
 from tqdm import tqdm
-from show_results import table_path, result_figs, regression_datasets, MEMORY_MODELS_LIST, COMPLEXITY_METRICS_LIST
+from show_results import table_path, result_figs, regression_datasets, MEMORY_MODELS_LIST, COMPLEXITY_METRICS_LIST, models_order, model_styles, custom_order, NUMBER_OF_CLASSES_PER_DATASET
 
 
 class TimeoutError(Exception):
@@ -213,9 +213,11 @@ def get_exp_from_path(paths):
                     predictions_file = os.path.join(exp, 'logs/experiment_metrics/test_predictions_per_sample.csv')
                     if os.path.exists(predictions_file):
                         try:
-                            with timeout(3):  # 3 second timeout
-                                df_pred = pd.read_csv(predictions_file)
-                            
+                            # with timeout(3):  # 3 second timeout
+                            #     df_pred = pd.read_csv(predictions_file)
+
+                            df_pred = pd.read_csv(predictions_file)
+
                             # Check if 'equation' column exists
                             if 'equation' in df_pred.columns:
                                 # The variables of the equations are the concept names
@@ -411,12 +413,11 @@ def get_intervention_from_path(
     if apply_filter is False:
         return performance
     else:
-        # For classification datasets with multiple memory sizes, compute Pareto knee
-        # First, load the full performance data to compute complexity and accuracy
-        performance_with_metrics = get_exp_from_path_cached(paths, cache_name='memory_ablation', output_path='output')
+        # For classification datasets with multiple memory sizes, select the memory size
+        # that achieves the best performance when all concepts are intervened (p_int = 1.0)
         
-        # Create the filtered_exps with Pareto knee selection for classification datasets
-        filtered_exps_with_knee = []
+        # Create the filtered_exps with best intervention performance selection
+        filtered_exps_with_best = []
         
         for dataset in custom_order:
             # Check if it's a classification dataset (not in regression_datasets)
@@ -424,37 +425,65 @@ def get_intervention_from_path(
             
             for model in model_styles.keys():
                 if model in MEMORY_MODELS_LIST:
-                    # Check if dataset has fixed memory or should use Pareto knee
+                    # Check if dataset has fixed memory
                     if dataset in fixed_memory.keys():
-                        # Use fixed memory size for this dataset
+                        # Use fixed memory size
                         mem_size = fixed_memory[dataset]
-                        filtered_exps_with_knee.append({
+                        filtered_exps_with_best.append({
                             'dataset': dataset,
                             'model': model,
                             'memory_size': mem_size
                         })
                     elif is_classification:
-                        # For classification datasets without fixed memory, use memory_size=2
-                        filtered_exps_with_knee.append({
-                            'dataset': dataset,
-                            'model': model,
-                            'memory_size': selected_memory_size
-                        })
+                        # For classification datasets without fixed memory, select memory size
+                        # with best performance at full intervention (p_int = 1.0)
+                        model_dataset_data = performance[
+                            (performance['dataset'] == dataset) & 
+                            (performance['model'] == model) &
+                            (performance['p_int'] == 1.0)
+                        ]
+                        
+                        if len(model_dataset_data) > 0:
+                            # Group by memory_size and compute mean accuracy at p_int=1.0
+                            mean_perf_by_memory = model_dataset_data.groupby('memory_size')['accuracy'].mean()
+                            best_memory_size = mean_perf_by_memory.idxmax()
+                            
+                            # Print the selected model, dataset, and memory size
+                            print(f"[Best Intervention Selection] Dataset: {dataset}, Model: {model}, Memory Size: {best_memory_size}, Accuracy: {mean_perf_by_memory[best_memory_size]:.4f}")
+                            
+                            filtered_exps_with_best.append({
+                                'dataset': dataset,
+                                'model': model,
+                                'memory_size': best_memory_size
+                            })
+                        else:
+                            # Fallback if no data found
+                            filtered_exps_with_best.append({
+                                'dataset': dataset,
+                                'model': model,
+                                'memory_size': selected_memory_size
+                            })
                     else:
                         # For regression datasets without fixed memory, use selected_memory_size
-                        filtered_exps_with_knee.append({
+                        filtered_exps_with_best.append({
                             'dataset': dataset,
                             'model': model,
                             'memory_size': selected_memory_size
                         })
         
-        # Keep only the experiments in filtered_exps_with_knee
-        criteria = pd.DataFrame(filtered_exps_with_knee)
+        # Keep only the experiments in filtered_exps_with_best
+        criteria = pd.DataFrame(filtered_exps_with_best)
         filtered_performance = performance.merge(criteria, on=criteria.columns.tolist(), how="inner")
 
-        # If the model belong to cmb_linear, licem, dcr, cem, blackbox, add them to performance
-        memoryless_models = performance[performance['model'].isin(['cmb_linear', 'cbm_mlp', 'licem', 'dcr', 'cem', 'blackbox'])]
+        # If the model belong to cbm_linear, licem, dcr, cem, blackbox, add them to performance
+        memoryless_models = performance[performance['model'].isin(['cbm_linear', 'cbm_mlp', 'licem', 'dcr', 'cem', 'blackbox'])]
         filtered_performance = pd.concat([filtered_performance, memoryless_models], ignore_index=True)
+
+        # lin symbolic cbm with memory size 1 is cbm_linear
+        cbm = performance[(performance['model']=='linear_symbolic_cbm') & (performance['memory_size']==1)]
+        cbm['model'] = 'cbm_linear'
+        filtered_performance = pd.concat([filtered_performance, cbm], ignore_index=True)
+
         return filtered_performance
 
 ##########################################
@@ -582,6 +611,7 @@ def plot_intervention_results(
     relative_accuracy=True,
     out_dir=None,
     ranges=None,
+    regression_ranges=None,
 ):
     """
     Plot intervention results across datasets.
@@ -595,13 +625,19 @@ def plot_intervention_results(
     regression_noise : float, optional
         Noise level to use for regression datasets. If None, uses unique_noises.
     ranges : list, optional
-        Y-axis range specification for classification datasets (bottom row) only.
+        Y-axis range specification for classification datasets.
         Each element corresponds to a classification subplot by index.
         Formats:
         - [y_min, y_max]: Single continuous axis
         - [[y_low_min, y_low_max], [y_high_min, y_high_max]]: Broken/stacked axis
         If None or shorter than needed, uses matplotlib auto-scale for missing entries.
-        Regression datasets always use continuous y-axis (ranges not applied).
+    regression_ranges : list, optional
+        Y-axis range specification for regression datasets.
+        Each element corresponds to a regression subplot by index.
+        Formats:
+        - [y_min, y_max]: Single continuous axis
+        - [[y_low_min, y_low_max], [y_high_min, y_high_max]]: Broken/stacked axis
+        If None or shorter than needed, uses matplotlib auto-scale for missing entries.
     """
 
     unique_datasets = [d for d in df['dataset'].unique()]
@@ -650,15 +686,24 @@ def plot_intervention_results(
     else:
         axes = np.array(axes)
     
-    # Validate and set defaults for ranges parameter
-    # ranges applies only to classification datasets (bottom row)
+    # Validate and set defaults for ranges parameters
+    # ranges applies to classification datasets, regression_ranges applies to regression datasets
     n_classification = len(classification_datasets)
+    n_regression = len(found_regression_datasets)
+    
     if ranges is None:
         ranges = [None] * n_classification  # Default: let matplotlib auto-scale
     else:
         # Extend ranges with None for missing entries (auto-scale)
         if len(ranges) < n_classification:
             ranges = list(ranges) + [None] * (n_classification - len(ranges))
+    
+    if regression_ranges is None:
+        regression_ranges = [None] * n_regression  # Default: let matplotlib auto-scale
+    else:
+        # Extend regression_ranges with None for missing entries (auto-scale)
+        if len(regression_ranges) < n_regression:
+            regression_ranges = list(regression_ranges) + [None] * (n_regression - len(regression_ranges))
     
     # Track which subplots need broken axes (to apply after tight_layout)
     broken_axes_specs = {}
@@ -688,41 +733,37 @@ def plot_intervention_results(
         # Access the axis consistently
         ax = axes[row][col]
         
-        # Handle broken/stacked axes for classification datasets only
+        # Handle broken/stacked axes for both classification and regression datasets
         use_broken_axis = False
         
-        if has_classification and not has_regression:
-            # Only classification datasets
-            if idx < len(organized_datasets):
-                is_classification = True
-                class_idx = organized_datasets.index(dataset) if dataset in classification_datasets else -1
-        elif has_regression and not has_classification:
-            # Only regression datasets
-            is_classification = False
-            class_idx = -1
-        else:
-            # Both types exist
-            is_classification = dataset in classification_datasets
-            class_idx = list(classification_datasets).index(dataset) if is_classification else -1
+        # Determine if this is a classification or regression dataset and get the appropriate index
+        is_classification = dataset in classification_datasets
+        is_regression = dataset in found_regression_datasets
         
-        if is_classification and class_idx >= 0 and class_idx < len(ranges):
-            range_spec = ranges[class_idx]
-            
-            # Check if this is a broken axis specification
-            if (range_spec is not None and isinstance(range_spec, list) and len(range_spec) == 2 and 
-                isinstance(range_spec[0], list) and isinstance(range_spec[1], list)):
-                # Mark for broken axis creation after tight_layout
-                use_broken_axis = True
-                broken_axes_specs[(row, col)] = {
-                    'ax': ax,
-                    'y_low_range': range_spec[0],
-                    'y_high_range': range_spec[1],
-                    'dataset': dataset
-                }
-            elif range_spec is not None:
-                # Regular single axis: set y-limits based on range_spec
-                if isinstance(range_spec, list) and len(range_spec) == 2:
-                    ax.set_ylim(range_spec)
+        if is_classification:
+            class_idx = classification_datasets.index(dataset)
+            range_spec = ranges[class_idx] if class_idx < len(ranges) else None
+        elif is_regression:
+            reg_idx = found_regression_datasets.index(dataset)
+            range_spec = regression_ranges[reg_idx] if reg_idx < len(regression_ranges) else None
+        else:
+            range_spec = None
+        
+        # Check if this is a broken axis specification
+        if (range_spec is not None and isinstance(range_spec, list) and len(range_spec) == 2 and 
+            isinstance(range_spec[0], list) and isinstance(range_spec[1], list)):
+            # Mark for broken axis creation after tight_layout
+            use_broken_axis = True
+            broken_axes_specs[(row, col)] = {
+                'ax': ax,
+                'y_low_range': range_spec[0],
+                'y_high_range': range_spec[1],
+                'dataset': dataset
+            }
+        elif range_spec is not None:
+            # Regular single axis: set y-limits based on range_spec
+            if isinstance(range_spec, list) and len(range_spec) == 2:
+                ax.set_ylim(range_spec)
         
         # Determine which noise level to use based on dataset type
         if dataset in found_regression_datasets:
@@ -763,7 +804,9 @@ def plot_intervention_results(
                     baseline = model_data[model_data['p_int'] == 0]['mean_metric'].iloc[0] if len(model_data[model_data['p_int'] == 0]) > 0 else 0
                     grouped_data.loc[grouped_data['model'] == model, 'mean_metric'] -= baseline
             
-            for model in grouped_data['model'].unique():
+            # Order models according to model_styles
+            models_in_data = [m for m in model_styles.keys() if m in grouped_data['model'].unique()]
+            for model in models_in_data:
                 model_data = grouped_data[grouped_data['model'] == model]
                 style = model_styles.get(model, {'marker': 'o', 'color': 'black', 'size': 10, 'name': model})
                 
@@ -897,8 +940,8 @@ def plot_intervention_results(
     # Filter the style according to the models' names which are present in the df
     filtered_styles = {name: style for name, style in model_styles.items() if name in df['model'].values}
 
-    # Create custom legend handles
-    custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=style['size']+10, label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in filtered_styles.values()]
+    # Create custom legend handles ordered by models_order
+    custom_handles = [plt.Line2D([0], [0], marker=filtered_styles[model]['marker'], color='w', markerfacecolor=filtered_styles[model]['color'], markersize=filtered_styles[model]['size']+10, label=filtered_styles[model]['name'], markeredgewidth=0.5, markeredgecolor='black') for model in models_order if model in filtered_styles]
 
     # Place legend either in empty subplot or below plots
     if legend_in_subplot:
@@ -1019,7 +1062,7 @@ def plot_intervention_results(
         if col == 0:
             ylabel = original_ax.get_ylabel()
             ax_bottom.yaxis.label.set_visible(False)
-            fig.text(pos.x0 - 0.08,
+            fig.text(pos.x0 - 0.1,
                     pos.y0 + pos.height / 2,
                     ylabel,
                     fontdict={'size': label_font['size']},
@@ -1196,8 +1239,8 @@ def plot_memory_ablation(performance, model_styles, title_font, label_font, tick
     # Filter the style according to the models' names which are present in the performance df
     filtered_styles = {name: style for name, style in model_styles.items() if name in performance['model'].values}
 
-    # Create custom legend handles
-    custom_handles = [plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=(style['size'])+10, label=style['name'], markeredgewidth=0.5, markeredgecolor='black') for style in filtered_styles.values()]
+    # Create custom legend handles ordered by models_order
+    custom_handles = [plt.Line2D([0], [0], marker=filtered_styles[model]['marker'], color='w', markerfacecolor=filtered_styles[model]['color'], markersize=(filtered_styles[model]['size'])+10, label=filtered_styles[model]['name'], markeredgewidth=0.5, markeredgecolor='black') for model in models_order if model in filtered_styles]
 
     # Place legend in empty subplot if available, otherwise below plots
     if legend_ax is not None:
@@ -1519,7 +1562,9 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         # Collect all points for Pareto front calculation
         all_points = []
         
-        for model in data['model'].unique():
+        # Order models according to model_styles
+        models_in_data = [m for m in model_styles.keys() if m in data['model'].unique()]
+        for model in models_in_data:
             model_data = data[data['model'] == model]
             
             # For accuracy metrics, plot 1-accuracy (error rate)
@@ -1834,15 +1879,17 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         if name in model_styles:
             filtered_styles[name] = model_styles[name]
 
-    # Create custom legend handles
+    # Create custom legend handles ordered by models_order
     custom_handles = []
-    for name, style in filtered_styles.items():
-        if name in ['cem', 'blackbox']:
-            # Use line handle for cem and blackbox
-            custom_handles.append(plt.Line2D([0], [0], color=style['color'], linestyle=':', linewidth=2, label=style['name']))
-        else:
-            # Use marker handle for other models
-            custom_handles.append(plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=(style['size'])+10, label=style['name'], markeredgewidth=0.5, markeredgecolor='black'))
+    for model in models_order:
+        if model in filtered_styles:
+            style = filtered_styles[model]
+            if model in ['cem', 'blackbox']:
+                # Use line handle for cem and blackbox
+                custom_handles.append(plt.Line2D([0], [0], color=style['color'], linestyle=':', linewidth=2, label=style['name']))
+            else:
+                # Use marker handle for other models
+                custom_handles.append(plt.Line2D([0], [0], marker=style['marker'], color='w', markerfacecolor=style['color'], markersize=(style['size'])+10, label=style['name'], markeredgewidth=0.5, markeredgecolor='black'))
 
     # Place legend in empty subplot if available, otherwise below plots
     if legend_ax is not None:
@@ -2046,9 +2093,12 @@ def create_latex_tables_from_csv(csv_file_path, output_dir='tabs'):
     # Read the CSV file
     df = pd.read_csv(csv_file_path)
     
-    # Get unique datasets and models
-    datasets = df['dataset'].unique()
-    models = df['model'].unique()
+    # Get unique datasets and models, preserving order from custom_order and models_order
+    all_datasets = df['dataset'].unique()
+    datasets = [d for d in custom_order if d in all_datasets]
+    
+    all_models = df['model'].unique()
+    models = [m for m in models_order if m in all_models]
     
     # Calculate se_task and se_concept if not already present
     # Note: Since we only have one row per model/dataset, se values should already be in the CSV
@@ -2060,8 +2110,10 @@ def create_latex_tables_from_csv(csv_file_path, output_dir='tabs'):
     concept_table = []
     
     for model in models:
-        task_row = [model]
-        concept_row = [model]
+        # Get display name from model_styles
+        model_display_name = model_styles.get(model, {}).get('name', model)
+        task_row = [model_display_name]
+        concept_row = [model_display_name]
         
         for dataset in datasets:
             # Filter data for this model and dataset
@@ -2076,7 +2128,7 @@ def create_latex_tables_from_csv(csv_file_path, output_dir='tabs'):
                 
                 if pd.notna(mean_task):
                     if pd.notna(se_task):
-                        task_cell = f"${mean_task:.2f} \\pm {se_task:.2f}$"
+                        task_cell = f"${mean_task:.2f}_{{\\tiny{{\\pm {se_task:.2f}}}}}$"
                     else:
                         task_cell = f"${mean_task:.2f}$"
                 else:
@@ -2090,7 +2142,7 @@ def create_latex_tables_from_csv(csv_file_path, output_dir='tabs'):
                 
                 if pd.notna(mean_concept):
                     if pd.notna(se_concept):
-                        concept_cell = f"${mean_concept:.2f} \\pm {se_concept:.2f}$"
+                        concept_cell = f"${mean_concept:.2f}_{{\\tiny{{\\pm {se_concept:.2f}}}}}$"
                     else:
                         concept_cell = f"${mean_concept:.2f}$"
                 else:
@@ -2114,6 +2166,9 @@ def create_latex_tables_from_csv(csv_file_path, output_dir='tabs'):
     # Task performance table
     task_latex = "\\begin{table}[h]\n"
     task_latex += "\\centering\n"
+    task_latex += "\\caption{Predictive performance (MAE) of all models on regression tasks, reported as mean $\\pm$ 95\\% confidence interval.}\n"
+    task_latex += "\\label{tab:task_performance}\n"
+    task_latex += "\\resizebox{\\columnwidth}{!}{%\n"
     task_latex += f"\\begin{{tabular}}{{{col_format}}}\n"
     task_latex += "\\hline\n"
     # Be sure dataset_names do not contains nan, if so, replace with 'NaN'  
@@ -2126,13 +2181,15 @@ def create_latex_tables_from_csv(csv_file_path, output_dir='tabs'):
     
     task_latex += "\\hline\n"
     task_latex += "\\end{tabular}\n"
-    task_latex += "\\caption{Task Performance: $\\text{mean\\_task} \\pm \\text{se\\_task}$ (MAE for regression tasks)}\n"
-    task_latex += "\\label{tab:task_performance}\n"
+    task_latex += "}\n"
     task_latex += "\\end{table}\n"
     
     # Concept performance table
     concept_latex = "\\begin{table}[h]\n"
     concept_latex += "\\centering\n"
+    concept_latex += "\\caption{Concept Performance: $\\text{mean\\_concept} \\pm \\text{se\\_concept}$ (MAE for regression tasks)}\n"
+    concept_latex += "\\label{tab:concept_performance}\n"
+    concept_latex += "\\resizebox{\\columnwidth}{!}{%\n"
     concept_latex += f"\\begin{{tabular}}{{{col_format}}}\n"
     concept_latex += "\\hline\n"
     concept_latex += "Model & " + " & ".join(dataset_names) + " \\\\\n"
@@ -2143,8 +2200,7 @@ def create_latex_tables_from_csv(csv_file_path, output_dir='tabs'):
     
     concept_latex += "\\hline\n"
     concept_latex += "\\end{tabular}\n"
-    concept_latex += "\\caption{Concept Performance: $\\text{mean\\_concept} \\pm \\text{se\\_concept}$ (MAE for regression tasks)}\n"
-    concept_latex += "\\label{tab:concept_performance}\n"
+    concept_latex += "}\n"
     concept_latex += "\\end{table}\n"
     
     # Save to files
@@ -2549,6 +2605,89 @@ def csv_to_table(
     with open(path, "w") as f:
         f.write(table)
 
+
+def compute_pareto_frontier_count(df, performance_col, complexity_metrics, higher_is_better=True, dataset=None):
+    """
+    Compute how many times each model is on the Pareto frontier across different complexity metrics.
+    
+    A point is on the Pareto frontier for a given complexity metric if no other point
+    dominates it (i.e., no other point is both better in performance AND less complex).
+    
+    For classification tasks, models with performance <= random classifier (1/num_classes)
+    are excluded from the Pareto frontier computation.
+    
+    Args:
+        df: DataFrame with model performance and complexity data
+        performance_col: Name of the performance column (e.g., 'task_acc_mean', 'task_mae_mean')
+        complexity_metrics: List of complexity metric names
+        higher_is_better: True for accuracy (higher = better), False for MAE/MSE (lower = better)
+        dataset: Dataset name (used to determine random classifier threshold for classification)
+    
+    Returns:
+        dict: Mapping from row index to Pareto frontier count
+    """
+    pareto_counts = {idx: 0 for idx in df.index}
+    
+    # For classification datasets, determine the random classifier threshold
+    random_threshold = None
+    if higher_is_better and dataset is not None and dataset in NUMBER_OF_CLASSES_PER_DATASET:
+        num_classes = NUMBER_OF_CLASSES_PER_DATASET[dataset]
+        random_threshold = 1.0 / num_classes  # Random classifier accuracy
+    
+    for metric in complexity_metrics:
+        complexity_col = f'complexity_{metric}_mean'
+        
+        if complexity_col not in df.columns or performance_col not in df.columns:
+            continue
+        
+        # Get valid rows (non-NaN for both performance and complexity)
+        valid_mask = df[performance_col].notna() & df[complexity_col].notna()
+        
+        # For classification, exclude models with performance <= random classifier
+        if random_threshold is not None:
+            valid_mask = valid_mask & (df[performance_col] > random_threshold)
+        
+        valid_indices = df[valid_mask].index.tolist()
+        
+        for idx in valid_indices:
+            perf_i = df.loc[idx, performance_col]
+            comp_i = df.loc[idx, complexity_col]
+            
+            # Check if any other point dominates this one
+            is_dominated = False
+            for other_idx in valid_indices:
+                if other_idx == idx:
+                    continue
+                
+                perf_other = df.loc[other_idx, performance_col]
+                comp_other = df.loc[other_idx, complexity_col]
+                
+                # For domination:
+                # - Other must be strictly better in at least one dimension
+                # - Other must be at least as good in the other dimension
+                if higher_is_better:
+                    # Higher performance is better, lower complexity is better
+                    # Other dominates if: (perf_other >= perf_i AND comp_other <= comp_i) 
+                    #                     AND (perf_other > perf_i OR comp_other < comp_i)
+                    at_least_as_good = (perf_other >= perf_i) and (comp_other <= comp_i)
+                    strictly_better = (perf_other > perf_i) or (comp_other < comp_i)
+                else:
+                    # Lower performance is better (MAE), lower complexity is better
+                    # Other dominates if: (perf_other <= perf_i AND comp_other <= comp_i)
+                    #                     AND (perf_other < perf_i OR comp_other < comp_i)
+                    at_least_as_good = (perf_other <= perf_i) and (comp_other <= comp_i)
+                    strictly_better = (perf_other < perf_i) or (comp_other < comp_i)
+                
+                if at_least_as_good and strictly_better:
+                    is_dominated = True
+                    break
+            
+            if not is_dominated:
+                pareto_counts[idx] += 1
+    
+    return pareto_counts
+
+
 def generate_performance_tables(
     performance,
     custom_order,
@@ -2559,6 +2698,8 @@ def generate_performance_tables(
     """
     Generate LaTeX tables for classification and regression datasets showing
     performance metrics and all complexity metrics.
+    
+    For models in MEMORY_MODELS_LIST, separate rows are created for each memory_size.
     
     Args:
         performance: DataFrame with performance data including complexity metrics
@@ -2584,8 +2725,19 @@ def generate_performance_tables(
         if cls_data.empty:
             pass
         else:
-            # Aggregate by dataset and model
-            cls_grouped = cls_data.groupby(['dataset', 'model']).agg({
+            # For memory models, group by dataset, model, and memory_size
+            # For other models, group by dataset and model only
+            cls_data['grouping_key'] = cls_data.apply(
+                lambda row: f"{row['model']}_{row['memory_size']}" if row['model'] in MEMORY_MODELS_LIST and 'memory_size' in cls_data.columns else row['model'],
+                axis=1
+            )
+            
+            # Aggregate by dataset and grouping_key
+            group_cols = ['dataset', 'model', 'grouping_key']
+            if 'memory_size' in cls_data.columns:
+                group_cols.append('memory_size')
+                
+            cls_grouped = cls_data.groupby(group_cols).agg({
                 'task_acc': ['mean', 'std'],
                 **{f'complexity_{metric}': ['mean', 'std'] for metric in complexity_metrics}
             }).reset_index()
@@ -2612,8 +2764,19 @@ def generate_performance_tables(
         if reg_data.empty:
             pass
         else:
-            # Aggregate by dataset and model
-            reg_grouped = reg_data.groupby(['dataset', 'model']).agg({
+            # For memory models, group by dataset, model, and memory_size
+            # For other models, group by dataset and model only
+            reg_data['grouping_key'] = reg_data.apply(
+                lambda row: f"{row['model']}_{row['memory_size']}" if row['model'] in MEMORY_MODELS_LIST and 'memory_size' in reg_data.columns else row['model'],
+                axis=1
+            )
+            
+            # Aggregate by dataset and grouping_key
+            group_cols = ['dataset', 'model', 'grouping_key']
+            if 'memory_size' in reg_data.columns:
+                group_cols.append('memory_size')
+                
+            reg_grouped = reg_data.groupby(group_cols).agg({
                 'task_mae': ['mean', 'std'],
                 'task_mse': ['mean', 'std'],
                 **{f'complexity_{metric}': ['mean', 'std'] for metric in complexity_metrics}
@@ -2645,6 +2808,13 @@ def _create_performance_latex_table(
     """
     Helper function to create LaTeX table with performance and complexity metrics.
     
+    Table structure:
+    - Dataset column (with row spanning to avoid repetition)
+    - Model column (includes memory size for memory models)
+    - Performance metric column (Accuracy for classification, MAE/MSE for regression)
+    - Complexity metric columns (one per metric)
+    - Pareto Frontier column (count of how many complexity metrics the model is on the frontier)
+    
     Args:
         df: DataFrame with aggregated performance data
         datasets: List of dataset names to include
@@ -2658,241 +2828,214 @@ def _create_performance_latex_table(
     # Filter datasets
     df = df[df['dataset'].isin(datasets)].copy()
     
-    # Map model names
-    if model_styles is not None:
-        df['model_name'] = df['model'].apply(
-            lambda x: model_styles[x]['name'] if x in model_styles else x
-        )
-    else:
-        df['model_name'] = df['model']
+    # Create display name for models (with memory size if applicable)
+    def get_model_display_name(row):
+        base_name = model_styles[row['model']]['name'] if row['model'] in model_styles else row['model']
+        if row['model'] in MEMORY_MODELS_LIST and 'memory_size' in row and pd.notna(row['memory_size']):
+            return f"{base_name} ({int(row['memory_size'])})"
+        return base_name
+    
+    df['model_display_name'] = df.apply(get_model_display_name, axis=1)
     
     # Map dataset names
     df['dataset_name'] = df['dataset'].apply(get_df_name)
     
-    # Get unique models and datasets
-    models = sorted(df['model_name'].unique())
+    # Create model order index for sorting (respect models_order)
+    model_order_map = {model: idx for idx, model in enumerate(models_order)}
+    df['model_order'] = df['model'].apply(lambda x: model_order_map.get(x, len(models_order)))
+    
+    # Sort by dataset, model order, and memory_size
+    if 'memory_size' in df.columns:
+        df = df.sort_values(['dataset', 'model_order', 'memory_size'])
+    else:
+        df = df.sort_values(['dataset', 'model_order'])
+    
+    # Get unique dataset names in order
     dataset_names = [get_df_name(d) for d in datasets if d in df['dataset'].unique()]
     
-    # Define metric columns based on task type
-    if task_type == 'classification':
-        perf_metrics = [
-            ('Accuracy', 'task_acc_mean', 'task_acc_std', '{:.2f}'),
-        ]
-    else:  # regression
-        perf_metrics = [
-            ('MAE', 'task_mae_mean', 'task_mae_std', '{:.4f}'),
-            ('MSE', 'task_mse_mean', 'task_mse_std', '{:.4f}')
-        ]
-    
-    # Add complexity metrics
+    # Complexity metric names mapping
     complexity_metric_names = {
         'node_count': 'Nodes',
         'depth': 'Depth',
-        'visitation_length': 'Visit-Len',
+        'visitation_length': 'Expr.-Comp.',
         'total_variables': 'Vars',
         'total_operations': 'Ops',
         'weighted_node_count': 'Weighted'
     }
     
-    for metric in complexity_metrics:
-        metric_name = complexity_metric_names.get(metric, metric)
-        perf_metrics.append((
-            metric_name,
-            f'complexity_{metric}_mean',
-            f'complexity_{metric}_std',
-            '{:.1f}'
-        ))
+    # Column format: Dataset + Model + Performance metric(s) + Complexity metrics + Pareto
+    if task_type == 'classification':
+        n_perf_cols = 1  # Just Accuracy
+    else:  # regression
+        n_perf_cols = 2  # MAE and MSE
     
-    # Build LaTeX table for each dataset
-    for dataset in dataset_names:
-        dataset_key = [d for d in datasets if get_df_name(d) == dataset][0]
-        dataset_df = df[df['dataset'] == dataset_key].copy()
+    n_complexity_cols = len(complexity_metrics)
+    total_metric_cols = n_perf_cols + n_complexity_cols + 1  # +1 for Pareto column
+    col_format = "ll" + "c" * total_metric_cols  # Dataset + Model + metrics + Pareto
+    
+    # Determine performance column for Pareto computation
+    if task_type == 'classification':
+        perf_col = 'task_acc_mean'
+        higher_is_better = True
+    else:
+        perf_col = 'task_mae_mean'
+        higher_is_better = False
+    
+    # Define dataset groups
+    if task_type == 'classification':
+        dataset_groups = [
+            (['awa2', 'awa2_incomplete'], 'awa2'),
+            (['cub', 'cub_incomplete'], 'cub'),
+            (['cifar10'], 'cifar10'),
+        ]
+    else:  # regression
+        dataset_groups = [
+            (['feynman_I_6_2', 'feynman_I_9_18', 'feynman_I_12_1', 'feynman_I_13_4', 'feynman_I_14_3', 'feynman_I_15_10'], 'feynman'),
+            (['dsprites_simple', 'pendulum'], 'dsprites_pendulum'),
+            (['mnist_arithmetic', 'mawps'], 'mnist_mawps'),
+        ]
+    
+    # Build a table for each dataset group
+    for group_datasets, group_name in dataset_groups:
+        # Filter to datasets in this group that exist in our data
+        group_datasets_present = [d for d in group_datasets if d in df['dataset'].unique()]
         
-        if len(dataset_df) == 0:
+        if len(group_datasets_present) == 0:
             continue
+        
+        group_df = df[df['dataset'].isin(group_datasets_present)].copy()
+        
+        # Get dataset display names in order
+        group_dataset_names = [get_df_name(d) for d in group_datasets if d in group_datasets_present]
+        
+        # Generate caption based on group
+        if len(group_datasets_present) == 1:
+            caption_datasets = get_df_name(group_datasets_present[0])
+        else:
+            caption_datasets = ", ".join([get_df_name(d) for d in group_datasets_present[:-1]]) + " and " + get_df_name(group_datasets_present[-1])
         
         lines = []
         lines.append(r"\begin{table}[t]")
         lines.append(r"\centering")
-        lines.append(r"\caption{Performance and Complexity Metrics for " + dataset.replace("_", r"\_") + r"}")
-        lines.append(r"\label{tab:" + task_type + "_" + dataset_key + r"}")
-        
-        # Column format: Model + one column per metric
-        n_cols = len(perf_metrics) + 1
-        col_format = "l" + "c" * len(perf_metrics)
-        
+        lines.append(r"\caption{Predictive performance and model complexity for all methods on the " + caption_datasets.replace("_", r"\_") + r" dataset" + ("s" if len(group_datasets_present) > 1 else "") + r".}")
+        lines.append(r"\label{tab:" + task_type + "_" + group_name + r"}")
         lines.append(r"\resizebox{\columnwidth}{!}{%")
         lines.append(r"\begin{tabular}{" + col_format + r"}")
         lines.append(r"\toprule")
         
-        # Header
-        metric_headers = [name for name, _, _, _ in perf_metrics]
-        header = "Model & " + " & ".join(metric_headers) + r" \\"
-        lines.append(header)
+        # Header row
+        header_parts = ["Dataset", "Model"]
+        if task_type == 'classification':
+            header_parts.append("Accuracy")
+        else:  # regression
+            header_parts.extend(["MAE", "MSE"])
+        
+        for metric in complexity_metrics:
+            header_parts.append(complexity_metric_names.get(metric, metric))
+        
+        # Add Pareto column header
+        header_parts.append("Pareto")
+        
+        lines.append(" & ".join(header_parts) + r" \\")
         lines.append(r"\midrule")
         
-        # Data rows
-        for model in models:
-            model_data = dataset_df[dataset_df['model_name'] == model]
+        # Data rows - grouped by dataset
+        for dataset in group_dataset_names:
+            dataset_key = [d for d in group_datasets_present if get_df_name(d) == dataset][0]
+            dataset_df = group_df[group_df['dataset'] == dataset_key].copy()
             
-            if len(model_data) == 0:
+            if len(dataset_df) == 0:
                 continue
             
-            row = [model.replace("_", r"\_")]
+            # Compute Pareto frontier counts for this dataset
+            pareto_counts = compute_pareto_frontier_count(
+                dataset_df, 
+                perf_col, 
+                complexity_metrics, 
+                higher_is_better,
+                dataset=dataset_key  # Pass dataset for random classifier threshold
+            )
             
-            for _, mean_col, std_col, fmt in perf_metrics:
-                if mean_col in model_data.columns and not pd.isna(model_data.iloc[0][mean_col]):
-                    mean_val = model_data.iloc[0][mean_col]
-                    std_val = model_data.iloc[0][std_col] if std_col in model_data.columns else 0
-                    
-                    # Format based on metric type
-                    if 'task_acc' in mean_col or 'task_f1' in mean_col:
-                        # Convert to percentage
-                        mean_val *= 100
-                        std_val *= 100
-                    
-                    mean_str = fmt.format(mean_val)
-                    std_str = fmt.format(std_val)
-                    cell = rf"${mean_str} \scriptscriptstyle{{\pm {std_str}}}$"
-                else:
-                    cell = "--"
+            # Get all model rows for this dataset
+            model_rows = []
+            for idx, row_data in dataset_df.iterrows():
+                model_display = row_data['model_display_name'].replace("_", r"\_")
+                row_parts = [model_display]
                 
-                row.append(cell)
+                # Add performance metric(s)
+                if task_type == 'classification':
+                    # Accuracy
+                    if 'task_acc_mean' in row_data and pd.notna(row_data['task_acc_mean']):
+                        acc_mean = row_data['task_acc_mean'] * 100  # Convert to percentage
+                        acc_std = row_data['task_acc_std'] * 100
+                        row_parts.append(rf"${acc_mean:.1f}_{{\tiny{{\pm {acc_std:.1f}}}}}$")
+                    else:
+                        row_parts.append("--")
+                else:  # regression
+                    # MAE
+                    if 'task_mae_mean' in row_data and pd.notna(row_data['task_mae_mean']):
+                        mae_mean = row_data['task_mae_mean']
+                        mae_std = row_data['task_mae_std']
+                        row_parts.append(rf"${mae_mean:.3f}_{{\tiny{{\pm {mae_std:.3f}}}}}$")
+                    else:
+                        row_parts.append("--")
+                    # MSE
+                    if 'task_mse_mean' in row_data and pd.notna(row_data['task_mse_mean']):
+                        mse_mean = row_data['task_mse_mean']
+                        mse_std = row_data['task_mse_std']
+                        row_parts.append(rf"${mse_mean:.3f}_{{\tiny{{\pm {mse_std:.3f}}}}}$")
+                    else:
+                        row_parts.append("--")
+                
+                # Add complexity metrics
+                for metric in complexity_metrics:
+                    mean_col = f'complexity_{metric}_mean'
+                    std_col = f'complexity_{metric}_std'
+                    if mean_col in row_data and pd.notna(row_data[mean_col]):
+                        c_mean = row_data[mean_col]
+                        c_std = row_data[std_col]
+                        row_parts.append(rf"${c_mean:.1f}_{{\tiny{{\pm {c_std:.1f}}}}}$")
+                    else:
+                        row_parts.append("--")
+                
+                # Add Pareto frontier count
+                pareto_count = pareto_counts.get(idx, 0)
+                row_parts.append(f"${pareto_count}/{len(complexity_metrics)}$")
+                
+                model_rows.append(row_parts)
             
-            lines.append(" & ".join(row) + r" \\")
+            # Write rows with dataset name only on first row
+            if len(model_rows) > 0:
+                dataset_display = dataset.replace("_", r"\_")
+                # First row with dataset name
+                first_row = [dataset_display] + model_rows[0]
+                lines.append(" & ".join(first_row) + r" \\")
+                
+                # Remaining rows without dataset name
+                for model_row in model_rows[1:]:
+                    row_line = " & " + " & ".join(model_row) + r" \\"
+                    lines.append(row_line)
+                
+                # Add separator between datasets within a group
+                lines.append(r"\midrule")
         
-        lines.append(r"\bottomrule")
+        # Remove last midrule and add bottomrule
+        if lines[-1] == r"\midrule":
+            lines[-1] = r"\bottomrule"
+        else:
+            lines.append(r"\bottomrule")
+        
         lines.append(r"\end{tabular}")
         lines.append(r"}")
         lines.append(r"\end{table}")
         
-        # Save table
+        # Save table for this dataset group
         table_content = "\n".join(lines)
-        filename = os.path.join(output_path, f'{task_type}_{dataset_key}_performance_table.txt')
+        filename = os.path.join(output_path, f'{task_type}_{group_name}_performance_table.txt')
         with open(filename, 'w') as f:
             f.write(table_content)
         
         print(f"Table saved to: {filename}")
-    
-    # Also create a combined table with all datasets
-    _create_combined_performance_table(df, datasets, models, perf_metrics, task_type, output_path)
-
-
-def _create_combined_performance_table(
-    df,
-    datasets,
-    models,
-    perf_metrics,
-    task_type,
-    output_path
-):
-    """
-    Create a combined table with all datasets as columns and models as rows.
-    """
-    dataset_names = [get_df_name(d) for d in datasets if d in df['dataset'].unique()]
-    
-    lines = []
-    lines.append(r"\begin{table*}[t]")
-    lines.append(r"\centering")
-    lines.append(r"\caption{" + task_type.capitalize() + r" Performance and Complexity Metrics}")
-    lines.append(r"\label{tab:" + task_type + "_combined}")
-    
-    # For combined table, show all metrics
-    if task_type == 'classification':
-        key_metrics = [
-            ('Acc', 'task_acc_mean', 'task_acc_std', '{:.1f}'),
-            ('Nodes', 'complexity_node_count_mean', 'complexity_node_count_std', '{:.0f}'),
-            ('Depth', 'complexity_depth_mean', 'complexity_depth_std', '{:.0f}'),
-            ('Visit-Len', 'complexity_visitation_length_mean', 'complexity_visitation_length_std', '{:.0f}'),
-            ('Vars', 'complexity_total_variables_mean', 'complexity_total_variables_std', '{:.0f}'),
-            ('Ops', 'complexity_total_operations_mean', 'complexity_total_operations_std', '{:.0f}'),
-            ('Weighted', 'complexity_weighted_node_count_mean', 'complexity_weighted_node_count_std', '{:.0f}')
-        ]
-    else:
-        key_metrics = [
-            ('MAE', 'task_mae_mean', 'task_mae_std', '{:.3f}'),
-            ('MSE', 'task_mse_mean', 'task_mse_std', '{:.3f}'),
-            ('Nodes', 'complexity_node_count_mean', 'complexity_node_count_std', '{:.0f}'),
-            ('Depth', 'complexity_depth_mean', 'complexity_depth_std', '{:.0f}'),
-            ('Visit-Len', 'complexity_visitation_length_mean', 'complexity_visitation_length_std', '{:.0f}'),
-            ('Vars', 'complexity_total_variables_mean', 'complexity_total_variables_std', '{:.0f}'),
-            ('Ops', 'complexity_total_operations_mean', 'complexity_total_operations_std', '{:.0f}'),
-            ('Weighted', 'complexity_weighted_node_count_mean', 'complexity_weighted_node_count_std', '{:.0f}')
-        ]
-    
-    # Multi-column header
-    n_metrics = len(key_metrics)
-    col_format = "l" + ("c" * n_metrics) * len(dataset_names)
-    
-    lines.append(r"\resizebox{\textwidth}{!}{%")
-    lines.append(r"\begin{tabular}{" + col_format + r"}")
-    lines.append(r"\toprule")
-    
-    # Top header with dataset names spanning multiple columns
-    # Model column should span 2 rows
-    top_header = r"\multirow{2}{*}{Model}"
-    for dataset_name in dataset_names:
-        top_header += " & " + r"\multicolumn{" + str(n_metrics) + r"}{c}{" + dataset_name.replace("_", r"\_") + r"}"
-    top_header += r" \\"
-    lines.append(top_header)
-    
-    # Add a line separator after the dataset names
-    lines.append(r"\cmidrule(lr){2-" + str(1 + n_metrics * len(dataset_names)) + r"}")
-    
-    # Second header with metric names repeated for each dataset (no Model column label here)
-    metric_header = ""
-    for _ in dataset_names:
-        for metric_name, _, _, _ in key_metrics:
-            metric_header += " & " + metric_name
-    lines.append(metric_header + r" \\")
-    lines.append(r"\midrule")
-    
-    # Data rows
-    for model in models:
-        row = [model.replace("_", r"\_")]
-        
-        for dataset in datasets:
-            if dataset not in df['dataset'].unique():
-                row.extend(["--"] * n_metrics)
-                continue
-            
-            model_data = df[(df['model_name'] == model) & (df['dataset'] == dataset)]
-            
-            if len(model_data) == 0:
-                row.extend(["--"] * n_metrics)
-                continue
-            
-            for _, mean_col, std_col, fmt in key_metrics:
-                if mean_col in model_data.columns and not pd.isna(model_data.iloc[0][mean_col]):
-                    mean_val = model_data.iloc[0][mean_col]
-                    std_val = model_data.iloc[0][std_col] if std_col in model_data.columns else 0
-                    
-                    # Convert accuracy/F1 to percentage
-                    if 'task_acc' in mean_col or 'task_f1' in mean_col:
-                        mean_val *= 100
-                        std_val *= 100
-                    
-                    mean_str = fmt.format(mean_val)
-                    std_str = fmt.format(std_val)
-                    cell = rf"$\scriptstyle{{{mean_str} \pm {std_str}}}$"
-                else:
-                    cell = "--"
-                
-                row.append(cell)
-        
-        lines.append(" & ".join(row) + r" \\")
-    
-    lines.append(r"\bottomrule")
-    lines.append(r"\end{tabular}")
-    lines.append(r"}")
-    lines.append(r"\end{table*}")
-    
-    table_content = "\n".join(lines)
-    filename = os.path.join(output_path, f'{task_type}_combined_performance_table.txt')
-    with open(filename, 'w') as f:
-        f.write(table_content)
-    
-    print(f"Combined table saved to: {filename}")
 
 
 def generate_concept_metrics_table(
@@ -2982,24 +3125,31 @@ def generate_concept_metrics_table(
         for dataset in agg_dict:
             agg_dict[dataset] = agg_dict[dataset][agg_dict[dataset]['model'].isin(model_styles.keys())]
     
+    # Exclude blackbox model
+    for dataset in agg_dict:
+        agg_dict[dataset] = agg_dict[dataset][agg_dict[dataset]['model'] != 'blackbox']
+    
     # Combine all datasets
     concept_df = pd.concat(agg_dict.values(), ignore_index=True)
     
-    # Get unique models
-    models = sorted(concept_df['model_name'].unique())
+    # Get unique models in the order specified by models_order
+    all_models = concept_df['model'].unique()
+    ordered_models = [m for m in models_order if m in all_models]
+    # Get display names for ordered models
+    models = [model_styles[m]['name'] if m in model_styles else m for m in ordered_models]
     
     # Build LaTeX table
     lines = []
     lines.append(r"\begin{table*}[t]")
     lines.append(r"\centering")
-    lines.append(r"\caption{Concept-level Metrics Across Datasets}")
+    lines.append(r"\caption{Concept accuracy across methods and datasets.}")
     lines.append(r"\label{tab:concept_metrics}")
     
     # Column format: Model + 1 column per dataset
     n_datasets = len(all_datasets)
     col_format = "l" + "c" * n_datasets
     
-    lines.append(r"\resizebox{\textwidth}{!}{%")
+    lines.append(r"\resizebox{\columnwidth}{!}{%")
     lines.append(r"\begin{tabular}{" + col_format + r"}")
     lines.append(r"\toprule")
     
@@ -3072,6 +3222,221 @@ def generate_concept_metrics_table(
     csv_filename = os.path.join(output_path, 'concept_metrics_table.csv')
     concept_df.to_csv(csv_filename, index=False)
     print(f"Concept metrics CSV saved to: {csv_filename}")
+
+
+def generate_ted_metrics_table(
+    ted_results,
+    custom_order,
+    model_styles,
+    output_path
+):
+    """
+    Generate a LaTeX table showing Tree Edit Distance (TED) metrics for all datasets and models.
+    
+    Table structure:
+    - Rows: Models
+    - Columns: Datasets
+    - Each cell: mean TED ± 95% CI
+    
+    Args:
+        ted_results: DataFrame with TED metrics (dataset, model, seed, avg_ted, se_ted)
+        custom_order: List of datasets in desired order
+        model_styles: Dictionary with model styling information
+        output_path: Directory path to save the table
+    """
+    os.makedirs(output_path, exist_ok=True)
+    
+    # Filter datasets that are in custom_order
+    ted_filtered = ted_results[ted_results['dataset'].isin(custom_order)].copy()
+    
+    if ted_filtered.empty:
+        print("No TED metrics found for the specified datasets.")
+        return
+    
+    # Get ordered datasets present in the data
+    datasets = [d for d in custom_order if d in ted_filtered['dataset'].unique()]
+    
+    # Get ordered models present in the data
+    all_models = ted_filtered['model'].unique()
+    models = [m for m in models_order if m in all_models]
+    
+    # Aggregate TED metrics by dataset and model
+    agg_df = ted_filtered.groupby(['dataset', 'model'])['avg_ted'].agg(['mean', 'std', 'count']).reset_index()
+    agg_df['ci95'] = 1.96 * agg_df['std'] / np.sqrt(agg_df['count'])
+    
+    # Build LaTeX table
+    lines = []
+    lines.append(r"\begin{table}[h]")
+    lines.append(r"\centering")
+    lines.append(r"\caption{TED between learned and ground truth expressions, reported as mean $\pm$ 95\% confidence interval.}")
+    lines.append(r"\label{tab:ted_metrics}")
+    
+    # Column format: Model + 1 column per dataset
+    n_datasets = len(datasets)
+    col_format = "l" + "c" * n_datasets
+    
+    lines.append(r"\resizebox{\columnwidth}{!}{%")
+    lines.append(r"\begin{tabular}{" + col_format + r"}")
+    lines.append(r"\toprule")
+    
+    # Header row: dataset names
+    header_row = ["Model"]
+    for dataset in datasets:
+        dataset_name = get_df_name(dataset)
+        header_row.append(dataset_name)
+    lines.append(" & ".join(header_row) + r" \\")
+    lines.append(r"\midrule")
+    
+    # Data rows
+    for model in models:
+        model_display = model_styles[model]['name'] if model in model_styles else model
+        row = [model_display.replace("_", r"\_")]
+        
+        for dataset in datasets:
+            model_data = agg_df[(agg_df['dataset'] == dataset) & (agg_df['model'] == model)]
+            
+            if len(model_data) == 0:
+                row.append("--")
+                continue
+            
+            mean_val = model_data.iloc[0]['mean']
+            ci95_val = model_data.iloc[0]['ci95']
+            
+            if pd.isna(mean_val):
+                row.append("--")
+            else:
+                cell_value = rf"${mean_val:.2f}_{{\tiny{{\pm {ci95_val:.2f}}}}}$"
+                row.append(cell_value)
+        
+        lines.append(" & ".join(row) + r" \\")
+    
+    lines.append(r"\bottomrule")
+    lines.append(r"\end{tabular}")
+    lines.append(r"}")
+    lines.append(r"\end{table}")
+    
+    table_content = "\n".join(lines)
+    filename = os.path.join(output_path, 'ted_metrics_table.tex')
+    with open(filename, 'w') as f:
+        f.write(table_content)
+    
+    print(f"TED metrics table saved to: {filename}")
+
+
+def generate_complexity_metrics_table(
+    complexity_results,
+    custom_order,
+    model_styles,
+    output_path,
+    metric='node_count'
+):
+    """
+    Generate a LaTeX table showing equation complexity metrics for all datasets and models.
+    
+    Table structure:
+    - Rows: Models
+    - Columns: Datasets
+    - Each cell: mean complexity ± 95% CI
+    
+    Args:
+        complexity_results: DataFrame with complexity metrics
+        custom_order: List of datasets in desired order
+        model_styles: Dictionary with model styling information
+        output_path: Directory path to save the table
+        metric: Which complexity metric to use (default: 'node_count')
+    """
+    os.makedirs(output_path, exist_ok=True)
+    
+    col_name = f'complexity_{metric}'
+    
+    # Filter datasets that are in custom_order
+    comp_filtered = complexity_results[complexity_results['dataset'].isin(custom_order)].copy()
+    
+    if comp_filtered.empty or col_name not in comp_filtered.columns:
+        print(f"No complexity metrics ({metric}) found for the specified datasets.")
+        return
+    
+    # Get ordered datasets present in the data
+    datasets = [d for d in custom_order if d in comp_filtered['dataset'].unique()]
+    
+    # Get ordered models present in the data - only include models that have complexity values
+    comp_with_values = comp_filtered[comp_filtered[col_name].notna()]
+    all_models = comp_with_values['model'].unique()
+    models = [m for m in models_order if m in all_models]
+    
+    # Aggregate complexity metrics by dataset and model
+    agg_df = comp_filtered.groupby(['dataset', 'model'])[col_name].agg(['mean', 'std', 'count']).reset_index()
+    agg_df['ci95'] = 1.96 * agg_df['std'] / np.sqrt(agg_df['count'])
+    
+    # Metric display names
+    metric_names = {
+        'node_count': 'Node Count',
+        'depth': 'Tree Depth',
+        'visitation_length': 'Expression Complexity',
+        'total_variables': 'Total Variables',
+        'total_operations': 'Total Operations',
+        'weighted_node_count': 'Weighted Node Count'
+    }
+    metric_display = metric_names.get(metric, metric)
+    
+    # Build LaTeX table
+    lines = []
+    lines.append(r"\begin{table}[h]")
+    lines.append(r"\centering")
+    lines.append(r"\caption{Complexity (" + metric_display + r") of learned expressions, reported as mean $\pm$ 95\% confidence interval.}")
+    lines.append(r"\label{tab:complexity_" + metric + r"}")
+    
+    # Column format: Model + 1 column per dataset
+    n_datasets = len(datasets)
+    col_format = "l" + "c" * n_datasets
+    
+    lines.append(r"\resizebox{\columnwidth}{!}{%")
+    lines.append(r"\begin{tabular}{" + col_format + r"}")
+    lines.append(r"\toprule")
+    
+    # Header row: dataset names
+    header_row = ["Model"]
+    for dataset in datasets:
+        dataset_name = get_df_name(dataset)
+        header_row.append(dataset_name)
+    lines.append(" & ".join(header_row) + r" \\")
+    lines.append(r"\midrule")
+    
+    # Data rows
+    for model in models:
+        model_display = model_styles[model]['name'] if model in model_styles else model
+        row = [model_display.replace("_", r"\_")]
+        
+        for dataset in datasets:
+            model_data = agg_df[(agg_df['dataset'] == dataset) & (agg_df['model'] == model)]
+            
+            if len(model_data) == 0:
+                row.append("--")
+                continue
+            
+            mean_val = model_data.iloc[0]['mean']
+            ci95_val = model_data.iloc[0]['ci95']
+            
+            if pd.isna(mean_val):
+                row.append("--")
+            else:
+                cell_value = rf"${mean_val:.1f}_{{\tiny{{\pm {ci95_val:.1f}}}}}$"
+                row.append(cell_value)
+        
+        lines.append(" & ".join(row) + r" \\")
+    
+    lines.append(r"\bottomrule")
+    lines.append(r"\end{tabular}")
+    lines.append(r"}")
+    lines.append(r"\end{table}")
+    
+    table_content = "\n".join(lines)
+    filename = os.path.join(output_path, f'complexity_{metric}_table.tex')
+    with open(filename, 'w') as f:
+        f.write(table_content)
+    
+    print(f"Complexity ({metric}) table saved to: {filename}")
+
 
 def global_verifiability_plot(paths, dataset='awa2_incomplete', memory_size=4, label_font=None, tick_font=None, legend_font=None):
     """
@@ -3231,9 +3596,9 @@ def global_verifiability_plot(paths, dataset='awa2_incomplete', memory_size=4, l
     
     print(f"Valid concept-class pairs with both models and 2+ unique lin_sym values: {len(valid_pairs)}")
     
-    # Randomly select at least 50 pairs
+    # Randomly select 30 pairs
     np.random.seed(42)  # For reproducibility
-    n_plots = min(max(50, len(valid_pairs)), len(valid_pairs))
+    n_plots = min(30, len(valid_pairs))
     selected_pairs = np.random.choice(len(valid_pairs), size=n_plots, replace=False)
     selected_pairs = [valid_pairs[i] for i in selected_pairs]
     
@@ -3248,21 +3613,40 @@ def global_verifiability_plot(paths, dataset='awa2_incomplete', memory_size=4, l
         licem_weights = data_by_concept_class[(concept, pred_class)]['licem']
         lin_sym_weights = data_by_concept_class[(concept, pred_class)]['lin_sym']
         
-        # Create the plot with dual y-axes (wider figure)
-        fig, ax1 = plt.subplots(figsize=(16, 5))
+        # Create the plot with dual y-axes (wider figure, more pronounced width)
+        fig, ax1 = plt.subplots(figsize=(14, 4))
         ax2 = ax1.twinx()
         
-        # Plot licem weights as continuous line on left axis
+        # Plot licem weights as continuous line on left axis using KDE
         if licem_weights:
-            # Use histogram with Gaussian smoothing for smooth density estimation
-            counts, bins = np.histogram(licem_weights, bins=50, density=True)
-            bin_centers = (bins[:-1] + bins[1:]) / 2
+            from scipy.stats import gaussian_kde
             
-            # Apply Gaussian smoothing to make it smoother
-            smoothed_counts = gaussian_filter1d(counts, sigma=2)
+            licem_arr = np.array(licem_weights)
             
-            ax1.plot(bin_centers, smoothed_counts, '-', color='tab:blue', linewidth=2.5, 
-                    label=f'LICEM (n={len(licem_weights)})', alpha=0.8)
+            # Compute data range with padding to show density tapering to zero
+            data_min, data_max = licem_arr.min(), licem_arr.max()
+            data_range = data_max - data_min
+            padding = max(0.3 * data_range, 0.5)  # At least 30% padding or 0.5 units
+            
+            # Use Kernel Density Estimation for smooth density that tapers to zero
+            try:
+                kde = gaussian_kde(licem_arr, bw_method='silverman')
+                
+                # Extend evaluation range beyond data to show zero-tapering boundaries
+                x_eval = np.linspace(data_min - padding, data_max + padding, 200)
+                density = kde(x_eval)
+                
+                ax1.plot(x_eval, density, '-', color='tab:blue', linewidth=2.5, 
+                        label=f'LICEM (n={len(licem_weights)})', alpha=0.8)
+                # Optional: fill under the curve for better visualization
+                ax1.fill_between(x_eval, density, alpha=0.2, color='tab:blue')
+            except Exception as e:
+                # Fallback to histogram if KDE fails (e.g., too few unique values)
+                counts, bins = np.histogram(licem_weights, bins=50, density=True)
+                bin_centers = (bins[:-1] + bins[1:]) / 2
+                smoothed_counts = gaussian_filter1d(counts, sigma=2)
+                ax1.plot(bin_centers, smoothed_counts, '-', color='tab:blue', linewidth=2.5, 
+                        label=f'LICEM (n={len(licem_weights)})', alpha=0.8)
         
         # Plot linear_symbolic_cbm weights as bars on right axis
         if lin_sym_weights:
@@ -3287,17 +3671,25 @@ def global_verifiability_plot(paths, dataset='awa2_incomplete', memory_size=4, l
         class_display = pred_class.replace('+', ' ')
         class_filename = pred_class.replace('+', '_')
         
-        ax1.set_xlabel('Weight', fontsize=label_font['size'], fontweight='bold')
-        ax1.set_ylabel('Density', fontsize=label_font['size'], fontweight='bold', color='tab:blue')
-        ax2.set_ylabel('Probability', fontsize=label_font['size'], fontweight='bold', color='tab:orange')
+        # Use larger fonts specifically for this plot
+        local_label_size = 44
+        local_tick_size = 36
+        
+        ax1.set_xlabel('Weight', fontsize=local_label_size, fontweight='bold')
+        ax1.set_ylabel('Density', fontsize=local_label_size, fontweight='bold', color='tab:blue')
+        ax2.set_ylabel('Probability', fontsize=local_label_size, fontweight='bold', color='tab:orange')
+        
+        # Align both y-axes to start at zero
+        ax1.set_ylim(bottom=0)
+        ax2.set_ylim(bottom=0)
         
         # Eliminate minor ticks
         ax1.minorticks_off()
         ax2.minorticks_off()
         
         ax1.grid(True, alpha=0.3, which='both')
-        ax1.tick_params(axis='both', which='major', labelsize=tick_font['size'], color='tab:blue', labelcolor='tab:blue')
-        ax2.tick_params(axis='y', which='major', labelsize=tick_font['size'], color='tab:orange', labelcolor='tab:orange')
+        ax1.tick_params(axis='both', which='major', labelsize=local_tick_size, color='tab:blue', labelcolor='tab:blue')
+        ax2.tick_params(axis='y', which='major', labelsize=local_tick_size, color='tab:orange', labelcolor='tab:orange')
         
         # Save the figure
         save_filename = f'{concept}_{class_filename}.pdf'
@@ -3403,8 +3795,9 @@ def get_adaptability_exp_from_path(base_paths, constraint_configs):
                     predictions_file = os.path.join(exp, 'logs/experiment_metrics/test_predictions_per_sample.csv')
                     if os.path.exists(predictions_file):
                         try:
-                            with timeout(3):
-                                df_pred = pd.read_csv(predictions_file)
+                            # with timeout(3):
+                            #     df_pred = pd.read_csv(predictions_file)
+                            df_pred = pd.read_csv(predictions_file)
                             
                             if 'equation' in df_pred.columns:
                                 vars = [x.replace('c_pred_','') for x in df_pred.columns if 'c_pred' in x]
@@ -3448,109 +3841,110 @@ def get_adaptability_exp_from_path(base_paths, constraint_configs):
                 
             except Exception as e:
                 print(f"Error while processing original experiment {exp}: {e}")
-            
-        # Now process each constraint directory
-        for constraint_dir in constraint_dirs:
-            constraint_name = constraint_dir.split('_')[1]
-            constraint_path = os.path.join(exp, 'logs', 'experiment_metrics', constraint_dir)
-            
-            d = {}
-            result_file = os.path.join(constraint_path, 'metrics.csv')
-            
-            try:
-                if not os.path.exists(result_file):
-                    continue
-                    
-                d['seed'] = main_conf['seed']
-                d['dataset'] = main_conf['dataset']['metadata']['name']
-                # Append constraint name to model name
-                d['model'] = f"{main_conf['model']['metadata']['name']}_{constraint_name}"
-                d['base_model'] = main_conf['model']['metadata']['name']
-                d['constraint_config'] = constraint_name
-                d['memory_size'] = main_conf['memory_size']
-                d['concept_percentage'] = main_conf.get('concept_percentage', 1.0)
-                d['task_type'] = main_conf['dataset']['metadata']['task']
-                d['path'] = constraint_path
-
-                with open(result_file, 'r') as file:
-                    result = pd.read_csv(file)
-
-                # Select the last row for test metrics
-                if 'test/y/mse' in result.columns:
-                    d['task_mse'] = result['test/y/mse'].iloc[-1]
-                    d['task_mae'] = result['test/y/mae'].iloc[-1]
-                else:
-                    d['task_acc'] = result['test/y/acc'].iloc[-1]
-
-                if main_conf['model']['metadata']['name'] != 'blackbox':
-                    if 'test/c/mse' in result.columns:
-                        d['concept_mse'] = result['test/c/mse'].iloc[-1]
-                        d['concept_mae'] = result['test/c/mae'].iloc[-1]
-                    else:
-                        d['concept_acc'] = result['test/c/acc'].iloc[-1]
                 
-                # Compute complexity for equations
-                predictions_file = os.path.join(constraint_path, 'test_predictions_per_sample.csv')
-                if os.path.exists(predictions_file):
-                    try:
-                        with timeout(3):
-                            df_pred = pd.read_csv(predictions_file)
+            # Now process each constraint directory
+            for constraint_dir in constraint_dirs:
+                constraint_name = constraint_dir.split('_')[1]
+                constraint_path = os.path.join(exp, 'logs', 'experiment_metrics', constraint_dir)
+                
+                d = {}
+                result_file = os.path.join(constraint_path, 'metrics.csv')
+                
+                try:
+                    if not os.path.exists(result_file):
+                        continue
                         
-                        if 'equation' in df_pred.columns:
-                            vars = [x.replace('c_pred_','') for x in df_pred.columns if 'c_pred' in x]
-                            
-                            equation_counts = df_pred['equation'].value_counts().to_dict()
-                            equation_counts = {eq: cnt for eq, cnt in equation_counts.items() if pd.notna(eq) and eq != ''}
+                    d['seed'] = main_conf['seed']
+                    d['dataset'] = main_conf['dataset']['metadata']['name']
+                    # Append constraint name to model name
+                    d['model'] = f"{main_conf['model']['metadata']['name']}_{constraint_name}"
+                    d['base_model'] = main_conf['model']['metadata']['name']
+                    d['constraint_config'] = constraint_name
+                    d['memory_size'] = main_conf['memory_size']
+                    d['concept_percentage'] = main_conf.get('concept_percentage', 1.0)
+                    d['task_type'] = main_conf['dataset']['metadata']['task']
+                    d['path'] = constraint_path
 
-                            # Clean equations
-                            cleaned_equation_counts = {}
-                            for eq, cnt in equation_counts.items():
-                                if ':' in eq:
-                                    cleaned_eq = eq.split(':')[1].strip()
-                                else:
-                                    cleaned_eq = eq
-                                if cleaned_eq in cleaned_equation_counts:
-                                    cleaned_equation_counts[cleaned_eq] += cnt
-                                else:
-                                    cleaned_equation_counts[cleaned_eq] = cnt
+                    with open(result_file, 'r') as file:
+                        result = pd.read_csv(file)
 
-                            # Compute all complexity metrics
-                            complexity_metrics = COMPLEXITY_METRICS_LIST
-                            complexity_totals = {metric: 0 for metric in complexity_metrics}
-                            
-                            for eq, _ in tqdm(cleaned_equation_counts.items(), 
-                                            desc=f"Complexity, {d['model']}, {d['dataset']}", 
-                                            leave=False):
-                                sympy_eq = sympify(eq, locals={var: symbols(var) for var in vars})
-                                for metric in complexity_metrics:
-                                    complexity_totals[metric] += compute_complexity(sympy_eq, metric=metric)
-                            
-                            for metric in complexity_metrics:
-                                d[f'complexity_{metric}'] = complexity_totals[metric]
+                    # Select the last row for test metrics
+                    if 'test/y/mse' in result.columns:
+                        d['task_mse'] = result['test/y/mse'].iloc[-1]
+                        d['task_mae'] = result['test/y/mae'].iloc[-1]
+                    else:
+                        d['task_acc'] = result['test/y/acc'].iloc[-1]
+
+                    if main_conf['model']['metadata']['name'] != 'blackbox':
+                        if 'test/c/mse' in result.columns:
+                            d['concept_mse'] = result['test/c/mse'].iloc[-1]
+                            d['concept_mae'] = result['test/c/mae'].iloc[-1]
+                        else:
+                            d['concept_acc'] = result['test/c/acc'].iloc[-1]
                     
-                    except Exception as e:
-                        print(f"Error computing complexity for {constraint_path}: {e}")
-                        complexity_metrics = COMPLEXITY_METRICS_LIST
-                        for metric in complexity_metrics:
-                            d[f'complexity_{metric}'] = np.nan
+                    # Compute complexity for equations
+                    predictions_file = os.path.join(constraint_path, 'test_predictions_per_sample.csv')
+                    if os.path.exists(predictions_file):
+                        try:
+                            with timeout(3):
+                                df_pred = pd.read_csv(predictions_file)
+                            
+                            if 'equation' in df_pred.columns:
+                                vars = [x.replace('c_pred_','') for x in df_pred.columns if 'c_pred' in x]
+                                
+                                equation_counts = df_pred['equation'].value_counts().to_dict()
+                                equation_counts = {eq: cnt for eq, cnt in equation_counts.items() if pd.notna(eq) and eq != ''}
 
-                performance = pd.concat([performance, pd.DataFrame([d])], ignore_index=True)
-                
-            except Exception as e:
-                print(f"Error while processing {constraint_path}: {e}")
-                continue
+                                # Clean equations
+                                cleaned_equation_counts = {}
+                                for eq, cnt in equation_counts.items():
+                                    if ':' in eq:
+                                        cleaned_eq = eq.split(':')[1].strip()
+                                    else:
+                                        cleaned_eq = eq
+                                    if cleaned_eq in cleaned_equation_counts:
+                                        cleaned_equation_counts[cleaned_eq] += cnt
+                                    else:
+                                        cleaned_equation_counts[cleaned_eq] = cnt
+
+                                # Compute all complexity metrics
+                                complexity_metrics = COMPLEXITY_METRICS_LIST
+                                complexity_totals = {metric: 0 for metric in complexity_metrics}
+                                
+                                for eq, _ in tqdm(cleaned_equation_counts.items(), 
+                                                desc=f"Complexity, {d['model']}, {d['dataset']}", 
+                                                leave=False):
+                                    sympy_eq = sympify(eq, locals={var: symbols(var) for var in vars})
+                                    for metric in complexity_metrics:
+                                        complexity_totals[metric] += compute_complexity(sympy_eq, metric=metric)
+                                
+                                for metric in complexity_metrics:
+                                    d[f'complexity_{metric}'] = complexity_totals[metric]
+                        
+                        except Exception as e:
+                            print(f"Error computing complexity for {constraint_path}: {e}")
+                            complexity_metrics = COMPLEXITY_METRICS_LIST
+                            for metric in complexity_metrics:
+                                d[f'complexity_{metric}'] = np.nan
+
+                    performance = pd.concat([performance, pd.DataFrame([d])], ignore_index=True)
+                    
+                except Exception as e:
+                    print(f"Error while processing {constraint_path}: {e}")
+                    continue
 
     return performance
 
 
 def generate_adaptability_table(performance, datasets, output_path, regression_datasets):
     """
-    Generate a table for adaptability experiments with datasets as columns and 
-    sub-columns for MAE, MSE, and complexity metrics.
+    Generate a LaTeX table for adaptability experiments with datasets as columns,
+    each split into MAE and Nodes sub-columns. Rows are models.
+    Designed to fit in a single column of a two-column paper format.
     
     Args:
         performance: DataFrame with performance data
-        datasets: List of dataset names
+        datasets: List of dataset names (in order)
         output_path: Directory to save the table
         regression_datasets: List of regression dataset names
     """
@@ -3558,65 +3952,207 @@ def generate_adaptability_table(performance, datasets, output_path, regression_d
     
     os.makedirs(output_path, exist_ok=True)
     
-    # Complexity metrics
-    complexity_metrics = COMPLEXITY_METRICS_LIST
+    # Get models present in the data
+    models_in_data = performance['model'].unique()
     
-    # Group by model (which includes constraint config) and dataset
+    # Sort models according to models_order (from show_results.py)
+    # The model names in data are like "sr_symbolic_cbm_original", "sr_symbolic_cbm_simple"
+    # We need to order by base model first, then by constraint config
+    constraint_order = ['original', 'simple', 'medium', 'complex']
+    
+    def model_sort_key(model_name):
+        # Extract base model and constraint config
+        parts = model_name.rsplit('_', 1)
+        if len(parts) == 2 and parts[1] in constraint_order:
+            base_model = parts[0]
+            constraint = parts[1]
+        else:
+            base_model = model_name
+            constraint = 'original'
+        
+        # Get base model order
+        base_order = models_order.index(base_model) if base_model in models_order else 999
+        constraint_order_idx = constraint_order.index(constraint) if constraint in constraint_order else 999
+        
+        return (base_order, constraint_order_idx)
+    
+    sorted_models = sorted(models_in_data, key=model_sort_key)
+    
+    # Filter datasets to only those present in data and in custom_order
+    datasets_in_data = performance['dataset'].unique()
+    ordered_datasets = [d for d in custom_order if d in datasets_in_data and d in datasets]
+    
+    # Group by model and dataset
     grouped = performance.groupby(['model', 'dataset']).agg({
         'task_mae': ['mean', 'std'],
-        'task_mse': ['mean', 'std'],
-        **{f'complexity_{metric}': ['mean', 'std'] for metric in complexity_metrics}
+        'complexity_node_count': ['mean', 'std'],
     })
     
-    # Create multi-index for columns
-    table_data = []
-    models = sorted(performance['model'].unique())
+    # Build LaTeX table - compact version for single column
+    lines = []
     
-    for model in models:
-        row = {'Model': model}
-        for dataset in datasets:
-            if dataset in performance['dataset'].values:
-                model_dataset = grouped.loc[(model, dataset)] if (model, dataset) in grouped.index else None
-                
-                if model_dataset is not None:
-                    # Add MAE
+    # Number of datasets
+    n_datasets = len(ordered_datasets)
+    
+    # Column format: l for model name, then 2 columns per dataset (MAE | Nodes)
+    col_format = "l" + "cc" * n_datasets
+    
+    lines.append(r"\begin{table}[t]")
+    lines.append(r"\centering")
+    lines.append(r"\caption{Adaptability Experiment Results}")
+    lines.append(r"\label{tab:adaptability}")
+    lines.append(r"\setlength{\tabcolsep}{3pt}")  # Reduce column padding
+    lines.append(r"\resizebox{\columnwidth}{!}{%")
+    lines.append(r"\begin{tabular}{" + col_format + r"}")
+    lines.append(r"\toprule")
+    
+    # First header row: dataset names spanning 2 columns each
+    header1_parts = [""]
+    for dataset in ordered_datasets:
+        dataset_display = get_df_name(dataset)
+        header1_parts.append(r"\multicolumn{2}{c}{" + dataset_display + "}")
+    lines.append(" & ".join(header1_parts) + r" \\")
+    
+    # Add cmidrule for each dataset
+    cmidrule_parts = []
+    for i, _ in enumerate(ordered_datasets):
+        start_col = 2 + i * 2
+        end_col = start_col + 1
+        cmidrule_parts.append(rf"\cmidrule(lr){{{start_col}-{end_col}}}")
+    lines.append(" ".join(cmidrule_parts))
+    
+    # Second header row: MAE | Nodes for each dataset
+    header2_parts = ["Model"]
+    for _ in ordered_datasets:
+        header2_parts.append("MAE")
+        header2_parts.append("Complexity")
+    lines.append(" & ".join(header2_parts) + r" \\")
+    lines.append(r"\midrule")
+    
+    # Compact constraint abbreviations
+    constraint_abbrev = {'original': 'Orig.', 'simple': 'S', 'medium': 'M', 'complex': 'C'}
+    
+    # Data rows
+    for model in sorted_models:
+        # Get display name for model
+        # Extract base model and constraint
+        parts = model.rsplit('_', 1)
+        if len(parts) == 2 and parts[1] in constraint_order:
+            base_model = parts[0]
+            constraint = parts[1]
+        else:
+            base_model = model
+            constraint = ''
+        
+        # Get display name from model_styles
+        if base_model in model_styles:
+            base_display = model_styles[base_model]['name']
+        else:
+            base_display = base_model.replace('_', ' ').title()
+        
+        # Add constraint suffix with abbreviation
+        if constraint and constraint in constraint_abbrev:
+            model_display = f"{base_display} ({constraint_abbrev[constraint]})"
+        else:
+            model_display = base_display
+        
+        row_parts = [model_display]
+        
+        for dataset in ordered_datasets:
+            try:
+                if (model, dataset) in grouped.index:
+                    model_dataset = grouped.loc[(model, dataset)]
+                    
+                    # MAE - compact format with std in scriptscriptstyle
                     mae_mean = model_dataset[('task_mae', 'mean')]
                     mae_std = model_dataset[('task_mae', 'std')]
-                    row[f'{dataset}_mae'] = f"{mae_mean:.3f} ± {mae_std:.3f}"
-                    
-                    # Add MSE
-                    mse_mean = model_dataset[('task_mse', 'mean')]
-                    mse_std = model_dataset[('task_mse', 'std')]
-                    row[f'{dataset}_mse'] = f"{mse_mean:.3f} ± {mse_std:.3f}"
-                    
-                    # Add complexity metrics
-                    for i, metric in enumerate(complexity_metrics, 1):
-                        comp_mean = model_dataset[(f'complexity_{metric}', 'mean')]
-                        comp_std = model_dataset[(f'complexity_{metric}', 'std')]
-                        if pd.notna(comp_mean):
-                            row[f'{dataset}_complexity_{i}'] = f"{comp_mean:.1f} ± {comp_std:.1f}"
+                    if pd.notna(mae_mean):
+                        if pd.notna(mae_std) and mae_std >= 0.01:
+                            mae_cell = rf"${mae_mean:.2f}{{\scriptstyle\pm{mae_std:.2f}}}$"
                         else:
-                            row[f'{dataset}_complexity_{i}'] = "N/A"
+                            mae_cell = rf"${mae_mean:.2f}{{\scriptstyle<0.01}}$"
+                    else:
+                        mae_cell = "--"
+                    
+                    # Nodes (complexity_node_count) - compact format
+                    # NA complexity means only one node, so replace with 1
+                    nodes_mean = model_dataset[('complexity_node_count', 'mean')]
+                    nodes_std = model_dataset[('complexity_node_count', 'std')]
+                    if not pd.notna(nodes_mean):
+                        nodes_mean = 1.0  # NA means only one node
+                        nodes_std = 0.0
+                    if pd.notna(nodes_std) and nodes_std >= 0.01:
+                        nodes_cell = rf"${nodes_mean:.1f}{{\scriptstyle\pm{nodes_std:.1f}}}$"
+                    else:
+                        nodes_cell = rf"${nodes_mean:.1f}{{\scriptstyle<0.01}}$"
+                else:
+                    mae_cell = "--"
+                    nodes_cell = "--"
+            except Exception:
+                mae_cell = "--"
+                nodes_cell = "--"
+            
+            row_parts.append(mae_cell)
+            row_parts.append(nodes_cell)
+        
+        lines.append(" & ".join(row_parts) + r" \\")
+    
+    lines.append(r"\bottomrule")
+    lines.append(r"\end{tabular}")
+    lines.append(r"}")  # end resizebox
+    lines.append(r"\end{table}")
+    
+    # Join lines and save
+    table_latex = "\n".join(lines)
+    
+    latex_path = os.path.join(output_path, 'adaptability_results.tex')
+    with open(latex_path, 'w') as f:
+        f.write(table_latex)
+    print(f"LaTeX table saved to {latex_path}")
+    
+    # Also save CSV for reference
+    table_data = []
+    for model in sorted_models:
+        parts = model.rsplit('_', 1)
+        if len(parts) == 2 and parts[1] in constraint_order:
+            base_model = parts[0]
+            constraint = parts[1]
+        else:
+            base_model = model
+            constraint = ''
+        
+        if base_model in model_styles:
+            base_display = model_styles[base_model]['name']
+        else:
+            base_display = base_model.replace('_', ' ').title()
+        
+        if constraint and constraint in constraint_abbrev:
+            model_display = f"{base_display} ({constraint_abbrev[constraint]})"
+        else:
+            model_display = base_display
+        
+        row = {'Model': model_display}
+        for dataset in ordered_datasets:
+            try:
+                if (model, dataset) in grouped.index:
+                    model_dataset = grouped.loc[(model, dataset)]
+                    mae_mean = model_dataset[('task_mae', 'mean')]
+                    mae_std = model_dataset[('task_mae', 'std')]
+                    nodes_mean = model_dataset[('complexity_node_count', 'mean')]
+                    nodes_std = model_dataset[('complexity_node_count', 'std')]
+                    row[f'{dataset}_mae'] = f"{mae_mean:.3f} ± {mae_std:.3f}" if pd.notna(mae_mean) else "N/A"
+                    row[f'{dataset}_nodes'] = f"{nodes_mean:.1f} ± {nodes_std:.1f}" if pd.notna(nodes_mean) else "N/A"
                 else:
                     row[f'{dataset}_mae'] = "N/A"
-                    row[f'{dataset}_mse'] = "N/A"
-                    for i in range(1, len(complexity_metrics) + 1):
-                        row[f'{dataset}_complexity_{i}'] = "N/A"
-        
+                    row[f'{dataset}_nodes'] = "N/A"
+            except Exception:
+                row[f'{dataset}_mae'] = "N/A"
+                row[f'{dataset}_nodes'] = "N/A"
         table_data.append(row)
     
-    # Create DataFrame
     result_df = pd.DataFrame(table_data)
-    
-    # Save to CSV
     csv_path = os.path.join(output_path, 'adaptability_results.csv')
     result_df.to_csv(csv_path, index=False)
-    print(f"Adaptability table saved to {csv_path}")
-    
-    # Also create a formatted version
-    formatted_path = os.path.join(output_path, 'adaptability_results_formatted.txt')
-    with open(formatted_path, 'w') as f:
-        f.write(result_df.to_string(index=False))
-    print(f"Formatted table saved to {formatted_path}")
+    print(f"CSV table saved to {csv_path}")
     
     return result_df

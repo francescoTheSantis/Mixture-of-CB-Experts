@@ -4,6 +4,7 @@ Used by the Engine class during test time to collect per-sample equation data.
 """
 
 import torch
+import sympy as sp
 from tqdm import tqdm
 
 
@@ -281,9 +282,33 @@ def extract_memory_equations(model, model_name):
                 eq_strs = [f"{eq_name}: {trainable_eqs[set_name][eq_name].get_equation_string()}" for eq_name in eq_names[set_name]]
                 equations[mem_idx] = "; ".join(eq_strs)
         else:
-            # BlackBoxPredictor or not yet trained
-            no_eq_msg = "No symbolic equations (BlackBoxPredictor)"
-            equations = {mem_idx: no_eq_msg for mem_idx in range(getattr(model, 'memory_size', 1))}
+            # BlackBoxPredictor - extract equations from each predictor in memory
+            memory_size = getattr(model, 'memory_size', 1)
+            y_names = model.y_names
+            c_names = model.c_names
+            
+            for mem_idx in tqdm(range(memory_size), desc="Extracting blackbox equations", leave=False):
+                # Get the predictor for this memory slot
+                predictor_module = predictor.memory_of_predictors[mem_idx]
+                
+                # Check if it's an MLP (supports input_names) or Linear encoder
+                if hasattr(predictor_module, 'mlp'):
+                    # MLPEncoder - pass concept names for readable equations
+                    eq_result = predictor_module.to_symbolic(input_names=c_names)
+                else:
+                    # LinearEncoder - doesn't support input_names
+                    eq_result = predictor_module.to_symbolic()
+                
+                # Format the equations with output names
+                # to_symbolic returns a list for multi-output, single expr for single output
+                if isinstance(eq_result, list):
+                    # Multi-output: list of equations
+                    eq_strs = [f"{y_names[i]}: {eq}" for i, eq in enumerate(eq_result)]
+                    equations[mem_idx] = "; ".join(eq_strs)
+                else:
+                    # Single output (sympy expression)
+                    y_name = y_names[0] if isinstance(y_names, list) else y_names
+                    equations[mem_idx] = f"{y_name}: {eq_result}"
 
     elif model_name == 'MemoryCBM':
         # Get the symbolic equivalent of each blackbox predictor

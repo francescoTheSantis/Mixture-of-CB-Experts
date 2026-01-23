@@ -71,32 +71,50 @@ MEMORY_MODELS_LIST = ['cmr', 'linear_symbolic_cbm', 'sr_symbolic_cbm', 'prior_sy
 
 COMPLEXITY_METRICS_LIST = ['node_count', 'depth', 'visitation_length', 'total_variables', 'total_operations', 'weighted_node_count']
 
+NUMBER_OF_CLASSES_PER_DATASET = {
+    'awa2': 50,
+    'awa2_incomplete': 50,
+    'cub': 200,
+    'cub_incomplete': 200,
+    'cifar10': 10,
+}
+
 # Generate colors from a colormap
 cmap = plt.cm.RdYlGn 
 colors = list(reversed([cmap(i) for i in np.linspace(0, 1, 5)]))
 
 model_styles = {
-    # =========================
-    # BASELINES (non-verifiable)
-    # =========================
+
     'blackbox': {'marker': 'o', 'name': 'BlackBox', 'color': 'tab:gray', 'size': marker_size, 'fillstyle': 'none'},
     'cem': {'marker': 's', 'name': 'CEM', 'color': 'tab:red', 'size': marker_size, 'fillstyle': 'none'},
-    'licem': {'marker': 'D', 'name': 'LICEM', 'color': 'tab:brown', 'size': marker_size, 'fillstyle': 'none'},
+
+    'licem': {'marker': '^', 'name': 'LICEM', 'color': 'mediumpurple', 'size': marker_size, 'fillstyle': 'none'},
     'dcr': {'marker': 'v', 'name': 'DCR', 'color': 'tab:purple', 'size': marker_size, 'fillstyle': 'none'},
-    # =========================
-    # BASELINE but VERIFIABLE
-    # =========================
-    'cmr': {'marker': 'P', 'name': 'CMR', 'color': 'yellow', 'size': marker_size, 'fillstyle': 'none'},
-    'cbm_linear': {'marker': '^', 'name': 'CBM', 'color': 'tab:orange', 'size': marker_size, 'fillstyle': 'none'},
-    # =========================
-    # PROPOSED MODELS (verifiable)
-    # =========================
-    'memory_cbm': {'marker': 'X', 'name': 'MLP-Mem-CBM', 'color': 'tab:blue', 'size': marker_size, 'fillstyle': 'none'},
+
+    'cbm_linear': {'marker': 'X', 'name': 'CBM', 'color': 'tab:orange', 'size': marker_size, 'fillstyle': 'none'},
+    'cmr': {'marker': 'P', 'name': 'CMR', 'color': 'gold', 'size': marker_size, 'fillstyle': 'none'},
+
+    'memory_cbm': {'marker': '*', 'name': 'MLP-Mem-CBM', 'color': 'tab:blue', 'size': marker_size, 'fillstyle': 'none'},
     'prior_symbolic_cbm': {'marker': '*', 'name': 'Prior-Mem-CBM', 'color': 'tab:cyan', 'size': marker_size, 'fillstyle': 'none'},
-    'sr_symbolic_cbm': {'marker': 'h', 'name': 'Sym-Mem-CBM', 'color': 'tab:green', 'size': marker_size, 'fillstyle': 'none'},
-    'linear_symbolic_cbm': {'marker': '8', 'name': 'Lin-Mem-CBM', 'color': 'tab:olive', 'size': marker_size, 'fillstyle': 'none'},
-    'kan_symbolic_cbm': {'marker': 'p', 'name': 'Kan-Mem-CBM', 'color': 'tab:teal', 'size': marker_size, 'fillstyle': 'none'},
+
+    'kan_symbolic_cbm': {'marker': 's', 'name': 'Kan-Mem-CBM', 'color': 'darkgreen', 'size': marker_size, 'fillstyle': 'none'},
+    'linear_symbolic_cbm': {'marker': 'h', 'name': 'Lin-Mem-CBM', 'color': 'limegreen', 'size': marker_size, 'fillstyle': 'none'},
+    'sr_symbolic_cbm': {'marker': 'o', 'name': 'Sym-Mem-CBM', 'color': 'tab:green', 'size': marker_size, 'fillstyle': 'none'},
 }
+
+models_order = [
+    'blackbox', 
+    'cem', 
+    'licem', 
+    'dcr', 
+    'cbm_linear', 
+    'cmr', 
+    'memory_cbm', 
+    'prior_symbolic_cbm', 
+    'kan_symbolic_cbm', 
+    'linear_symbolic_cbm', 
+    'sr_symbolic_cbm'
+]
 
 
 # Call the function with the desired metric and font properties
@@ -120,11 +138,11 @@ fixed_memory={
     'pendulum': 1,
     'mawps': 4,
     # classification datasets
-    'awa2': 1,
-    'awa2_incomplete': 1,
-    'cub': 1, 
-    'cub_incomplete': 1,
-    'cifar10': 1,
+    # 'awa2': 1,
+    # 'awa2_incomplete': 3,
+    # 'cub': 1, 
+    # 'cub_incomplete': 2,
+    # 'cifar10': 2,
 }
 
 def main():
@@ -202,6 +220,27 @@ def main():
         equations_df.to_csv(equations_csv_path, index=False)
         print(f"Learned equations saved to {equations_csv_path}")
 
+        # Generate TED metrics LaTeX table
+        print("\nGenerating TED metrics LaTeX table...")
+        generate_ted_metrics_table(
+            ted_results,
+            [d for d in custom_order if d in ted_results['dataset'].unique()],
+            model_styles,
+            os.path.join(table_path, 'sr_ablation')
+        )
+
+        # Generate complexity metrics LaTeX tables for each metric
+        print("\nGenerating complexity metrics LaTeX tables...")
+        complexity_metrics_list = ['node_count', 'depth', 'visitation_length', 'total_variables', 'total_operations', 'weighted_node_count']
+        for metric in complexity_metrics_list:
+            generate_complexity_metrics_table(
+                complexity_results,
+                [d for d in custom_order if d in complexity_results['dataset'].unique()],
+                model_styles,
+                os.path.join(table_path, 'sr_ablation'),
+                metric=metric
+            )
+
         # Now plot intervention results with noise=0.0
         performance = get_intervention_from_path(paths)
 
@@ -212,17 +251,19 @@ def main():
 
         # Plot intervention results
         for noise in performance['noise'].unique():
-            plot_intervention_results(performance, 
-                                        metric='accuracy', 
-                                        unique_noises=[noise], 
-                                        title_font=title_font, 
-                                        label_font=label_font, 
-                                        tick_font=tick_font, 
-                                        legend_font=legend_font,
-                                        custom_order=custom_order,
-                                        model_styles=model_styles,
-                                        relative_accuracy=False,
-                                        out_dir=f'{result_figs}/sr_ablation')
+            plot_intervention_results(
+                performance, 
+                metric='accuracy', 
+                unique_noises=[noise], 
+                title_font=title_font, 
+                label_font=label_font, 
+                tick_font=tick_font, 
+                legend_font=legend_font,
+                custom_order=custom_order,
+                model_styles=model_styles,
+                relative_accuracy=False,
+                out_dir=f'{result_figs}/sr_ablation'
+            )
 
     except Exception as e:
         print(f"Error occurred while plotting Symbolic Regression ablation results: {e}")
@@ -293,11 +334,11 @@ def main():
                 refined_custom_order,
                 complexity_metric=metric,
                 ranges=[
-                    [0,100], # awa2
-                    [0,100], # awa2 incomplete
-                    [0,100], # cub
-                    [0,100], # cub incomplete
-                    [0,100], # cifar10
+                    [[2, 5],[61,90]], # awa2
+                    [[2, 4.5], [25, 27]], # awa2 incomplete
+                    [[17, 38],[76, 101]], # cub
+                    [17,50], # cub incomplete
+                    [[10,23],[65,101]], # cifar10
                 ]
             )
         
@@ -357,7 +398,7 @@ def main():
 
     # global_verifiability_plot(
     #     paths, 
-    #     dataset='cub',  # Change dataset here
+    #     dataset='cub_incomplete',  # Change dataset here
     #     memory_size=4,     # Change memory size here
     #     label_font=label_font, 
     #     tick_font=tick_font, 
@@ -371,7 +412,12 @@ def main():
 
     try:
 
-        performance = get_exp_from_path_cached(paths, cache_name='memory_ablation', output_path=output_path)
+        # performance = get_exp_from_path_cached(paths, cache_name='memory_ablation', output_path=output_path)
+
+        # # Take the rows in the dataset when model=linear_symbolic_cbm and memory_size=1
+        # cbm = performance[(performance['model']=='linear_symbolic_cbm') & (performance['memory_size']==1)]
+        # cbm['model'] = 'cbm_linear'
+        # performance = pd.concat([performance, cbm], ignore_index=True)
 
         # Filter the experiments in order to show only the 
         performance = get_intervention_from_path(
@@ -390,7 +436,7 @@ def main():
                 metric='accuracy', 
                 # unique_noises=[noise], 
                 classification_noise=[noise],
-                regression_noise=[0.0],
+                regression_noise=[0.2],
                 title_font=title_font, 
                 label_font=label_font, 
                 tick_font=tick_font, 
@@ -400,11 +446,17 @@ def main():
                 relative_accuracy=False,
                 out_dir=f'{result_figs}',
                 ranges=[
-                    [0,100], # awa2
-                    [0,100], # awa2 incomplete
-                    [0,100], # cub
-                    [0,100], # cub incomplete
-                    [0,100], # cifar10
+                    [[0, 5],[70,80]], # awa2
+                    [[0,4],[22,27]], # awa2 incomplete
+                    [[0,40],[70,101]], # cub
+                    [0,45], # cub incomplete
+                    [[6,20],[80,95]], # cifar10
+                ],
+                regression_ranges=[
+                    [0, 1.5],
+                    [[0,1.7],[2, 3.4]],
+                    [[0, 4.1], [8,9]],
+                    [0, 15],
                 ]
             )
             
