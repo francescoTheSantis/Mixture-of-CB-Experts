@@ -657,17 +657,17 @@ def plot_intervention_results(
     has_classification = len(classification_datasets) > 0
     has_regression = len(found_regression_datasets) > 0
     
-    # If only one type exists, use both rows for that type
+    # If only one type exists, put all on a single row with legend below
     if has_classification and not has_regression:
-        # Only classification datasets - spread across 2 rows
+        # Only classification datasets - put all on one row
         organized_datasets = classification_datasets
-        n_cols = (len(classification_datasets) + 1) // 2  # Ceiling division
-        n_rows = 2
+        n_cols = len(classification_datasets)
+        n_rows = 1
     elif has_regression and not has_classification:
-        # Only regression datasets - spread across 2 rows
+        # Only regression datasets - put all on one row
         organized_datasets = found_regression_datasets
-        n_cols = (len(found_regression_datasets) + 1) // 2  # Ceiling division
-        n_rows = 2
+        n_cols = len(found_regression_datasets)
+        n_rows = 1
     else:
         # Both types exist - organize with regression first, then classification
         organized_datasets = found_regression_datasets + classification_datasets
@@ -714,13 +714,13 @@ def plot_intervention_results(
     for idx, dataset in enumerate(organized_datasets):
         # Determine row and column based on layout
         if has_classification and not has_regression:
-            # Only classification - spread across 2 rows
-            row = idx // n_cols
-            col = idx % n_cols
+            # Only classification - all on one row
+            row = 0
+            col = idx
         elif has_regression and not has_classification:
-            # Only regression - spread across 2 rows
-            row = idx // n_cols
-            col = idx % n_cols
+            # Only regression - all on one row
+            row = 0
+            col = idx
         else:
             # Both types - regression on row 0, classification on row 1
             if dataset in found_regression_datasets:
@@ -853,13 +853,11 @@ def plot_intervention_results(
         
         # Show xlabel only for the last row
         if has_classification and not has_regression:
-            # Only classification - show xlabel on last row
-            if row == n_rows - 1 or idx >= len(organized_datasets) - n_cols:
-                ax.set_xlabel('$p_{int}$', fontsize=label_font['size'])
+            # Only classification - all on one row, show xlabel on all
+            ax.set_xlabel('$p_{int}$', fontsize=label_font['size'])
         elif has_regression and not has_classification:
-            # Only regression - show xlabel on last row
-            if row == n_rows - 1 or idx >= len(organized_datasets) - n_cols:
-                ax.set_xlabel('$p_{int}$', fontsize=label_font['size'])
+            # Only regression - all on one row, show xlabel on all
+            ax.set_xlabel('$p_{int}$', fontsize=label_font['size'])
         else:
             # Both types - show xlabel on row 1 (classification row)
             if row == 1:
@@ -896,27 +894,11 @@ def plot_intervention_results(
     legend_ax = None
     
     if has_classification and not has_regression:
-        # Only classification - hide unused subplots in both rows
-        total_used = len(organized_datasets)
-        for i in range(total_used, n_rows * n_cols):
-            row = i // n_cols
-            col = i % n_cols
-            axes[row][col].set_visible(False)
-            # Use the last empty subplot for legend
-            if i == n_rows * n_cols - 1 and total_used < n_rows * n_cols:
-                legend_in_subplot = True
-                legend_ax = axes[row][col]
+        # Only classification on single row - legend always below
+        legend_in_subplot = False
     elif has_regression and not has_classification:
-        # Only regression - hide unused subplots in both rows
-        total_used = len(organized_datasets)
-        for i in range(total_used, n_rows * n_cols):
-            row = i // n_cols
-            col = i % n_cols
-            axes[row][col].set_visible(False)
-            # Use the last empty subplot for legend
-            if i == n_rows * n_cols - 1 and total_used < n_rows * n_cols:
-                legend_in_subplot = True
-                legend_ax = axes[row][col]
+        # Only regression on single row - legend always below
+        legend_in_subplot = False
     else:
         # Both types exist - original logic
         total_datasets = len(classification_datasets) + len(found_regression_datasets)
@@ -956,7 +938,7 @@ def plot_intervention_results(
             ncol=(len(custom_handles) + 1) // 2,  # Split legend into two rows
             fontsize=tick_font['size'],
             frameon=True,
-            bbox_to_anchor=(0.5, -0.15),
+            bbox_to_anchor=(0.5, -0.3),
             columnspacing=1.0,
             handletextpad=0.5
         )
@@ -1062,7 +1044,7 @@ def plot_intervention_results(
         if col == 0:
             ylabel = original_ax.get_ylabel()
             ax_bottom.yaxis.label.set_visible(False)
-            fig.text(pos.x0 - 0.1,
+            fig.text(pos.x0 - 0.039,
                     pos.y0 + pos.height / 2,
                     ylabel,
                     fontdict={'size': label_font['size']},
@@ -1266,7 +1248,8 @@ def plot_concept_size_ablation(
         model_styles, 
         title_font, 
         label_font, 
-        tick_font):
+        tick_font,
+        custom_order=None):
     """
     Plots the concept size ablation results.
     In this plot the concept accuracy is shown on the y axis while the
@@ -1281,46 +1264,88 @@ def plot_concept_size_ablation(
 
     # Avg over the seeds for the performance metrics
     performance = performance.groupby(['dataset', 'concept_percentage', 'model']).agg(
-        mean_task=('task', 'mean'),
-        std_task=('task', 'std'),
-        mean_concept=('concept', 'mean'),
-        std_concept=('concept', 'std')
+        mean_task=('task_acc', 'mean'),
+        std_task=('task_acc', 'std'),
+        mean_concept=('concept_acc', 'mean'),
+        std_concept=('concept_acc', 'std')
     ).reset_index()
     
     # instead of the std compute the standard error at 95% confidence
     performance['se_task'] = 1.96 * performance['std_task'] / np.sqrt(num_seeds)
     performance['se_concept'] = 1.96 * performance['std_concept'] / np.sqrt(num_seeds)
 
-    # Create a new figure
-    fig, ax = plt.subplots(figsize=(25, 10))
+    # Get unique datasets and order them according to custom_order
+    available_datasets = performance['dataset'].unique()
+    if custom_order is not None:
+        # Filter custom_order to only include datasets that exist in performance
+        ordered_datasets = [d for d in custom_order if d in available_datasets]
+        # Add any remaining datasets not in custom_order
+        remaining_datasets = [d for d in available_datasets if d not in ordered_datasets]
+        ordered_datasets.extend(remaining_datasets)
+    else:
+        ordered_datasets = list(available_datasets)
+    
+    n_datasets = len(ordered_datasets)
+    
+    # Calculate grid dimensions
+    n_cols = min(n_datasets, 4)  # Max 4 columns
+    n_rows = (n_datasets + n_cols - 1) // n_cols  # Ceiling division
 
-    # Iterate over each model and plot its performance
+    # Create subplots with larger figure size
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(8*n_cols, 7*n_rows), squeeze=False)
+    
+    # Flatten axes for easy iteration
+    axes_flat = axes.flatten()
+
+    # Iterate over each dataset
+    for idx, dataset in enumerate(ordered_datasets):
+        ax = axes_flat[idx]
+        dataset_data = performance[performance['dataset'] == dataset]
+        
+        # Iterate over each model and plot its performance
+        for model, style in model_styles.items():
+            if model in dataset_data['model'].values:
+                data = dataset_data[dataset_data['model'] == model]
+                ax.plot(data['concept_percentage'], data['mean_task'],
+                        label=style['name'], marker=style['marker'], color=style['color'],
+                        markersize=style['size'], markeredgecolor='black', markeredgewidth=0.1, alpha=0.8)
+                ax.fill_between(data['concept_percentage'], 
+                              data['mean_task'] - data['se_task'], 
+                              data['mean_task'] + data['se_task'], 
+                              color=style['color'], alpha=0.2)
+
+        # Set the title using get_df_name
+        ax.set_title(get_df_name(dataset), fontdict=title_font)
+        ax.set_xlabel("Concept Percentage", **label_font)
+        ax.set_ylabel("Accuracy", **label_font)
+
+        # Customize ticks
+        ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
+        ax.tick_params(axis='both', which='minor', bottom=False, left=False)
+        ax.minorticks_off()
+        ax.grid(True)
+
+    # Hide unused subplots
+    for idx in range(n_datasets, len(axes_flat)):
+        axes_flat[idx].set_visible(False)
+
+    # Create a single legend for all subplots
+    # Collect all unique models across all datasets
+    all_models_in_data = performance['model'].unique()
+    handles, labels = [], []
     for model, style in model_styles.items():
-        if model in performance['model'].values:
-            data = performance[performance['model'] == model]
-            ax.plot(data['concept_percentage'], data['mean_task'],
-                    label=style['name'], marker=style['marker'], color=style['color'])
-            ax.fill_between(data['concept_percentage'], 
-                          data['mean_task'] - data['se_task'], 
-                          data['mean_task'] + data['se_task'], 
-                          color=style['color'], alpha=0.2)
-
-    # Set the title and labels
-    ax.set_title("Concept Size Ablation", **title_font)
-    ax.set_xlabel("Dataset", **label_font)
-    ax.set_ylabel("Accuracy", **label_font)
-
-    # Customize ticks
-    ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
-    ax.grid(True)
-
-    # Create legend below the plot
-    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), 
-              ncol=len([m for m in model_styles.keys() if m in performance['model'].values]),
-              fontsize=tick_font['size'], frameon=True)
+        if model in all_models_in_data:
+            handle = plt.Line2D([0], [0], marker=style['marker'], color=style['color'],
+                               markersize=style['size']*0.6, markeredgecolor='black', 
+                               markeredgewidth=0.1, alpha=0.8, label=style['name'])
+            handles.append(handle)
+            labels.append(style['name'])
+    
+    fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 0.02), 
+               ncol=min(len(handles), 6), fontsize=tick_font['size']*0.8, frameon=True)
 
     # Save the figure
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0.05, 1, 1])  # Leave space at the bottom for legend
     plt.savefig(os.path.join(result_figs, 'concept_size_ablation.pdf'), bbox_inches='tight')
 
 
@@ -1404,7 +1429,7 @@ def filter_pareto_models(df: pd.DataFrame, fixed_memory: dict = None, custom_ord
 
     return filtered.reset_index(drop=True)
 
-def plot_pareto_front(performance, model_styles, title_font, label_font, tick_font, custom_order, complexity_metric='visitation_length', ranges=None):
+def plot_pareto_front(performance, model_styles, title_font, label_font, tick_font, custom_order, complexity_metric='visitation_length', ranges=None, regression_ranges=None):
     """
     Plot Pareto front for model complexity vs accuracy.
     
@@ -1414,13 +1439,15 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         The complexity metric to use for the x-axis. Options: 'node_count', 'depth', 
         'visitation_length', 'total_variables', 'total_operations', 'weighted_node_count'. Default: 'visitation_length'
     ranges : list, optional
-        Y-axis range specification for classification datasets (bottom row) only.
+        Y-axis range specification for classification datasets (bottom row).
         Each element corresponds to a classification subplot by index.
         Formats:
         - [y_min, y_max]: Single continuous axis
         - [[y_low_min, y_low_max], [y_high_min, y_high_max]]: Broken/stacked axis
-        If None or shorter than needed, defaults to [0, 1] for missing entries.
-        Regression datasets always use continuous y-axis (ranges not applied).
+        If None or shorter than needed, missing entries auto-scale.
+    regression_ranges : list, optional
+        Y-axis range specification for regression datasets (top row), same formats
+        as `ranges`. If None or shorter than needed, missing entries auto-scale.
     """
     performance = compute_avg_and_uncertainty(performance, custom_order, complexity_metric=complexity_metric)
 
@@ -1451,15 +1478,21 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
     elif n_cols == 1:
         axes = [[ax] for ax in axes]
 
-    # Validate and set defaults for ranges parameter
-    # ranges applies only to classification datasets (bottom row)
+    # Validate and set defaults for ranges parameters
     n_classification = len(classification_datasets)
+    n_regression = len(found_regression_datasets)
+    # Classification ranges (bottom row)
     if ranges is None:
-        ranges = [None] * n_classification  # Default: let matplotlib auto-scale
+        ranges = [None] * n_classification
     else:
-        # Extend ranges with None for missing entries (auto-scale)
         if len(ranges) < n_classification:
             ranges = list(ranges) + [None] * (n_classification - len(ranges))
+    # Regression ranges (top row)
+    if regression_ranges is None:
+        regression_ranges = [None] * n_regression
+    else:
+        if len(regression_ranges) < n_regression:
+            regression_ranges = list(regression_ranges) + [None] * (n_regression - len(regression_ranges))
     
     # Track which model styles are actually plotted across all subplots
     all_plotted_styles = set()
@@ -1469,6 +1502,12 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
     
     # Store plot data for broken axes reconstruction
     plot_data_for_broken_axes = {}
+    
+    # Store Pareto front data for each axis to draw dominated area after axis limits are finalized
+    pareto_data_for_shading = {}
+
+    # Defer uncertainty bands for cem/blackbox until after axis limits finalize
+    cem_blackbox_bands = {}
 
     for idx, dataset in enumerate(organized_datasets):
         # Determine row based on task type
@@ -1484,7 +1523,7 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         else:
             ax = axes[row][col] if n_cols > 1 else axes[row][0] if col == 0 else axes[row][col]
         
-        # Handle broken/stacked axes for classification datasets only
+        # Handle broken/stacked axes for classification (bottom) and regression (top) datasets
         use_broken_axis = False
         ax_bottom = None
         ax_top = None
@@ -1509,6 +1548,22 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                 if isinstance(range_spec, list) and len(range_spec) == 2:
                     ax.set_ylim(range_spec)
             # If range_spec is None, let matplotlib auto-scale (do nothing)
+        elif row == 0:  # Regression dataset
+            reg_idx = list(found_regression_datasets).index(dataset)
+            range_spec = regression_ranges[reg_idx]
+            # Check if this is a broken axis specification (nested list with 2 elements)
+            if (range_spec is not None and isinstance(range_spec, list) and len(range_spec) == 2 and 
+                isinstance(range_spec[0], list) and isinstance(range_spec[1], list)):
+                use_broken_axis = True
+                broken_axes_specs[(row, col)] = {
+                    'ax': ax,
+                    'y_low_range': range_spec[0],
+                    'y_high_range': range_spec[1],
+                    'dataset': dataset
+                }
+            elif range_spec is not None:
+                if isinstance(range_spec, list) and len(range_spec) == 2:
+                    ax.set_ylim(range_spec)
             
         data = performance[performance['dataset'] == dataset]
         metric_type = data['metric_type'].iloc[0]
@@ -1525,6 +1580,11 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         
         # Mark dcr and licem as having infinity complexity
         data['has_infinity'] = data['model'].isin(['dcr', 'licem'])
+        
+        # # Mark memory_cbm as having infinity complexity for specific datasets
+        # if dataset in ['awa2_incomplete', 'cub_incomplete', 'cifar10']:
+        #     data.loc[data['model'] == 'memory_cbm', 'has_infinity'] = True
+        
         # Find max finite complexity to set infinity value appropriately
         finite_complexities = data.loc[~data['has_infinity'], 'mean_complexity']
         finite_complexities = finite_complexities[finite_complexities.notna() & (finite_complexities > 0)]
@@ -1552,10 +1612,14 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         pareto_data = data[~data['model'].isin(['cem', 'blackbox'])]
         distinct_complexities = sorted(pareto_data['mean_complexity'].unique())
         
-        # Check if we have infinity models (dcr, licem) in the data
-        has_infinity_models = any(data['model'].isin(['dcr', 'licem']))
+        # Check if we have infinity models (dcr, licem, and memory_cbm for specific datasets) in the data
+        infinity_models = ['dcr', 'licem']
+        # if dataset in ['awa2_incomplete', 'cub_incomplete', 'cifar10']:
+        #     infinity_models.append('memory_cbm')
+        
+        has_infinity_models = any(data['model'].isin(infinity_models))
         if has_infinity_models:
-            infinity_complexity = data.loc[data['model'].isin(['dcr', 'licem']), 'mean_complexity'].unique()
+            infinity_complexity = data.loc[data['model'].isin(infinity_models), 'mean_complexity'].unique()
         else:
             infinity_complexity = np.array([])
         
@@ -1585,16 +1649,34 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                     all_points.append((complexity, y_val, y_err, model, memory_size))
                 
                 # Plot each point with appropriate style
-                for i, (complexity, y_val, y_err, memory_size) in enumerate(zip(model_data['mean_complexity'], y_values, y_errors, model_data['memory_size'])):
+                for i, (complexity, complexity_err, y_val, y_err, memory_size) in enumerate(zip(
+                    model_data['mean_complexity'], 
+                    model_data['se_complexity'],
+                    y_values, 
+                    y_errors, 
+                    model_data['memory_size']
+                )):
                     # Use cbm_linear style if linear_symbolic_cbm has memory_size = 1
                     if model == 'linear_symbolic_cbm' and memory_size == 1:
                         plot_style = model_styles.get('cbm_linear', model_styles[model])
                         plot_label = model_styles.get('cbm_linear', {})['name'] if 'cbm_linear' in model_styles else model_styles[model]['name']
                         style_key = 'cbm_linear'
                     else:
-                        plot_style = model_styles[model]
+                        plot_style = model_styles[model].copy()
                         plot_label = model_styles[model]['name']
                         style_key = model
+                    
+                    # Override CMR style for cifar10 and cub datasets to grey hollow marker
+                    marker_facecolor = plot_style['color']
+                    marker_edge_width = 0.1
+                    # if model == 'cmr' and dataset in ['cifar10', 'cub']:
+                    #     plot_style['color'] = 'tab:grey'
+                    #     marker_facecolor = 'none'
+                    
+                    # Override prior_symbolic_cbm style to white marker with thicker black border
+                    if model == 'prior_symbolic_cbm':
+                        marker_facecolor = 'white'
+                        marker_edge_width = 1.5
                     
                     # Track that this style was plotted
                     all_plotted_styles.add(style_key)
@@ -1602,20 +1684,22 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                     # Only add label for the first point of each unique style to avoid duplicate legends
                     label = plot_label if i == 0 else ""
                     
-                    # Show uncertainty as vertical error bars
+                    # Show uncertainty as error bars on both axes
                     ax.errorbar(
                         [complexity], 
                         [y_val],
+                        xerr=[complexity_err],
                         yerr=[y_err],
                         label=label,
                         marker=plot_style['marker'], 
                         color=plot_style['color'], 
                         markersize=plot_style['size'],
                         markeredgecolor='black',
-                        markeredgewidth=0.1,
+                        markeredgewidth=marker_edge_width,
+                        markerfacecolor=marker_facecolor,
                         capsize=3,
                         capthick=1.5,
-                        alpha=0.8,
+                        alpha=0.6,
                         linestyle='none'  # No line connecting dots
                     )
                     
@@ -1675,51 +1759,39 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                     pareto_points.append((complexity, y_val))
             
             # Sort Pareto points by complexity and draw connecting line
-            if len(pareto_points) > 1:
+            if len(pareto_points) >= 1:
                 pareto_points.sort(key=lambda x: x[0])
                 pareto_x, pareto_y = zip(*pareto_points)
-                ax.plot(pareto_x, pareto_y, 'gray', linestyle='--', alpha=0.7, linewidth=2, zorder=0)
-                
-                # Store for broken axes
-                if use_broken_axis and (row, col) not in plot_data_for_broken_axes:
-                    plot_data_for_broken_axes[(row, col)] = []
-                if use_broken_axis:
-                    plot_data_for_broken_axes[(row, col)].append({
-                        'type': 'plot',
-                        'x': pareto_x,
-                        'y': pareto_y,
-                        'color': 'gray',
-                        'linestyle': '--',
-                        'linewidth': 2,
-                        'alpha': 0.7,
-                        'label': '',
-                        'zorder': 0
-                    })
-                
-                # Create shadowed area above and to the right of the Pareto front
-                # Get axis limits to extend the shaded area
-                xlim = ax.get_xlim()
-                ylim = ax.get_ylim()
-                                
-                # Create extended pareto front for shading
-                extended_x = [pareto_x[0]] + list(pareto_x) + [xlim[1], xlim[1]]
-                extended_y = [ylim[1]]     + list(pareto_y) + [pareto_y[-1], ylim[1]]
 
-                # Add shaded area above the Pareto front
-                ax.fill(extended_x, extended_y, color='gray', alpha=0.1, zorder=0, 
-                        label='Dominated Region' if idx == 0 else "")
-                
-                # Store for broken axes
-                if use_broken_axis:
-                    plot_data_for_broken_axes[(row, col)].append({
-                        'type': 'fill',
-                        'x': extended_x,
-                        'y': extended_y,
-                        'color': 'gray',
-                        'alpha': 0.1,
-                        'zorder': 0,
-                        'label': 'Dominated Region' if idx == 0 else ""
-                    })
+                # Draw the Pareto front line only if there are 2+ points
+                if len(pareto_points) > 1:
+                    ax.plot(pareto_x, pareto_y, 'gray', linestyle='--', alpha=0.7, linewidth=2, zorder=0)
+                    
+                    # Store for broken axes
+                    if use_broken_axis and (row, col) not in plot_data_for_broken_axes:
+                        plot_data_for_broken_axes[(row, col)] = []
+                    if use_broken_axis:
+                        plot_data_for_broken_axes[(row, col)].append({
+                            'type': 'plot',
+                            'x': pareto_x,
+                            'y': pareto_y,
+                            'color': 'gray',
+                            'linestyle': '--',
+                            'linewidth': 2,
+                            'alpha': 0.7,
+                            'label': '',
+                            'zorder': 0
+                        })
+
+                # Store Pareto data for shading after axis limits are finalized
+                pareto_data_for_shading[idx] = {
+                    'ax': ax,
+                    'pareto_x': pareto_x,
+                    'pareto_y': pareto_y,
+                    'use_broken_axis': use_broken_axis,
+                    'row': row,
+                    'col': col
+                }
             
         # Set title on top axis if broken, otherwise on regular axis
         ax.set_title(get_df_name(dataset), fontdict=title_font)
@@ -1736,12 +1808,13 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
         # Set x-axis to log scale
         ax.set_xscale('log')
         
-        # Set xlim to maximum complexity value
+        # Set xlim to maximum complexity value (light padding)
         if distinct_complexities:
             max_complexity = max(distinct_complexities)
             if has_infinity_models and infinity_complexity.size > 0:
                 max_complexity = max(max_complexity, infinity_complexity[0])
-            ax.set_xlim(right=max_complexity * 1.1)  # Add 10% padding
+            min_complexity = min(distinct_complexities)
+            ax.set_xlim(min_complexity / 1.2, max_complexity * 1.2)  # Add 20% padding on both sides
         
         # Plot horizontal lines for cem and blackbox after xlim is set
         for model in data['model'].unique():
@@ -1759,19 +1832,20 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                 y_val = y_values.iloc[0]
                 y_err = y_errors.iloc[0]
                 
-                xlim = ax.get_xlim()
-                xlim = (0, xlim[1])
-                
                 ax.axhline(y=y_val, color=model_styles[model]['color'], 
                             linestyle='-.', linewidth=2.5, alpha=0.8,
                             label=model_styles[model]['name'])
                 
-                # add uncertainty shading for blackbox and cem
-                ax.fill_between(xlim,
-                                y_val - y_err,
-                                y_val + y_err,
-                                color=model_styles[model]['color'],
-                                alpha=0.2)
+                # Defer uncertainty shading until xlim is finalized
+                key = (row, col)
+                if key not in cem_blackbox_bands:
+                    cem_blackbox_bands[key] = []
+                cem_blackbox_bands[key].append({
+                    'ax': ax,
+                    'y': y_val,
+                    'yerr': y_err,
+                    'color': model_styles[model]['color']
+                })
                 
                 # Store for broken axes
                 if use_broken_axis:
@@ -1807,7 +1881,7 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                     log_min = np.log10(min_c)
                     log_max = np.log10(max_c)
                     log_spacing = (log_max - log_min) / 2  # 2 intervals for 3 ticks
-                    
+
                     # Generate 3 equally spaced ticks in log space
                     tick_values = [10 ** (log_min + i * log_spacing) for i in range(3)]
                     # Format labels with K notation for values >= 1000
@@ -1817,14 +1891,14 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                             tick_labels.append(f'{int(c/1000)}K')
                         else:
                             tick_labels.append(str(int(c)))
-                    
+
                     # Add infinity tick at the actual infinity value position
                     inf_tick_position = inf_value
                     tick_values.append(inf_tick_position)
                     tick_labels.append('$\infty$')
-                    
-                    # Set xlim to show all ticks including infinity
-                    ax.set_xlim(min_c * 0.5, inf_tick_position * 1.2)
+
+                    # Set xlim to show all ticks including infinity with margin on both sides
+                    ax.set_xlim(min_c / 1.2, inf_tick_position * 1.2)
                 else:
                     log_min = np.log10(min_c)
                     log_max = np.log10(max_c)
@@ -1849,12 +1923,67 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                 ax.set_xticks([inf_value])
                 from matplotlib.ticker import FixedFormatter
                 ax.xaxis.set_major_formatter(FixedFormatter(['$\infty$']))
-                ax.set_xlim(inf_value * 0.5, inf_value * 1.5)
+                # Add margin on both sides around the infinity tick
+                ax.set_xlim(inf_value * 0.8, inf_value * 1.2)
         
         # Apply tick params and grid
         ax.tick_params(axis='both', which='major', labelsize=tick_font['size'])
         ax.minorticks_off()
         ax.grid(True, alpha=0.3, zorder=0)
+
+    # Draw dominated area (grey shading) after all axis limits are finalized
+    for idx, pareto_info in pareto_data_for_shading.items():
+        ax = pareto_info['ax']
+        pareto_x = pareto_info['pareto_x']
+        pareto_y = pareto_info['pareto_y']
+        use_broken_axis = pareto_info['use_broken_axis']
+        row = pareto_info['row']
+        col = pareto_info['col']
+        
+        # Get final axis limits after all configurations
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        
+        # Create extended Pareto front for shading
+        # The dominated region extends from the Pareto front to the upper-right corner
+        # Start from the leftmost Pareto point going up to ylim[1]
+        # Then follow the Pareto front
+        # Then extend right to xlim[1] and up to ylim[1]
+        extended_x = [xlim[0], pareto_x[0]] + list(pareto_x) + [xlim[1], xlim[1], xlim[0]]
+        extended_y = [ylim[1], ylim[1]]     + list(pareto_y) + [pareto_y[-1], ylim[1], ylim[1]]
+
+        # Add shaded area above the Pareto front
+        ax.fill(extended_x, extended_y, color='gray', alpha=0.1, zorder=0, 
+                label='Dominated Region' if idx == 0 else "")
+        
+        # Store for broken axes reconstruction (include pareto points for recalculation)
+        if use_broken_axis:
+            if (row, col) not in plot_data_for_broken_axes:
+                plot_data_for_broken_axes[(row, col)] = []
+            plot_data_for_broken_axes[(row, col)].append({
+                'type': 'fill',
+                'x': extended_x,
+                'y': extended_y,
+                'pareto_x': pareto_x,
+                'pareto_y': pareto_y,
+                'color': 'gray',
+                'alpha': 0.1,
+                'zorder': 0,
+                'label': 'Dominated Region' if idx == 0 else ""
+            })
+
+    # Now add uncertainty bands for cem/blackbox using finalized axis limits
+    for (row, col), bands in cem_blackbox_bands.items():
+        for band in bands:
+            ax = band['ax']
+            xlim = ax.get_xlim()
+            ax.fill_between(
+                xlim,
+                band['y'] - band['yerr'],
+                band['y'] + band['yerr'],
+                color=band['color'],
+                alpha=0.2
+            )
 
     # Hide empty subplots and find the rightmost empty subplot for legend
     legend_ax = None
@@ -1987,14 +2116,32 @@ def plot_pareto_front(performance, model_styles, title_font, label_font, tick_fo
                             alpha=0.2
                         )
                     elif plot_cmd['type'] == 'fill':
-                        target_ax.fill(
-                            plot_cmd['x'],
-                            plot_cmd['y'],
-                            color=plot_cmd['color'],
-                            alpha=plot_cmd['alpha'],
-                            zorder=plot_cmd['zorder'],
-                            label=plot_cmd['label'] if target_ax == ax_bottom else ""
-                        )
+                        # For fill type with Pareto front shading, recalculate to extend to this axis's limits
+                        if 'pareto_x' in plot_cmd and 'pareto_y' in plot_cmd:
+                            # Use stored Pareto points to create proper shading for this axis
+                            ax_xlim = target_ax.get_xlim()
+                            ax_ylim = target_ax.get_ylim()
+                            pareto_x = plot_cmd['pareto_x']
+                            pareto_y = plot_cmd['pareto_y']
+                            ext_x = [ax_xlim[0], pareto_x[0]] + list(pareto_x) + [ax_xlim[1], ax_xlim[1], ax_xlim[0]]
+                            ext_y = [ax_ylim[1], ax_ylim[1]]  + list(pareto_y) + [pareto_y[-1], ax_ylim[1], ax_ylim[1]]
+                            target_ax.fill(
+                                ext_x,
+                                ext_y,
+                                color=plot_cmd['color'],
+                                alpha=plot_cmd['alpha'],
+                                zorder=plot_cmd['zorder'],
+                                label=plot_cmd['label'] if target_ax == ax_bottom else ""
+                            )
+                        else:
+                            target_ax.fill(
+                                plot_cmd['x'],
+                                plot_cmd['y'],
+                                color=plot_cmd['color'],
+                                alpha=plot_cmd['alpha'],
+                                zorder=plot_cmd['zorder'],
+                                label=plot_cmd['label'] if target_ax == ax_bottom else ""
+                            )
         
         # Configure x-axis: hide labels on top, show on bottom
         # IMPORTANT: Set xscale and xlim FIRST before setting ticks
@@ -3691,11 +3838,13 @@ def global_verifiability_plot(paths, dataset='awa2_incomplete', memory_size=4, l
         ax1.tick_params(axis='both', which='major', labelsize=local_tick_size, color='tab:blue', labelcolor='tab:blue')
         ax2.tick_params(axis='y', which='major', labelsize=local_tick_size, color='tab:orange', labelcolor='tab:orange')
         
+        # Adjust layout to prevent right ylabel from being cut off
+        fig.tight_layout(rect=[0, 0, 0.92, 1])
+        
         # Save the figure
         save_filename = f'{concept}_{class_filename}.pdf'
         save_path = os.path.join(output_dir, save_filename)
-        plt.tight_layout()
-        plt.savefig(save_path, bbox_inches='tight')
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
         plt.close()
         
         print(f"Saved: {save_filename}")
@@ -4156,3 +4305,231 @@ def generate_adaptability_table(performance, datasets, output_path, regression_d
     print(f"CSV table saved to {csv_path}")
     
     return result_df
+
+
+def extract_equation_examples(paths, output_path='results/tabs/equation_examples', 
+                                n_examples=5, fixed_class=None, fixed_memory=None):
+    """
+    Extract example equations from test_predictions_per_sample.csv files.
+    
+    For each dataset and model, extracts n_examples of equations.
+    For classification datasets, filters samples from a fixed class if provided.
+    For datasets in fixed_memory with memory models, only uses experiments with matching memory_size.
+    
+    Args:
+        paths: List of paths to experiment directories
+        output_path: Path to save the output CSV files
+        n_examples: Number of examples to extract per model per dataset
+        fixed_class: Dict mapping dataset names to class indices for classification datasets.
+                     If None, will use the first class (0) for classification datasets.
+        fixed_memory: Dict mapping dataset names to their fixed memory size.
+                      For memory models, only experiments with this memory_size will be used.
+    
+    Returns:
+        None. Saves CSV files to output_path.
+    """
+    import glob
+    
+    os.makedirs(output_path, exist_ok=True)
+    
+    # Collect all test_predictions_per_sample.csv files
+    all_results = {}
+    
+    for base_path in paths:
+        # Find all experiment directories
+        exp_dirs = glob.glob(os.path.join(base_path, '**/logs/experiment_metrics/test_predictions_per_sample.csv'), 
+                             recursive=True)
+        
+        pbar = tqdm(exp_dirs, desc=f"Processing {base_path}")
+        for predictions_file in pbar:
+            # Update progress bar to show current file
+            rel_path = os.path.relpath(predictions_file, base_path)
+            pbar.set_description(f"Processing {base_path} | {rel_path}")
+            
+            if 'memory_cbm' in predictions_file or 'cem' in predictions_file or 'blackbox' in predictions_file:
+                continue
+
+            try:
+                # Extract metadata from path
+                parts = predictions_file.split('/')
+                # Find the part with dataset and model info
+                exp_folder = None
+                for part in parts:
+                    if 'dataset_' in part and 'model_' in part:
+                        exp_folder = part
+                        break
+                
+                if not exp_folder:
+                    continue
+                
+                # Parse dataset, model, memory_size, and seed from folder name
+                dataset = None
+                model = None
+                seed = None
+                memory_size = None
+                
+                exp_parts = exp_folder.split('_')
+                for i, item in enumerate(exp_parts):
+                    if dataset is None and item in custom_order:
+                        dataset = item
+                    elif 'lin' in item or 'sym' in item or 'cbm' in item:
+                        # Start collecting model name
+                        if model is None:
+                            model = item
+                        else:
+                            model += '_' + item
+                    elif item == 'memory' and i + 1 < len(exp_parts) and exp_parts[i + 1] == 'size':
+                        # Next item after 'size' is the memory size number
+                        if i + 2 < len(exp_parts):
+                            try:
+                                memory_size = int(exp_parts[i + 2])
+                            except:
+                                pass
+                    elif item == 'seed':
+                        # Next item is the seed number
+                        continue
+                    elif model and dataset and seed is None:
+                        try:
+                            seed = int(item)
+                        except:
+                            pass
+                
+                if not dataset or not model:
+                    continue
+                
+                # Skip memory_cbm, cem, and blackbox models BEFORE reading the file
+                if model in ['memory_cbm', 'cem', 'blackbox']:
+                    continue
+                
+                # Also check if any of these strings appear in the model name
+                if any(skip_model in model for skip_model in ['memory_cbm', 'cem', 'blackbox']):
+                    continue
+                
+                # For datasets with fixed_memory, filter by memory_size for memory models
+                if fixed_memory and dataset in fixed_memory:
+                    if model in MEMORY_MODELS_LIST:
+                        required_memory_size = fixed_memory[dataset]
+                        if memory_size != required_memory_size:
+                            continue  # Skip this experiment if memory_size doesn't match
+                
+                # Read predictions file
+                df_pred = pd.read_csv(predictions_file)
+                
+                if 'equation' not in df_pred.columns:
+                    continue
+                
+                # Determine if this is a classification or regression dataset
+                is_classification = dataset in NUMBER_OF_CLASSES_PER_DATASET or dataset not in regression_datasets
+                
+                # For classification, filter by class
+                if is_classification and 'y_true' in df_pred.columns:
+                    target_class = fixed_class.get(dataset, 0) if fixed_class else 0
+                    df_pred = df_pred[df_pred['y_true'] == target_class]
+                
+                # Get unique equations
+                if len(df_pred) == 0:
+                    continue
+                
+                # For memory models, extract equations per memory expression (target)
+                # Group by equation/target to get examples from different memory expressions
+                if model in MEMORY_MODELS_LIST and 'equation' in df_pred.columns:
+                    # Get unique equations (memory expressions)
+                    unique_equations = df_pred['equation'].unique()
+                    samples = []
+                    for eq in unique_equations:
+                        eq_samples = df_pred[df_pred['equation'] == eq]
+                        # Sample up to n_examples per equation
+                        sample_size = min(n_examples, len(eq_samples))
+                        sampled = eq_samples.sample(n=sample_size, random_state=42)
+                        samples.append(sampled)
+                    samples = pd.concat(samples) if samples else pd.DataFrame()
+                else:
+                    # Sample up to n_examples total
+                    sample_size = min(n_examples, len(df_pred))
+                    samples = df_pred.sample(n=sample_size, random_state=42)
+                
+                if len(samples) == 0:
+                    continue
+                
+                # Store results
+                key = (dataset, model)
+                if key not in all_results:
+                    all_results[key] = []
+                
+                for idx, row in samples.iterrows():
+                    equation = row['equation']
+                    # Clean equation (remove target prefix if present)
+                    if ':' in str(equation):
+                        equation = equation.split(':', 1)[1].strip()
+                    
+                    result_entry = {
+                        'dataset': dataset,
+                        'model': model,
+                        'seed': seed,
+                        'memory_size': memory_size,
+                        'sample_idx': row['sample_idx'],
+                        'equation': equation,
+                        'y_true': row.get('y_true', None),
+                        'y_pred': row.get('y_pred', None),
+                    }
+                    
+                    # Add class names if available
+                    if 'y_true_task_name' in row:
+                        result_entry['y_true_class'] = row['y_true_task_name']
+                    if 'y_pred_task_name' in row:
+                        result_entry['y_pred_class'] = row['y_pred_task_name']
+                    
+                    all_results[key].append(result_entry)
+                    
+            except Exception as e:
+                print(f"Error processing {predictions_file}: {e}")
+                continue
+    
+    # Save results per dataset
+    datasets_processed = set()
+    for (dataset, model), entries in all_results.items():
+        datasets_processed.add(dataset)
+    
+    for dataset in sorted(datasets_processed):
+        dataset_results = []
+        
+        # Collect all results for this dataset
+        for (ds, model), entries in all_results.items():
+            if ds == dataset:
+                # For memory models, keep all entries (already limited per equation)
+                # For non-memory models, limit to n_examples total
+                if model in MEMORY_MODELS_LIST:
+                    for i, entry in enumerate(entries):
+                        entry['example_id'] = i + 1
+                        dataset_results.append(entry)
+                else:
+                    for i, entry in enumerate(entries[:n_examples]):
+                        entry['example_id'] = i + 1
+                        dataset_results.append(entry)
+        
+        if dataset_results:
+            df_results = pd.DataFrame(dataset_results)
+            
+            # Reorder columns
+            base_cols = ['dataset', 'model', 'seed']
+            if 'memory_size' in df_results.columns:
+                base_cols.append('memory_size')
+            base_cols.extend(['example_id', 'equation'])
+            if 'y_true_class' in df_results.columns:
+                base_cols.extend(['y_true_class', 'y_pred_class', 'y_true', 'y_pred'])
+            else:
+                base_cols.extend(['y_true', 'y_pred'])
+            base_cols.append('sample_idx')
+            
+            df_results = df_results[base_cols]
+            
+            # Sort by model and example_id
+            df_results = df_results.sort_values(['model', 'seed', 'example_id'])
+            
+            # Save to CSV
+            csv_path = os.path.join(output_path, f'{dataset}_equation_examples.csv')
+            df_results.to_csv(csv_path, index=False)
+            print(f"Saved {len(df_results)} equation examples for {dataset} to {csv_path}")
+    
+    print(f"\nProcessed {len(datasets_processed)} datasets")
+    print(f"Results saved to {output_path}")

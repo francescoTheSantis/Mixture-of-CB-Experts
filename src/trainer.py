@@ -168,7 +168,7 @@ class Trainer:
             # Unfortunatelly, the pruning does not work when speed_up_training=True.
             # So, if you want to prune, set speed_up_training=False in the model config.
             if self.model.model.speed_up_training:
-                self.model.model.allow_symbolic()
+                self.model.model.allow_symbolic_extraction()
                 print("Skipping pruning as speed_up_training=True")
                 epochs = 1
             else:

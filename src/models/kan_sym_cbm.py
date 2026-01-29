@@ -133,7 +133,7 @@ class KANSymbolicCBM(BaseModel):
     def prune(self):
         self.predictor.prune()
         
-    def allow_symbolic(self):
+    def allow_symbolic_extraction(self):
         self.predictor.allow_symbolic()
     
     def get_learned_equations(self, log_dir, fine_tuned=False):

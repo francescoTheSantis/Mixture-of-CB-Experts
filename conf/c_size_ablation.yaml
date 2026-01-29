@@ -10,34 +10,28 @@ hydra:
   sweeper:
     grid_params:
       seed: 1, 2, 3
-      concept_percentage: 0.2, 0.4, 0.6, 0.8
-
-    list_params:
+      concept_percentage: 0.2, 0.4, 0.6, 0.8, 1.0
       model: 
         - dcr
         - licem
         - cem
-        - blackbox
-        - memory_cbm
         - lin_sym_cbm
+        - cbm_linear
         - cmr
-        - sr_sym_cbm
-      disjoint_training:
-        - False
-        - False
-        - False
-        - False
-        - True
-        - True
-        - True
-        - True
+        # - sr_sym_cbm
+        
+    list_params:
       dataset: 
         - cub
-        - cifar10
+        # - cifar10
       img_backbone_name: 
         - facebook/dinov2-base
-        - google/vit-base-patch32-224-in21k
+        # - resnet18
 
-memory_size: 1
+memory_size: 2
+disjoint_training: true
+hard_concepts: True
+
+gpus: [1]
 
 note: "concept_size_ablation" 

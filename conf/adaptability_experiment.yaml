@@ -41,6 +41,10 @@ hydra:
       dataset: 
         - pendulum
         - mawps
+      memory_size:
+        - 1
+        - 4
+      
 
 
 # Override common parameters as needed

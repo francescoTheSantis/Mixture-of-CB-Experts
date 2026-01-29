@@ -52,10 +52,3 @@ Experimental settings are defined in `conf/`:
 * `encoder/` – input encoder configs
 * `engine/` – training loop settings
 * `common.yaml` – shared defaults
-
-
-
-
-
-
-conda activate lmr && export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH" && python show_results.py

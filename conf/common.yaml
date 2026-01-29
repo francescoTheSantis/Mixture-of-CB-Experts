@@ -66,8 +66,8 @@ wandb:
   # Set it to null if you do not want to use wandb.
   #project: null # Set to your project name
   #entity: null # Set to your wandb entity name
-  entity: "francescothesantis-politecnico-di-torino"
-  project: "linear_memory_reasoner"
+  entity: null
+  project: null
 
 # The note will be appended to the group name in wandb 
 # and will be considered as an additional tag (for filtering).

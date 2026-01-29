@@ -1,34 +1,27 @@
 defaults:
   - common
   - _self_
+  - override hydra/sweeper: list
 
 hydra:
   mode: MULTIRUN
   sweep:
-      dir: test/${now:%Y-%m-%d_%H-%M-%S}
+      dir: output/concept_size_ablation/${now:%Y-%m-%d_%H-%M-%S} 
   sweeper:
-    params:
-      seed: 1
-      dataset: cub #, awa2_incomplete, awa2, cub, cub_incomplete 
-      model: sr_sym_cbm
-      memory_size: 1
-    
-gpus: [0]
+    grid_params:
+      seed: 1 #, 2, 3
+      concept_percentage: 0.2 #, 0.4, 0.6, 0.8, 1.0
+      model: 
+        - cbm_linear
+        
+    list_params:
+      dataset: 
+        - cub
+      img_backbone_name: 
+        - facebook/dinov2-base
 
-# img_backbone_name: resnet18
-
-# NOTE: check this variable before running experiments 
-disjoint_training: True
+memory_size: 2
+disjoint_training: true
 hard_concepts: True
 
-max_epochs: 200
-patience: 50
-
-use_stored_dataset: True
-extract_embeddings: True
-
-wandb:
-  entity: null
-  project: null
-
-note: test
+gpus: [1]

@@ -2,7 +2,7 @@ from os import environ as env
 from pathlib import Path
 import os
 
-PROJECT_NAME = "linear_memory_reasoner" # Name of the project
+PROJECT_NAME = "" # Name of the project
 HOME = "" # Path to the project
 
 CACHE = Path(

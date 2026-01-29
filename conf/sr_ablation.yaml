@@ -19,7 +19,7 @@ hydra:
 
 disjoint_training: True
 
-gpus: [0]
+gpus: [1]
 
 wandb:
   entity: null

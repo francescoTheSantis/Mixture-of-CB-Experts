@@ -30,12 +30,12 @@ custom_order = [
     'cub_incomplete',
     'cifar10',
     # 'cifar100',
-    'feynman_I_6_2',
-    'feynman_I_9_18',
-    'feynman_I_12_1',
-    'feynman_I_13_4',
-    'feynman_I_14_3',
-    'feynman_I_15_10',
+    # 'feynman_I_6_2',
+    # 'feynman_I_9_18',
+    # 'feynman_I_12_1',
+    # 'feynman_I_13_4',
+    # 'feynman_I_14_3',
+    # 'feynman_I_15_10',
     'dsprites_simple',
     'pendulum',
     # 'dsprites_complex',
@@ -84,7 +84,6 @@ cmap = plt.cm.RdYlGn
 colors = list(reversed([cmap(i) for i in np.linspace(0, 1, 5)]))
 
 model_styles = {
-
     'blackbox': {'marker': 'o', 'name': 'BlackBox', 'color': 'tab:gray', 'size': marker_size, 'fillstyle': 'none'},
     'cem': {'marker': 's', 'name': 'CEM', 'color': 'tab:red', 'size': marker_size, 'fillstyle': 'none'},
 
@@ -94,12 +93,12 @@ model_styles = {
     'cbm_linear': {'marker': 'X', 'name': 'CBM', 'color': 'tab:orange', 'size': marker_size, 'fillstyle': 'none'},
     'cmr': {'marker': 'P', 'name': 'CMR', 'color': 'gold', 'size': marker_size, 'fillstyle': 'none'},
 
-    'memory_cbm': {'marker': '*', 'name': 'MLP-Mem-CBM', 'color': 'tab:blue', 'size': marker_size, 'fillstyle': 'none'},
-    'prior_symbolic_cbm': {'marker': '*', 'name': 'Prior-Mem-CBM', 'color': 'tab:cyan', 'size': marker_size, 'fillstyle': 'none'},
+    'memory_cbm': {'marker': '*', 'name': 'MLP-M-CBE', 'color': 'tab:blue', 'size': marker_size, 'fillstyle': 'none'},
+    'prior_symbolic_cbm': {'marker': '*', 'name': 'Prior-M-CBE', 'color': 'lightcyan', 'size': marker_size, 'fillstyle': 'none'},
 
-    'kan_symbolic_cbm': {'marker': 's', 'name': 'Kan-Mem-CBM', 'color': 'darkgreen', 'size': marker_size, 'fillstyle': 'none'},
-    'linear_symbolic_cbm': {'marker': 'h', 'name': 'Lin-Mem-CBM', 'color': 'limegreen', 'size': marker_size, 'fillstyle': 'none'},
-    'sr_symbolic_cbm': {'marker': 'o', 'name': 'Sym-Mem-CBM', 'color': 'tab:green', 'size': marker_size, 'fillstyle': 'none'},
+    'kan_symbolic_cbm': {'marker': 's', 'name': 'Kan-M-CBE', 'color': 'darkmagenta', 'size': marker_size, 'fillstyle': 'none'},
+    'linear_symbolic_cbm': {'marker': 'h', 'name': 'Lin-M-CBE', 'color': 'limegreen', 'size': marker_size, 'fillstyle': 'none'},
+    'sr_symbolic_cbm': {'marker': 'o', 'name': 'Sym-M-CBE', 'color': 'tab:green', 'size': marker_size, 'fillstyle': 'none'},
 }
 
 models_order = [
@@ -273,13 +272,13 @@ def main():
     ############################################################
 
     paths = [
-        "",
+        "output/concept_size_ablation",
     ]
 
     try:
         performance = get_exp_from_path_cached(paths, cache_name='concept_size_ablation', output_path=output_path)
         # Plot the results on the concept size ablation
-        plot_concept_size_ablation(performance, model_styles, title_font, label_font, tick_font)
+        plot_concept_size_ablation(performance, model_styles, title_font, label_font, tick_font, custom_order)
     except Exception as e:
         print(f"Error occurred while plotting concept size ablation results: {e}")    
 
@@ -339,6 +338,12 @@ def main():
                     [[17, 38],[76, 101]], # cub
                     [17,50], # cub incomplete
                     [[10,23],[65,101]], # cifar10
+                ],
+                regression_ranges= [
+                    [0.8, 1.25],
+                    [0, 3.2],
+                    [0.1, 9],
+                    [0, 6],
                 ]
             )
         
@@ -436,7 +441,7 @@ def main():
                 metric='accuracy', 
                 # unique_noises=[noise], 
                 classification_noise=[noise],
-                regression_noise=[0.2],
+                regression_noise=[0.1],
                 title_font=title_font, 
                 label_font=label_font, 
                 tick_font=tick_font, 
@@ -450,13 +455,13 @@ def main():
                     [[0,4],[22,27]], # awa2 incomplete
                     [[0,40],[70,101]], # cub
                     [0,45], # cub incomplete
-                    [[6,20],[80,95]], # cifar10
+                    [[6,21],[80,95]], # cifar10
                 ],
                 regression_ranges=[
                     [0, 1.5],
                     [[0,1.7],[2, 3.4]],
-                    [[0, 4.1], [8,9]],
-                    [0, 15],
+                    [[0, 4], [8.2,9]],
+                    [0, 6.5],
                 ]
             )
             
@@ -510,6 +515,50 @@ def main():
             
     except Exception as e:
         print(f"Error occurred while processing adaptability experiment results: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+    ##################################################
+    ########## Extract Equation Examples #############
+    ##################################################
+
+    print("\n" + "="*70)
+    print("EXTRACTING EQUATION EXAMPLES")
+    print("="*70)
+
+    # Define paths to extract from
+    equation_example_paths = [
+        f"{output_path}/sr_ablation",
+        f"{output_path}/prior_reg",
+        f"{output_path}/memory_cls",
+        f"{output_path}/memory_less_cls",
+        f"{output_path}/memory_reg",
+        f"{output_path}/memory_less_reg",
+    ]
+
+    # Define fixed class for classification datasets
+    # Using class 0 for all classification datasets as default
+    fixed_class_map = {
+        'awa2': 0,
+        'awa2_incomplete': 0,
+        'cub': 0,
+        'cub_incomplete': 0,
+        'cifar10': 0,
+    }
+
+    try:
+        from plot_utils import extract_equation_examples
+        extract_equation_examples(
+            paths=equation_example_paths,
+            output_path=os.path.join(table_path, 'equation_examples'),
+            n_examples=5,
+            fixed_class=fixed_class_map,
+            fixed_memory=fixed_memory
+        )
+        print("\n✓ Equation examples extracted successfully!")
+    except Exception as e:
+        print(f"Error occurred while extracting equation examples: {e}")
         import traceback
         traceback.print_exc()
 
