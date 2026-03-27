@@ -140,6 +140,48 @@ class LinearSymbolicCBM(BaseModel):
             'selection_dist': selection_dist
         }
         
+    def get_weights_from_latent(self, latent, latent_concepts, c_true, int_idxs):
+        """Compute flattened per-sample weight vector theta from latent representation, bypassing the encoder."""
+        bsz = latent.shape[0]
+
+        c_hat, _ = self.bottleneck(latent_concepts)
+        c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
+
+        # Deterministic slot selection via argmax (no Gumbel noise)
+        selector_logits = self.classifier_selector.selector(latent)
+        selector_logits = selector_logits.view(bsz, self.memory_size, len(self.y_names))
+        selected_slots = selector_logits.argmax(dim=1)  # (bsz, n_outputs)
+
+        # Get memory equation weights
+        equation_weights = self.linear_memory_predictor.equation_decoder(
+            self.linear_memory_predictor.equation_memory.weight
+        )
+        equation_weights = equation_weights.view(
+            self.memory_size, len(self.linear_memory_predictor.parameters), len(self.y_names)
+        )
+
+        # Apply mask if in fine-tuning stage
+        if self.linear_memory_predictor.stage == 'fine_tuning':
+            mask = self.linear_memory_predictor.mask.view(
+                self.memory_size, len(self.linear_memory_predictor.parameters), len(self.y_names)
+            ).to(equation_weights.device)
+            equation_weights = equation_weights * mask
+
+        # Select weights per sample per task
+        theta_list = []
+        for task_idx in range(len(self.y_names)):
+            slot_indices = selected_slots[:, task_idx]  # (bsz,)
+            task_weights = equation_weights[slot_indices, :, task_idx]  # (bsz, n_params)
+            theta_list.append(task_weights)
+        theta = torch.cat(theta_list, dim=1)  # (bsz, n_tasks * n_params)
+
+        # Append global bias if applicable
+        if self.bias == 'global':
+            bias = self.linear_memory_predictor.bias_params.unsqueeze(0).expand(bsz, -1)
+            theta = torch.cat([theta, bias], dim=1)
+
+        return theta
+
     def cut_weights(self):
         """Set to zero and freeze the weights of the linear predictor below a certain threshold."""
         self.stage = 'fine_tuning'

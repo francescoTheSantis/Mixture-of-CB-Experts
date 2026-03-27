@@ -143,6 +143,34 @@ class LinearConceptEmbeddingModel(BaseModel):
             'y_bias': y_bias,
         }
 
+    def get_weights_from_latent(self, latent, latent_concepts, c_true, int_idxs):
+        """Compute flattened weight vector theta from latent representation, bypassing the encoder."""
+        c_emb, c_dict = self.bottleneck(
+            latent,
+            c_true=c_true,
+            intervention_idxs=int_idxs,
+            intervention_rate=1.,
+        )
+        c_hat = c_dict['c_int']
+        c_hat, input_concepts = self._process_concepts(c_hat, c_true, int_idxs)
+
+        c_emb = self.bottleneck.linear(latent)
+        if all(x == 'continuous' for x in self.concept_type):
+            c_emb = self.continuous_mix(c_emb, input_concepts)
+        else:
+            c_emb = concept_embedding_mixture(c_emb, input_concepts)
+
+        c_weights = self.concept_relevance(c_emb).unsqueeze(dim=1)
+
+        bsz = latent.shape[0]
+        theta = c_weights.view(bsz, -1)
+
+        if self.use_bias:
+            y_bias = self.bias_predictor(c_emb).unsqueeze(dim=1)
+            theta = torch.cat([theta, y_bias.view(bsz, -1)], dim=1)
+
+        return theta
+
     def loss(self, y_hat, y, c_hat=None, c=None, *args, **kwargs):
         loss = self.concept_based_loss(y_hat, y, c_hat, c)
         # adding l1 regularization to the weights

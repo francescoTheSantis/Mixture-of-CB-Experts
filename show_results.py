@@ -464,6 +464,34 @@ def main():
                     [0, 6.5],
                 ]
             )
+        
+        ########## Intervention Delta Table ##########
+        print("\n" + "="*70)
+        print("GENERATING INTERVENTION DELTA TABLE")
+        print("="*70)
+        
+        # Generate intervention delta table for noise=0.0
+        intervention_delta_path = os.path.join(table_path, 'intervention_delta')
+        os.makedirs(intervention_delta_path, exist_ok=True)
+        
+        # Remove feynman datasets from custom_order for this table
+        refined_custom_order = [d for d in custom_order if not d.startswith('feynman')]
+        
+        intervention_delta_results = generate_intervention_delta_table(
+            performance,
+            refined_custom_order,
+            model_styles,
+            regression_datasets,
+            intervention_delta_path,
+            noise_level=0.0
+        )
+        
+        if intervention_delta_results is not None:
+            print(f"\n✓ Intervention delta table generated successfully!")
+            print(f"\nSummary statistics:")
+            print(intervention_delta_results.groupby('model')['delta_mean'].agg(['mean', 'std', 'count']))
+        else:
+            print("Failed to generate intervention delta table")
             
     except Exception as e:
         print(f"Error occurred while getting intervention results from path: {e}")
@@ -520,45 +548,210 @@ def main():
 
 
     ##################################################
-    ########## Extract Equation Examples #############
+    ######## Global Interpretability Table ###########
     ##################################################
 
     print("\n" + "="*70)
-    print("EXTRACTING EQUATION EXAMPLES")
+    print("GLOBAL INTERPRETABILITY TABLE")
     print("="*70)
 
-    # Define paths to extract from
-    equation_example_paths = [
-        f"{output_path}/sr_ablation",
-        f"{output_path}/prior_reg",
-        f"{output_path}/memory_cls",
-        f"{output_path}/memory_less_cls",
-        f"{output_path}/memory_reg",
-        f"{output_path}/memory_less_reg",
-    ]
+    try:
+        gi_results_df = collect_global_interpretability_results(f"{output_path}/global_interpretability")
 
-    # Define fixed class for classification datasets
-    # Using class 0 for all classification datasets as default
-    fixed_class_map = {
-        'awa2': 0,
-        'awa2_incomplete': 0,
-        'cub': 0,
-        'cub_incomplete': 0,
-        'cifar10': 0,
-    }
+        if not gi_results_df.empty:
+            print(f"Collected {len(gi_results_df)} rows from global interpretability experiments.")
+            print(f"Models: {gi_results_df['model'].unique()}")
+            print(f"Datasets: {gi_results_df['dataset'].unique()}")
+            print(f"Seeds: {gi_results_df['seed'].unique()}")
+
+            gi_output_path = os.path.join(table_path, 'global_interpretability')
+            os.makedirs(gi_output_path, exist_ok=True)
+
+            # Save aggregated raw results
+            gi_results_df.to_csv(os.path.join(gi_output_path, 'global_interpretability_all.csv'), index=False)
+
+            # Determine classification vs regression datasets present
+            all_gi_datasets = sorted(gi_results_df['dataset'].unique())
+            cls_datasets = [d for d in all_gi_datasets if d not in regression_datasets]
+            reg_datasets = [d for d in all_gi_datasets if d in regression_datasets]
+
+            # Generate range tables (classification + regression)
+            for ds_filter, ds_label, ds_caption in [
+                (cls_datasets, '_cls', ' Classification datasets.'),
+                (reg_datasets, '_reg', ' Regression datasets.'),
+            ]:
+                if not ds_filter:
+                    continue
+                latex_table = build_global_interpretability_table(
+                    gi_results_df, n_display_concepts=3,
+                    dataset_filter=ds_filter, label_suffix=ds_label, caption_suffix=ds_caption
+                )
+                tex_path = os.path.join(gi_output_path, f'global_interpretability{ds_label}.tex')
+                with open(tex_path, 'w') as f:
+                    f.write(latex_table)
+                print(f"LaTeX table saved to: {tex_path}")
+
+            # Generate violation tables (classification + regression)
+            if 'n_violations' in gi_results_df.columns:
+                for mode, suffix in [('count', 'count'), ('percentage', 'pct')]:
+                    for ds_filter, ds_label, ds_caption in [
+                        (cls_datasets, '_cls', ' Classification datasets.'),
+                        (reg_datasets, '_reg', ' Regression datasets.'),
+                    ]:
+                        if not ds_filter:
+                            continue
+                        table = build_global_interpretability_violations_table(
+                            gi_results_df, n_display_concepts=3, mode=mode,
+                            dataset_filter=ds_filter, label_suffix=ds_label, caption_suffix=ds_caption
+                        )
+                        tex_path = os.path.join(gi_output_path, f'global_interpretability_violations_{suffix}{ds_label}.tex')
+                        with open(tex_path, 'w') as f:
+                            f.write(table)
+                        print(f"Violation {suffix} table saved to: {tex_path}")
+            else:
+                print("No violation data in results (n_violations column missing). Re-run experiments to generate.")
+        else:
+            print("No global interpretability results found.")
+    except Exception as e:
+        print(f"Error occurred while processing global interpretability results: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+    ##################################################
+    ######### Expressions Intervention ###############
+    ##################################################
+
+    print("\n" + "="*70)
+    print("EXPRESSIONS INTERVENTION EXPERIMENT")
+    print("="*70)
+
+    expr_interv_path = os.path.join(output_path, 'expressions_intervention')
+    expr_interv_output = os.path.join(table_path, 'expressions_intervention')
+    os.makedirs(expr_interv_output, exist_ok=True)
 
     try:
-        from plot_utils import extract_equation_examples
-        extract_equation_examples(
-            paths=equation_example_paths,
-            output_path=os.path.join(table_path, 'equation_examples'),
-            n_examples=5,
-            fixed_class=fixed_class_map,
-            fixed_memory=fixed_memory
-        )
-        print("\n✓ Equation examples extracted successfully!")
+        cached_csv = os.path.join(output_path, 'cached_results', 'expressions_intervention_results.csv')
+        if os.path.exists(cached_csv):
+            print(f"Loading cached results from {cached_csv}")
+            expr_df = pd.read_csv(cached_csv)
+        else:
+            expr_df = collect_expressions_intervention_results(expr_interv_path)
+            if not expr_df.empty:
+                os.makedirs(os.path.dirname(cached_csv), exist_ok=True)
+                expr_df.to_csv(cached_csv, index=False)
+                print(f"Cached results saved to {cached_csv}")
+
+        if not expr_df.empty:
+            table_tex = build_expressions_intervention_table(expr_df)
+            tex_file = os.path.join(expr_interv_output, 'expressions_intervention.tex')
+            with open(tex_file, 'w') as f:
+                f.write(table_tex)
+            print(f"Expressions intervention table saved to: {tex_file}")
+        else:
+            print("No expressions intervention results found.")
     except Exception as e:
-        print(f"Error occurred while extracting equation examples: {e}")
+        print(f"Error processing expressions intervention results: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+    ##################################################
+    ########## Extract Equation Examples #############
+    ##################################################
+
+    # print("\n" + "="*70)
+    # print("EXTRACTING EQUATION EXAMPLES")
+    # print("="*70)
+
+    # # Define paths to extract from
+    # equation_example_paths = [
+    #     f"{output_path}/sr_ablation",
+    #     f"{output_path}/prior_reg",
+    #     f"{output_path}/memory_cls",
+    #     f"{output_path}/memory_less_cls",
+    #     f"{output_path}/memory_reg",
+    #     f"{output_path}/memory_less_reg",
+    # ]
+
+    # # Define fixed class for classification datasets
+    # # Using class 0 for all classification datasets as default
+    # fixed_class_map = {
+    #     'awa2': 0,
+    #     'awa2_incomplete': 0,
+    #     'cub': 0,
+    #     'cub_incomplete': 0,
+    #     'cifar10': 0,
+    # }
+
+    # try:
+    #     from plot_utils import extract_equation_examples
+    #     extract_equation_examples(
+    #         paths=equation_example_paths,
+    #         output_path=os.path.join(table_path, 'equation_examples'),
+    #         n_examples=5,
+    #         fixed_class=fixed_class_map,
+    #         fixed_memory=fixed_memory
+    #     )
+    #     print("\n✓ Equation examples extracted successfully!")
+    # except Exception as e:
+    #     print(f"Error occurred while extracting equation examples: {e}")
+    #     import traceback
+    #     traceback.print_exc()
+
+
+    ##################################################
+    ######### Explanation Robustness Tables ###########
+    ##################################################
+
+    print("\n" + "="*70)
+    print("EXPLANATION ROBUSTNESS TABLES")
+    print("="*70)
+
+    robustness_base_path = f"{output_path}/global_interpretability"
+    robustness_output = os.path.join(table_path, 'explanation_robustness')
+    os.makedirs(robustness_output, exist_ok=True)
+
+    try:
+        rob_df = collect_explanation_robustness_results(robustness_base_path)
+        if not rob_df.empty:
+            print(f"Collected {len(rob_df)} rows from explanation robustness experiments.")
+            print(f"Models: {rob_df['model'].unique()}")
+            print(f"Datasets: {rob_df['dataset'].unique()}")
+            print(f"Alphas: {sorted(rob_df['alpha'].unique())}")
+
+            # Save aggregated raw results
+            rob_df.to_csv(os.path.join(robustness_output, 'explanation_robustness_all.csv'), index=False)
+
+            for agg in ['mean', 'max']:
+                tables = build_explanation_robustness_tables(
+                    rob_df, model_styles, agg=agg, custom_order=custom_order
+                )
+                for alpha, tex in tables.items():
+                    fname = f"robustness_{agg}_alpha_{alpha:.2f}.tex"
+                    tex_path = os.path.join(robustness_output, fname)
+                    with open(tex_path, 'w') as f:
+                        f.write(tex)
+                print(f"Generated {len(tables)} {agg}-tables for explanation robustness.")
+
+                # Normalized tables
+                if 'lipschitz_constant_normalized' in rob_df.columns:
+                    tables_norm = build_explanation_robustness_tables(
+                        rob_df, model_styles, agg=agg, custom_order=custom_order,
+                        metric_col='lipschitz_constant_normalized'
+                    )
+                    for alpha, tex in tables_norm.items():
+                        fname = f"robustness_norm_{agg}_alpha_{alpha:.2f}.tex"
+                        tex_path = os.path.join(robustness_output, fname)
+                        with open(tex_path, 'w') as f:
+                            f.write(tex)
+                    print(f"Generated {len(tables_norm)} {agg}-tables for normalized explanation robustness.")
+
+            print(f"Tables saved to {robustness_output}")
+        else:
+            print("No explanation robustness results found.")
+    except Exception as e:
+        print(f"Error occurred while processing explanation robustness results: {e}")
         import traceback
         traceback.print_exc()
 

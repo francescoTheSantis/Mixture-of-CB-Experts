@@ -3,6 +3,7 @@ from omegaconf import DictConfig, open_dict
 from hydra.utils import instantiate
 import torch
 import os
+import numpy as np
 from tqdm.auto import tqdm
 
 from src.trainer import Trainer
@@ -122,6 +123,21 @@ def main(cfg: DictConfig) -> None:
     if model.model.has_concepts:
         intervention_df = trainer.interventions(loaded_test)
         intervention_df.to_csv(f"{log_dir}/interventions.csv", index=False)
+
+    ###### Global Interpretability Evaluation ######
+    if cfg.model.metadata.name in ['licem', 'linear_symbolic_cbm']:
+        gi_df = trainer.global_interpretability(loaded_train, loaded_test)
+        gi_df.to_csv(f"{log_dir}/global_interpretability.csv", index=False)
+
+    ###### Explanation Robustness ######
+    if cfg.model.metadata.name in ['licem', 'linear_symbolic_cbm']:
+        robustness_alphas = list(cfg.robustness_alphas) if 'robustness_alphas' in cfg \
+            else list(np.arange(0.01, 0.16, 0.01))
+        robustness_K = cfg.robustness_K if 'robustness_K' in cfg else 10
+        robustness_df = trainer.explanation_robustness(
+            loaded_test, alphas=robustness_alphas, K=robustness_K
+        )
+        robustness_df.to_csv(f"{log_dir}/explanation_robustness.csv", index=False)
 
     # Close the wandb logger if it is used
     if wandb_logger is not None:

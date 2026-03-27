@@ -1,3 +1,7 @@
+"""
+Yes, we generated a lot of tables/plots :)
+"""
+
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 import numpy as np
@@ -4533,3 +4537,1077 @@ def extract_equation_examples(paths, output_path='results/tabs/equation_examples
     
     print(f"\nProcessed {len(datasets_processed)} datasets")
     print(f"Results saved to {output_path}")
+
+
+def generate_intervention_delta_table(
+    performance,
+    custom_order,
+    model_styles,
+    regression_datasets,
+    output_path,
+    noise_level=0.0
+):
+    """
+    Generate a table showing the delta in task performance when intervening on all concepts
+    (p_int=1.0) versus not intervening (p_int=0.0).
+    
+    Args:
+        performance: DataFrame with intervention data (from get_intervention_from_path)
+        custom_order: List of datasets in desired order
+        model_styles: Dictionary with model styling information
+        regression_datasets: List of regression dataset names
+        output_path: Directory path to save the table
+        noise_level: Noise level to filter on (default 0.0)
+    """
+    import os
+    import pandas as pd
+    
+    os.makedirs(output_path, exist_ok=True)
+    
+    # Filter for specified noise level
+    perf_filtered = performance[performance['noise'] == noise_level].copy()
+    
+    # Filter for only datasets in custom_order
+    perf_filtered = perf_filtered[perf_filtered['dataset'].isin(custom_order)]
+    
+    if perf_filtered.empty:
+        print(f"No intervention data found for noise level {noise_level}")
+        return None
+    
+    # Separate intervention data for p_int=0.0 and p_int=1.0
+    no_intervention = perf_filtered[perf_filtered['p_int'] == 0.0].copy()
+    full_intervention = perf_filtered[perf_filtered['p_int'] == 1.0].copy()
+    
+    if no_intervention.empty or full_intervention.empty:
+        print("Missing data for p_int=0.0 or p_int=1.0")
+        return None
+    
+    # Determine metric: accuracy for classification, MAE for regression
+    results = []
+    
+    for dataset in custom_order:
+        if dataset not in perf_filtered['dataset'].unique():
+            continue
+            
+        is_regression = dataset in regression_datasets
+        metric = 'mae' if is_regression else 'accuracy'
+        
+        for model in model_styles.keys():
+            if model not in perf_filtered['model'].unique():
+                continue
+            
+            # Get data for this dataset-model combination
+            no_int_data = no_intervention[
+                (no_intervention['dataset'] == dataset) & 
+                (no_intervention['model'] == model)
+            ][['seed', metric]]
+            
+            full_int_data = full_intervention[
+                (full_intervention['dataset'] == dataset) & 
+                (full_intervention['model'] == model)
+            ][['seed', metric]]
+            
+            if len(no_int_data) == 0 or len(full_int_data) == 0:
+                continue
+            
+            # Merge on seed to compute per-seed deltas
+            merged = pd.merge(
+                no_int_data, 
+                full_int_data, 
+                on='seed', 
+                suffixes=('_no_int', '_full_int')
+            )
+            
+            if len(merged) == 0:
+                continue
+            
+            # Calculate delta for each seed
+            # For accuracy: delta = full_int - no_int (positive means improvement)
+            # For MAE: delta = no_int - full_int (positive means improvement, i.e., lower error)
+            if is_regression:
+                merged['delta'] = merged[f'{metric}_no_int'] - merged[f'{metric}_full_int']
+            else:
+                merged['delta'] = merged[f'{metric}_full_int'] - merged[f'{metric}_no_int']
+            
+            # Calculate mean and confidence interval on deltas
+            delta = merged['delta'].mean()
+            delta_std = merged['delta'].std()
+            n_seeds = len(merged)
+            
+            # 95% confidence interval = 1.96 * SE
+            delta_ci95 = 1.96 * delta_std / (n_seeds ** 0.5) if n_seeds > 0 else 0
+            
+            # Multiply by 100 if metric is accuracy (to show as percentage)
+            if not is_regression:
+                delta = delta * 100
+                delta_ci95 = delta_ci95 * 100
+            
+            # Calculate mean performance for each intervention level (for reference)
+            no_int_mean = merged[f'{metric}_no_int'].mean()
+            full_int_mean = merged[f'{metric}_full_int'].mean()
+            
+            results.append({
+                'dataset': dataset,
+                'model': model,
+                'delta_mean': delta,
+                'delta_ci95': delta_ci95,
+                'no_int_mean': no_int_mean,
+                'full_int_mean': full_int_mean,
+                'metric': metric,
+                'n_seeds': n_seeds
+            })
+    
+    if not results:
+        print("No results to generate table")
+        return None
+    
+    df_results = pd.DataFrame(results)
+    
+    # Save CSV
+    csv_path = os.path.join(output_path, f'intervention_delta_noise_{noise_level}.csv')
+    df_results.to_csv(csv_path, index=False)
+    print(f"Saved intervention delta results to {csv_path}")
+    
+    # Separate datasets into classification and regression
+    classification_datasets = [d for d in custom_order if d not in regression_datasets and d in df_results['dataset'].unique()]
+    regression_datasets_present = [d for d in custom_order if d in regression_datasets and d in df_results['dataset'].unique()]
+    
+    # Function to generate table for a specific dataset type
+    def generate_table(datasets_list, table_type, metric_label):
+        if not datasets_list:
+            return None
+            
+        # Create pivot table for LaTeX
+        pivot_data = []
+        for model in model_styles.keys():
+            model_data = {'model': model_styles[model]['name']}
+            for dataset in datasets_list:
+                row = df_results[(df_results['dataset'] == dataset) & (df_results['model'] == model)]
+                if not row.empty:
+                    delta_mean = row.iloc[0]['delta_mean']
+                    delta_ci95 = row.iloc[0]['delta_ci95']
+                    # Format uncertainty with \tiny and use <= 0.01 for very small values
+                    if delta_ci95 < 0.01:
+                        model_data[dataset] = f"{delta_mean:.2f} {{\\tiny $\\pm \\leq$ 0.01}}"
+                    else:
+                        model_data[dataset] = f"{delta_mean:.2f} {{\\tiny $\\pm$ {delta_ci95:.2f}}}"
+                else:
+                    model_data[dataset] = "-"
+            # Only add row if model has at least one valid entry for these datasets
+            if any(model_data.get(d, '-') != '-' for d in datasets_list):
+                pivot_data.append(model_data)
+        
+        if not pivot_data:
+            return None
+            
+        df_pivot = pd.DataFrame(pivot_data)
+        
+        # Generate LaTeX table
+        latex_lines = []
+        latex_lines.append(r"\begin{table}[t]")
+        latex_lines.append(r"\centering")
+        latex_lines.append(r"\scriptsize")
+        latex_lines.append(r"\setlength{\tabcolsep}{4pt}")
+        
+        # Build column specification
+        n_datasets = len(datasets_list)
+        col_spec = "l" + "c" * n_datasets
+        latex_lines.append(f"\\begin{{tabular}}{{{col_spec}}}")
+        latex_lines.append(r"\toprule")
+        
+        # Header row with dataset names
+        header = "\\textbf{Model}"
+        for dataset in datasets_list:
+            header += f" & \\textbf{{{get_df_name(dataset)}}}"
+        header += " \\\\"
+        latex_lines.append(header)
+        latex_lines.append(r"\midrule")
+        
+        # Data rows
+        for _, row in df_pivot.iterrows():
+            line = row['model']
+            for dataset in datasets_list:
+                line += f" & {row.get(dataset, '-')}"
+            line += " \\\\"
+            latex_lines.append(line)
+        
+        latex_lines.append(r"\bottomrule")
+        latex_lines.append(r"\end{tabular}")
+        
+        # Caption based on table type
+        if table_type == 'classification':
+            caption = (r"\caption{Performance delta ($\Delta$) when intervening on all concepts (p\_int=1.0) vs. no intervention (p\_int=0.0) " +
+                      f"for classification datasets. $\\Delta$ = accuracy(full) - accuracy(none). " +
+                      f"Positive values indicate improvement. Values shown as mean $\\pm$ 95\\% CI. Noise: {noise_level}.}}")
+            label = r"\label{tab:intervention_delta_classification}"
+        else:
+            caption = (r"\caption{Performance delta ($\Delta$) when intervening on all concepts (p\_int=1.0) vs. no intervention (p\_int=0.0) " +
+                      f"for regression datasets. $\\Delta$ = MAE(none) - MAE(full). " +
+                      f"Positive values indicate improvement. Values shown as mean $\\pm$ 95\\% CI. Noise: {noise_level}.}}")
+            label = r"\label{tab:intervention_delta_regression}"
+        
+        latex_lines.append(caption)
+        latex_lines.append(label)
+        latex_lines.append(r"\end{table}")
+        
+        return '\n'.join(latex_lines)
+    
+    # Generate classification table
+    if classification_datasets:
+        classification_table = generate_table(classification_datasets, 'classification', 'Accuracy')
+        if classification_table:
+            tex_path = os.path.join(output_path, f'intervention_delta_classification_noise_{noise_level}.tex')
+            with open(tex_path, 'w') as f:
+                f.write(classification_table)
+            print(f"Saved classification LaTeX table to {tex_path}")
+    
+    # Generate regression table
+    if regression_datasets_present:
+        regression_table = generate_table(regression_datasets_present, 'regression', 'MAE')
+        if regression_table:
+            tex_path = os.path.join(output_path, f'intervention_delta_regression_noise_{noise_level}.tex')
+            with open(tex_path, 'w') as f:
+                f.write(regression_table)
+            print(f"Saved regression LaTeX table to {tex_path}")
+    
+    return df_results
+
+
+########################################
+#### Global Interpretability Table #####
+########################################
+
+def collect_global_interpretability_results(base_path):
+    """
+    Walk the output directory tree and collect all global_interpretability.csv files.
+    """
+    all_dfs = []
+    if not os.path.exists(base_path):
+        print(f"Warning: {base_path} does not exist.")
+        return pd.DataFrame()
+
+    for root, dirs, files in os.walk(base_path):
+        for fname in files:
+            if fname == 'global_interpretability.csv':
+                fpath = os.path.join(root, fname)
+                try:
+                    df = pd.read_csv(fpath)
+                    all_dfs.append(df)
+                except Exception as e:
+                    print(f"Warning: could not read {fpath}: {e}")
+
+    if not all_dfs:
+        print("No global_interpretability.csv files found.")
+        return pd.DataFrame()
+
+    return pd.concat(all_dfs, ignore_index=True)
+
+
+def select_gi_concepts(df, dataset, task_idx=0, n_display=3):
+    """
+    Select top n_display concepts by training-range violation count.
+
+    For each (dataset, seed, concept), check whether the test range
+    exceeds the training range (test_min < train_min or test_max > train_max).
+    Count violations across all seeds x noise levels. Pick the top n_display.
+    """
+    licem_df = df[
+        (df['model'] == 'licem') &
+        (df['dataset'] == dataset) &
+        (df['concept_name'] != 'bias') &
+        (df['task_idx'] == task_idx)
+    ]
+
+    if licem_df.empty:
+        concepts = df[(df['dataset'] == dataset) & (df['concept_name'] != 'bias')][
+            ['concept_idx', 'concept_name']
+        ].drop_duplicates().sort_values('concept_idx')
+        return concepts.head(n_display)
+
+    concepts = licem_df[['concept_idx', 'concept_name']].drop_duplicates()
+    seeds = licem_df['seed'].unique()
+    test_noises = sorted(licem_df[licem_df['split'] == 'test']['noise'].unique())
+
+    violation_counts = {}
+    for _, row in concepts.iterrows():
+        c_idx, c_name = row['concept_idx'], row['concept_name']
+        count = 0
+        for seed in seeds:
+            train_sub = licem_df[
+                (licem_df['concept_idx'] == c_idx) &
+                (licem_df['seed'] == seed) &
+                (licem_df['split'] == 'train')
+            ]
+            if train_sub.empty:
+                continue
+            train_min = train_sub['weight_min'].values[0]
+            train_max = train_sub['weight_max'].values[0]
+
+            for noise in test_noises:
+                test_sub = licem_df[
+                    (licem_df['concept_idx'] == c_idx) &
+                    (licem_df['seed'] == seed) &
+                    (licem_df['split'] == 'test') &
+                    (np.isclose(licem_df['noise'], noise))
+                ]
+                if test_sub.empty:
+                    continue
+                test_min = test_sub['weight_min'].values[0]
+                test_max = test_sub['weight_max'].values[0]
+                if test_min < train_min or test_max > train_max:
+                    count += 1
+
+        violation_counts[(c_idx, c_name)] = count
+
+    sorted_concepts = sorted(
+        violation_counts.items(), key=lambda x: (-x[1], x[0][0])
+    )
+    top = sorted_concepts[:n_display]
+    result = pd.DataFrame(
+        [(idx, name) for (idx, name), _ in top],
+        columns=['concept_idx', 'concept_name'],
+    )
+    return result
+
+
+def build_global_interpretability_table(results_df, n_display_concepts=3, dataset_filter=None, label_suffix='', caption_suffix=''):
+    """
+    Build and return a LaTeX table string for global interpretability comparison.
+
+    LICEM: weight ranges [min, max] per concept, per split (train, test+noise).
+    Lin-M-CBE: fixed learned weight values per concept, per memory slot.
+
+    Args:
+        dataset_filter: optional list of dataset names to include.
+        label_suffix: appended to the LaTeX label.
+        caption_suffix: appended to the caption.
+    """
+    if results_df.empty:
+        return "% No results to display."
+
+    if dataset_filter is not None:
+        results_df = results_df[results_df['dataset'].isin(dataset_filter)].copy()
+        if results_df.empty:
+            return "% No results for the given dataset filter."
+
+    datasets = sorted(results_df['dataset'].unique())
+    task_idx = 0
+
+    dataset_concepts = {}
+    for ds in datasets:
+        sel = select_gi_concepts(results_df, ds, task_idx=task_idx, n_display=n_display_concepts)
+        dataset_concepts[ds] = list(sel.itertuples(index=False, name=None))
+
+    licem_df = results_df[results_df['model'] == 'licem'].copy()
+    linsym_df = results_df[results_df['model'] == 'linear_symbolic_cbm'].copy()
+
+    licem_rows = []
+    if not licem_df.empty:
+        licem_rows.append(('train', 0.0))
+        test_noises = sorted(licem_df[licem_df['split'] == 'test']['noise'].unique())
+        for noise in test_noises:
+            licem_rows.append(('test', noise))
+
+    linsym_slots = []
+    if not linsym_df.empty:
+        linsym_slots = sorted(linsym_df['memory_slot'].dropna().unique())
+
+    col_spec = "ll|" + "|".join(
+        "c" * len(dataset_concepts[ds]) for ds in datasets
+    )
+
+    def _format_range(row_min, row_max, decimals=2):
+        return f"[{row_min:.{decimals}f}, {row_max:.{decimals}f}]"
+
+    def _format_value(val, decimals=2):
+        return f"{val:.{decimals}f}"
+
+    def _is_classification(ds):
+        return results_df[results_df['dataset'] == ds]['task_idx'].nunique() > 1
+
+    lines = []
+    lines.append(r"\begin{table*}[t]")
+    lines.append(r"\centering")
+    cap_extra = f" {caption_suffix}" if caption_suffix else ""
+    lines.append(r"\caption{Global interpretability comparison. LICEM shows weight ranges $[\min, \max]$ "
+                 r"across samples; Lin-M-CBE shows fixed learned weights per memory slot. "
+                 r"Noise is applied to the encoder input. "
+                 rf"Concepts selected by most training-range violations across seeds and noise levels.{cap_extra}}}")
+    lab = f"tab:global_interpretability{label_suffix}"
+    lines.append(rf"\label{{{lab}}}")
+    lines.append(r"\resizebox{\textwidth}{!}{")
+    lines.append(r"\begin{tabular}{" + col_spec + "}")
+    lines.append(r"\toprule")
+
+    # Header row 1: dataset names (with class name for classification)
+    header1_parts = [r"\multicolumn{2}{c|}{}"]
+    for ds in datasets:
+        n_cols = len(dataset_concepts[ds])
+        ds_display = get_df_name(ds) if get_df_name(ds) else ds
+        if _is_classification(ds):
+            task_name_row = results_df[
+                (results_df['dataset'] == ds) & (results_df['task_idx'] == task_idx)
+            ]['task_name'].iloc[0]
+            task_clean = task_name_row.replace('+', ' ')
+            ds_display = f"{ds_display} ({task_clean})"
+        header1_parts.append(
+            rf"\multicolumn{{{n_cols}}}{{c}}{{{ds_display}}}"
+        )
+    lines.append(" & ".join(header1_parts) + r" \\")
+
+    # Header row 2: concept names
+    header2_parts = ["Model", "Split"]
+    for ds in datasets:
+        for _, c_name in dataset_concepts[ds]:
+            short = c_name.replace('value_', '').replace('_', r'\_')
+            header2_parts.append(f"${short}$")
+    lines.append(" & ".join(header2_parts) + r" \\")
+    lines.append(r"\midrule")
+
+    # LICEM rows
+    if licem_rows:
+        n_licem_rows = len(licem_rows)
+        first = True
+        for split, noise in licem_rows:
+            row_parts = []
+            if first:
+                row_parts.append(rf"\multirow{{{n_licem_rows}}}{{*}}{{LICEM}}")
+                first = False
+            else:
+                row_parts.append("")
+
+            if split == 'train':
+                row_parts.append("Train")
+            else:
+                row_parts.append(f"Test ($\\epsilon$={noise:.1f})")
+
+            for ds in datasets:
+                for c_idx, c_name in dataset_concepts[ds]:
+                    mask = (
+                        (licem_df['dataset'] == ds) &
+                        (licem_df['concept_idx'] == c_idx) &
+                        (licem_df['task_idx'] == task_idx)
+                    )
+                    if split == 'train':
+                        mask = mask & (licem_df['split'] == 'train')
+                    else:
+                        mask = mask & (licem_df['split'] == 'test') & (np.isclose(licem_df['noise'], noise))
+
+                    subset = licem_df[mask]
+                    if subset.empty:
+                        row_parts.append("--")
+                    else:
+                        env_min = subset['weight_min'].min()
+                        env_max = subset['weight_max'].max()
+                        row_parts.append(_format_range(env_min, env_max))
+
+            lines.append(" & ".join(row_parts) + r" \\")
+
+    lines.append(r"\midrule")
+
+    # Lin-M-CBE rows
+    if linsym_slots is not None and len(linsym_slots) > 0:
+        n_linsym_rows = len(linsym_slots)
+        first = True
+        for mem_idx in linsym_slots:
+            row_parts = []
+            if first:
+                row_parts.append(rf"\multirow{{{n_linsym_rows}}}{{*}}{{Lin-M-CBE}}")
+                first = False
+            else:
+                row_parts.append("")
+
+            row_parts.append(f"Slot {int(mem_idx)}")
+
+            for ds in datasets:
+                for c_idx, c_name in dataset_concepts[ds]:
+                    mask = (
+                        (linsym_df['dataset'] == ds) &
+                        (linsym_df['concept_idx'] == c_idx) &
+                        (linsym_df['task_idx'] == task_idx) &
+                        (linsym_df['memory_slot'] == mem_idx)
+                    )
+                    subset = linsym_df[mask]
+                    if subset.empty:
+                        row_parts.append("--")
+                    else:
+                        avg_val = subset['weight_value'].mean()
+                        row_parts.append(_format_value(avg_val))
+
+            lines.append(" & ".join(row_parts) + r" \\")
+
+    lines.append(r"\bottomrule")
+    lines.append(r"\end{tabular}")
+    lines.append(r"}")
+    lines.append(r"\end{table*}")
+
+    return "\n".join(lines)
+
+
+def build_global_interpretability_violations_table(results_df, n_display_concepts=3, mode='count', dataset_filter=None, label_suffix='', caption_suffix=''):
+    """
+    Build a LaTeX table showing training ranges + per-sample violation counts or percentages.
+
+    Structure:
+    - LICEM Train row: shows training weight range [min, max] per concept.
+    - LICEM Test rows: shows violation count/percentage per noise level.
+    - Lin-M-CBE rows: shows 0 violations (fixed weights, by design).
+
+    Args:
+        results_df: DataFrame with n_violations and n_samples columns.
+        n_display_concepts: Number of concepts to display per dataset.
+        mode: 'count' for absolute violation counts, 'percentage' for percentages.
+        dataset_filter: optional list of dataset names to include.
+        label_suffix: appended to the LaTeX label.
+        caption_suffix: appended to the caption.
+    """
+    if results_df.empty:
+        return "% No results to display."
+
+    if 'n_violations' not in results_df.columns:
+        return "% No violation data available."
+
+    if dataset_filter is not None:
+        results_df = results_df[results_df['dataset'].isin(dataset_filter)].copy()
+        if results_df.empty:
+            return "% No results for the given dataset filter."
+
+    licem_df = results_df[
+        (results_df['model'] == 'licem') &
+        (results_df['concept_name'] != 'bias')
+    ].copy()
+
+    linsym_df = results_df[
+        (results_df['model'] == 'linear_symbolic_cbm') &
+        (results_df['concept_name'] != 'bias')
+    ].copy()
+
+    if licem_df.empty:
+        return "% No LICEM violation data available."
+
+    datasets = sorted(licem_df['dataset'].unique())
+    task_idx = 0
+
+    dataset_concepts = {}
+    for ds in datasets:
+        sel = select_gi_concepts(results_df, ds, task_idx=task_idx, n_display=n_display_concepts)
+        dataset_concepts[ds] = list(sel.itertuples(index=False, name=None))
+
+    test_noises = sorted(licem_df[licem_df['split'] == 'test']['noise'].unique())
+
+    # Lin-M-CBE memory slots
+    linsym_slots = []
+    if not linsym_df.empty:
+        linsym_slots = sorted(linsym_df['memory_slot'].dropna().unique())
+
+    col_spec = "ll|" + "|".join(
+        "c" * len(dataset_concepts[ds]) for ds in datasets
+    )
+
+    def _is_classification(ds):
+        return results_df[results_df['dataset'] == ds]['task_idx'].nunique() > 1
+
+    def _format_range(v_min, v_max, decimals=2):
+        return f"[{v_min:.{decimals}f}, {v_max:.{decimals}f}]"
+
+    if mode == 'count':
+        caption_metric = "number of samples"
+        label_base = "violations_count"
+        zero_val = "0"
+    else:
+        caption_metric = "percentage of samples"
+        label_base = "violations_pct"
+        zero_val = "0.0\\%"
+
+    # Count rows: 1 train + len(test_noises) LICEM + len(linsym_slots) Lin-M-CBE
+    n_licem_rows = 1 + len(test_noises)
+    n_linsym_rows = max(len(linsym_slots), 1) if not linsym_df.empty else 0
+
+    lines = []
+    lines.append(r"\begin{table*}[t]")
+    lines.append(r"\centering")
+    cap_extra = f" {caption_suffix}" if caption_suffix else ""
+    lines.append(rf"\caption{{{caption_metric.capitalize()} violating the training weight range per concept. "
+                 r"The Train row shows the reference range $[\min, \max]$. "
+                 r"Lin-M-CBE has zero violations by design (fixed weights). "
+                 rf"Concepts selected by most training-range violations across seeds and noise levels.{cap_extra}}}")
+    lab = f"tab:global_interpretability_{label_base}{label_suffix}"
+    lines.append(rf"\label{{{lab}}}")
+    lines.append(r"\resizebox{\textwidth}{!}{")
+    lines.append(r"\begin{tabular}{" + col_spec + "}")
+    lines.append(r"\toprule")
+
+    # Header row 1: dataset names
+    header1_parts = [r"\multicolumn{2}{c|}{}"]
+    for ds in datasets:
+        n_cols = len(dataset_concepts[ds])
+        ds_display = get_df_name(ds) if get_df_name(ds) else ds
+        if _is_classification(ds):
+            task_name_row = results_df[
+                (results_df['dataset'] == ds) & (results_df['task_idx'] == task_idx)
+            ]['task_name'].iloc[0]
+            task_clean = task_name_row.replace('+', ' ')
+            ds_display = f"{ds_display} ({task_clean})"
+        header1_parts.append(
+            rf"\multicolumn{{{n_cols}}}{{c}}{{{ds_display}}}"
+        )
+    lines.append(" & ".join(header1_parts) + r" \\")
+
+    # Header row 2: concept names
+    header2_parts = ["Model", "Split"]
+    for ds in datasets:
+        for _, c_name in dataset_concepts[ds]:
+            short = c_name.replace('value_', '').replace('_', r'\_')
+            header2_parts.append(f"${short}$")
+    lines.append(" & ".join(header2_parts) + r" \\")
+    lines.append(r"\midrule")
+
+    # --- LICEM rows ---
+    first = True
+    # Train row: show training range
+    row_parts = []
+    row_parts.append(rf"\multirow{{{n_licem_rows}}}{{*}}{{LICEM}}")
+    row_parts.append("Train")
+    for ds in datasets:
+        for c_idx, c_name in dataset_concepts[ds]:
+            mask = (
+                (licem_df['dataset'] == ds) &
+                (licem_df['concept_idx'] == c_idx) &
+                (licem_df['task_idx'] == task_idx) &
+                (licem_df['split'] == 'train')
+            )
+            subset = licem_df[mask]
+            if subset.empty:
+                row_parts.append("--")
+            else:
+                env_min = subset['weight_min'].min()
+                env_max = subset['weight_max'].max()
+                row_parts.append(_format_range(env_min, env_max))
+    lines.append(" & ".join(row_parts) + r" \\")
+
+    # Test rows: show violations
+    for noise in test_noises:
+        row_parts = ["", f"Test ($\\epsilon$={noise:.1f})"]
+        for ds in datasets:
+            for c_idx, c_name in dataset_concepts[ds]:
+                mask = (
+                    (licem_df['dataset'] == ds) &
+                    (licem_df['concept_idx'] == c_idx) &
+                    (licem_df['task_idx'] == task_idx) &
+                    (licem_df['split'] == 'test') &
+                    (np.isclose(licem_df['noise'], noise))
+                )
+                subset = licem_df[mask].dropna(subset=['n_violations'])
+                if subset.empty:
+                    row_parts.append("--")
+                else:
+                    total_violations = subset['n_violations'].sum()
+                    total_samples = subset['n_samples'].sum()
+                    if mode == 'count':
+                        row_parts.append(f"{int(total_violations)}")
+                    else:
+                        pct = (total_violations / total_samples * 100) if total_samples > 0 else 0
+                        row_parts.append(f"{pct:.1f}\\%")
+        lines.append(" & ".join(row_parts) + r" \\")
+
+    lines.append(r"\midrule")
+
+    # --- Lin-M-CBE rows: all zeros ---
+    if n_linsym_rows > 0:
+        if linsym_slots:
+            first = True
+            for mem_idx in linsym_slots:
+                row_parts = []
+                if first:
+                    row_parts.append(rf"\multirow{{{n_linsym_rows}}}{{*}}{{Lin-M-CBE}}")
+                    first = False
+                else:
+                    row_parts.append("")
+                row_parts.append(f"Slot {int(mem_idx)}")
+                for ds in datasets:
+                    for _ in dataset_concepts[ds]:
+                        row_parts.append(zero_val)
+                lines.append(" & ".join(row_parts) + r" \\")
+        else:
+            row_parts = [r"Lin-M-CBE", "Fixed"]
+            for ds in datasets:
+                for _ in dataset_concepts[ds]:
+                    row_parts.append(zero_val)
+            lines.append(" & ".join(row_parts) + r" \\")
+
+    lines.append(r"\bottomrule")
+    lines.append(r"\end{tabular}")
+    lines.append(r"}")
+    lines.append(r"\end{table*}")
+
+    return "\n".join(lines)
+
+
+##########################################################
+#### Expressions Intervention Experiment Functions #######
+##########################################################
+
+def collect_expressions_intervention_results(base_path):
+    """
+    Collect results from the expressions_intervention experiment.
+
+    Walks subdirectories, loads MAE from metrics.csv and computes TED
+    by comparing learned equations against the dataset ground-truth equations.
+
+    Returns a DataFrame with columns:
+        dataset, n_gt_equations, seed, memory_size, task_mae, avg_ted
+    """
+    from src.utils.ted import sympy_to_tree, ted_weighted, make_costs
+    from sympy import sympify, Symbol
+    try:
+        from scipy.optimize import linear_sum_assignment
+        use_scipy = True
+    except ImportError:
+        use_scipy = False
+
+    if not os.path.exists(base_path):
+        return pd.DataFrame()
+
+    # Collect all experiment run directories
+    exps_path = []
+    for timestamp_dir in os.listdir(base_path):
+        ts_full = os.path.join(base_path, timestamp_dir)
+        if not os.path.isdir(ts_full):
+            continue
+        for run_dir in os.listdir(ts_full):
+            run_full = os.path.join(ts_full, run_dir)
+            if os.path.isdir(run_full) and 'multirun' not in run_dir:
+                exps_path.append(run_full)
+
+    results = []
+    weight_fn, rename_fn = make_costs()
+
+    for exp_path in tqdm(exps_path, desc="Processing expressions_intervention experiments"):
+        config_file = os.path.join(exp_path, '.hydra/config.yaml')
+        metrics_file = os.path.join(exp_path, 'logs/experiment_metrics/metrics.csv')
+        predictions_file = os.path.join(exp_path, 'logs/experiment_metrics/test_predictions_per_sample.csv')
+
+        if not os.path.exists(config_file) or not os.path.exists(metrics_file):
+            continue
+
+        try:
+            with open(config_file, 'r') as f:
+                config = yaml.safe_load(f)
+
+            dataset_name = config['dataset']['metadata']['name']
+            seed = config['seed']
+            memory_size = config.get('memory_size', 1)
+            n_gt = config.get('model', {}).get('params', {}).get('n_gt_equations', 0)
+
+            # Load MAE from metrics.csv
+            metrics_df = pd.read_csv(metrics_file)
+            task_mae = None
+            if 'test/y/mae' in metrics_df.columns:
+                task_mae = metrics_df['test/y/mae'].iloc[-1]
+            elif 'test/y/mse' in metrics_df.columns:
+                task_mae = metrics_df['test/y/mse'].iloc[-1]
+
+            # Compute TED if ground-truth equations and predictions are available
+            avg_ted = np.nan
+            gt_equation_strs = config.get('dataset', {}).get('equations', None)
+            if gt_equation_strs and os.path.exists(predictions_file):
+                try:
+                    # Load predictions first to extract concept names
+                    # (c_names is set at runtime and NOT saved in the Hydra config)
+                    df_pred = pd.read_csv(predictions_file)
+                    c_names = [x.replace('c_pred_', '') for x in df_pred.columns if 'c_pred' in x]
+
+                    # Build true trees from dataset config equations
+                    true_trees = []
+                    for eq_str in gt_equation_strs:
+                        eq_expr = sympify(eq_str)
+                        # Rename c0, c1, ... to concept names
+                        for i, c_name in enumerate(c_names):
+                            eq_expr = eq_expr.subs(Symbol(f'c{i}'), Symbol(c_name))
+                        tree = sympy_to_tree(eq_expr, canonicalize_commutative=True, enforce_mul_for_add_terms=True)
+                        true_trees.append(tree)
+                    if 'equation' in df_pred.columns:
+                        pred_vars = [x.replace('c_pred_', '') for x in df_pred.columns if 'c_pred' in x]
+                        learned_eq_strs = []
+                        for eq_str in df_pred['equation'].unique():
+                            if pd.notna(eq_str) and eq_str != '':
+                                if ':' in eq_str:
+                                    eq_str = eq_str.split(':')[1].strip()
+                                learned_eq_strs.append(eq_str)
+
+                        learned_trees = []
+                        for eq_str in learned_eq_strs:
+                            try:
+                                equation = sympify(eq_str, locals={v: sympify(v) for v in pred_vars})
+                                tree = sympy_to_tree(equation, canonicalize_commutative=True, enforce_mul_for_add_terms=True)
+                                learned_trees.append(tree)
+                            except Exception:
+                                continue
+
+                        if learned_trees and true_trees:
+                            n_l, n_t = len(learned_trees), len(true_trees)
+                            ted_matrix = np.zeros((n_l, n_t))
+                            for i, lt in enumerate(learned_trees):
+                                for j, tt in enumerate(true_trees):
+                                    try:
+                                        ted_matrix[i, j] = ted_weighted(lt, tt, weight_fn, rename_fn)
+                                    except Exception:
+                                        ted_matrix[i, j] = np.inf
+
+                            if n_l != n_t:
+                                max_dim = max(n_l, n_t)
+                                padded = np.full((max_dim, max_dim), np.max(ted_matrix) * 10)
+                                padded[:n_l, :n_t] = ted_matrix
+                                if use_scipy:
+                                    ri, ci = linear_sum_assignment(padded)
+                                else:
+                                    ri, ci = np.arange(min(n_l, n_t)), np.arange(min(n_l, n_t))
+                                valid = (ri < n_l) & (ci < n_t)
+                                ri, ci = ri[valid], ci[valid]
+                            else:
+                                if use_scipy:
+                                    ri, ci = linear_sum_assignment(ted_matrix)
+                                else:
+                                    ri, ci = np.arange(n_l), np.arange(n_t)
+
+                            assigned = [ted_matrix[i, j] for i, j in zip(ri, ci)]
+                            avg_ted = np.mean(assigned) if assigned else np.nan
+
+                except Exception as e:
+                    pass  # TED stays NaN
+
+            results.append({
+                'dataset': dataset_name,
+                'n_gt_equations': n_gt,
+                'seed': seed,
+                'memory_size': memory_size,
+                'task_mae': task_mae,
+                'avg_ted': avg_ted,
+            })
+
+        except Exception:
+            continue
+
+    return pd.DataFrame(results)
+
+
+def build_expressions_intervention_table(results_df):
+    """
+    Build a LaTeX table for the expressions intervention experiment.
+
+    Columns: one per dataset, each split into MAE and TED sub-columns.
+    Rows: one per n_gt_equations value (aggregated across seeds as mean ± std).
+    """
+    if results_df.empty:
+        return "% No expressions intervention results."
+
+    datasets = sorted(results_df['dataset'].unique())
+    n_gt_values = sorted(results_df['n_gt_equations'].unique())
+
+    # Aggregate across seeds
+    agg = results_df.groupby(['dataset', 'n_gt_equations']).agg(
+        mae_mean=('task_mae', 'mean'),
+        mae_std=('task_mae', 'std'),
+        ted_mean=('avg_ted', 'mean'),
+        ted_std=('avg_ted', 'std'),
+        count=('seed', 'count'),
+    ).reset_index()
+
+    n_ds = len(datasets)
+    # l | cc | cc | ...
+    col_fmt = "l" + " cc" * n_ds
+
+    lines = []
+    lines.append(r"\begin{table*}[t]")
+    lines.append(r"\centering")
+    lines.append(r"\resizebox{\textwidth}{!}{%")
+    lines.append(r"\begin{tabular}{" + col_fmt + r"}")
+    lines.append(r"\toprule")
+
+    # First header row: dataset names spanning 2 columns each
+    header1_parts = [""]
+    for ds in datasets:
+        ds_display = get_df_name(ds)
+        header1_parts.append(r"\multicolumn{2}{c}{" + ds_display + r"}")
+    lines.append(" & ".join(header1_parts) + r" \\")
+
+    # Cmidrules for each dataset pair
+    cmidrules = []
+    for i, _ in enumerate(datasets):
+        start = 2 + i * 2
+        end = start + 1
+        cmidrules.append(rf"\cmidrule(lr){{{start}-{end}}}")
+    lines.append(" ".join(cmidrules))
+
+    # Second header row: MAE | TED for each dataset
+    header2_parts = [r"\# GT Eq."]
+    for _ in datasets:
+        header2_parts.append("MAE")
+        header2_parts.append("TED")
+    lines.append(" & ".join(header2_parts) + r" \\")
+    lines.append(r"\midrule")
+
+    def fmt_cell(mean, std):
+        if pd.isna(mean):
+            return "--"
+        if pd.isna(std) or std == 0:
+            return rf"${mean:.3f}$"
+        return rf"${mean:.3f}_{{\tiny{{\pm {std:.3f}}}}}$"
+
+    # Data rows: one per n_gt_equations
+    for n_gt in n_gt_values:
+        row_parts = [str(n_gt)]
+        for ds in datasets:
+            row_data = agg[(agg['dataset'] == ds) & (agg['n_gt_equations'] == n_gt)]
+            if len(row_data) == 0:
+                row_parts.append("--")
+                row_parts.append("--")
+            else:
+                r = row_data.iloc[0]
+                row_parts.append(fmt_cell(r['mae_mean'], r['mae_std']))
+                row_parts.append(fmt_cell(r['ted_mean'], r['ted_std']))
+        lines.append(" & ".join(row_parts) + r" \\")
+
+    lines.append(r"\bottomrule")
+    lines.append(r"\end{tabular}")
+    lines.append(r"}")
+    lines.append(r"\caption{Effect of providing ground-truth equations on task performance (MAE) "
+                 r"and equation quality (TED). Each row corresponds to a different number of "
+                 r"ground-truth equations injected; remaining equations are discovered via PySR.}")
+    lines.append(r"\label{tab:expressions_intervention}")
+    lines.append(r"\end{table*}")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------
+# Explanation Robustness utilities
+# ---------------------------------------------------------------
+
+def collect_explanation_robustness_results(base_path):
+    """Walk the output directory tree and collect all explanation_robustness.csv files."""
+    all_dfs = []
+    if not os.path.exists(base_path):
+        print(f"Warning: {base_path} does not exist.")
+        return pd.DataFrame()
+
+    for root, dirs, files in os.walk(base_path):
+        for fname in files:
+            if fname == 'explanation_robustness.csv':
+                fpath = os.path.join(root, fname)
+                try:
+                    df = pd.read_csv(fpath)
+                    all_dfs.append(df)
+                except Exception as e:
+                    print(f"Warning: could not read {fpath}: {e}")
+
+    if not all_dfs:
+        print("No explanation_robustness.csv files found.")
+        return pd.DataFrame()
+
+    return pd.concat(all_dfs, ignore_index=True)
+
+
+def build_explanation_robustness_tables(results_df, model_styles, agg='mean',
+                                         custom_order=None, float_fmt="{:.4f}",
+                                         metric_col='lipschitz_constant'):
+    """
+    Build a LaTeX table for explanation robustness.
+
+    For each alpha level, produce one table where:
+      - columns = datasets
+      - rows = models
+      - cell = mean±ci across seeds of the *per-alpha aggregate*
+
+    Args:
+        results_df: DataFrame with columns [sample_idx, lipschitz_constant,
+                    lipschitz_constant_normalized, model, dataset, seed, alpha, K].
+        model_styles: dict mapping model key -> {'name': ...}.
+        agg: 'mean' or 'max' – how to aggregate L_{x_i} across samples
+             within a single (model, dataset, seed, alpha) run.
+        custom_order: optional list of datasets in desired column order.
+        float_fmt: format string for floats.
+        metric_col: column to aggregate ('lipschitz_constant' or
+                    'lipschitz_constant_normalized').
+
+    Returns:
+        dict  alpha -> LaTeX table string.
+    """
+    if results_df.empty:
+        return {}
+
+    # Aggregate per (model, dataset, seed, alpha)
+    grouped = (
+        results_df
+        .groupby(['model', 'dataset', 'seed', 'alpha'])[metric_col]
+        .agg(agg)
+        .reset_index()
+        .rename(columns={metric_col: 'value'})
+    )
+
+    # Then mean, std and count across seeds for confidence interval
+    summary = (
+        grouped
+        .groupby(['model', 'dataset', 'alpha'])['value']
+        .agg(['mean', 'std', 'count'])
+        .reset_index()
+    )
+    summary['std'] = summary['std'].fillna(0.0)
+    # 95% confidence interval: 1.96 * std / sqrt(n)
+    summary['ci'] = 1.96 * summary['std'] / np.sqrt(summary['count'])
+
+    alphas = sorted(summary['alpha'].unique())
+    datasets = sorted(summary['dataset'].unique())
+    if custom_order is not None:
+        datasets = [d for d in custom_order if d in datasets]
+
+    models = sorted(summary['model'].unique())
+    # Re-order models according to model_styles order if available
+    if model_styles is not None:
+        style_order = list(model_styles.keys())
+        models = [m for m in style_order if m in models]
+
+    tables = {}
+    for alpha in alphas:
+        sub = summary[summary['alpha'] == alpha]
+
+        display_datasets = [get_df_name(d) for d in datasets]
+        col_format = "l" + "c" * len(datasets)
+
+        lines = []
+        lines.append(r"\begin{table}[t]")
+        lines.append(r"\centering")
+        lines.append(r"\resizebox{\columnwidth}{!}{%")
+        lines.append(r"\begin{tabular}{" + col_format + r"}")
+        lines.append(r"\toprule")
+        header = "Model & " + " & ".join(display_datasets) + r" \\"
+        lines.append(header)
+        lines.append(r"\midrule")
+
+        for model in models:
+            name = model_styles[model]['name'] if model_styles and model in model_styles else model
+            row = [name.replace("_", r"\_")]
+            for dataset in datasets:
+                cell_df = sub[(sub['model'] == model) & (sub['dataset'] == dataset)]
+                if cell_df.empty:
+                    row.append("--")
+                else:
+                    m = float_fmt.format(cell_df.iloc[0]['mean'])
+                    ci = float_fmt.format(cell_df.iloc[0]['ci'])
+                    row.append(rf"${m} \scriptscriptstyle{{\pm {ci}}}$")
+            lines.append(" & ".join(row) + r" \\")
+
+        lines.append(r"\bottomrule")
+        lines.append(r"\end{tabular}")
+        lines.append(r"}")
+        agg_label = r"$\overline{L}$" if agg == 'mean' else r"$L_{\max}$"
+        norm_suffix = ", normalized" if metric_col == 'lipschitz_constant_normalized' else ""
+        metric_tag = "norm_" if metric_col == 'lipschitz_constant_normalized' else ""
+        lines.append(r"\caption{Explanation robustness (" + agg_label +
+                     norm_suffix + r") at $\alpha=" + f"{alpha:.2f}" + r"$.}")
+        lines.append(r"\label{tab:robustness_" + metric_tag + agg + f"_alpha_{alpha:.2f}" + r"}")
+        lines.append(r"\end{table}")
+
+        tables[alpha] = "\n".join(lines)
+
+    return tables
