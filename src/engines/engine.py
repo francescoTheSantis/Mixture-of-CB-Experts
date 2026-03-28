@@ -240,7 +240,7 @@ class Engine(pl.LightningModule):
                 print(f"✗ Error extracting equations: {str(e)}")
                 self.cached_equations = {0: f"Error extracting equation: {str(e)}"}
                 self.cached_parsed_equations = {(0, y_name): f"Error extracting equation: {str(e)}" for y_name in self.y_name}
-        elif self.model_name in ['KANSymbolicCBM', 'LinearSymbolicCBM', 'PriorSymbolicCBM', 'SymbolicRegressorCBM', 'MemoryCBM']:
+        elif self.model_name in ['KANSymbolicCBM', 'LinearSymbolicCBM', 'PriorSymbolicCBM', 'SymbolicRegressorCBM', 'MemoryCBM', 'BooleanSymbolicCBM']:
             # For memory-based models, extract and parse equations once
             self.cached_equations = extract_memory_equations(self.model, self.model_name)
             self.cached_parsed_equations = parse_memory_equations(self.cached_equations, self.y_name)

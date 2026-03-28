@@ -269,7 +269,7 @@ def extract_memory_equations(model, model_name):
         else:
             equations[0] = "No equations available"
     
-    elif model_name == 'SymbolicRegressorCBM':
+    elif model_name in ['SymbolicRegressorCBM', 'BooleanSymbolicCBM']:
         # Extract from predictor
         predictor = model.predictor
         if hasattr(predictor, 'trainable_equations'):

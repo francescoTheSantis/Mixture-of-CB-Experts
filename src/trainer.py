@@ -138,7 +138,13 @@ class Trainer:
         # Load the best model and test
         if ckpt_path is None:
             ckpt_path = f"{self.checkpoint_dir}/best_model.ckpt"
-        self.trainer.test(self.model, test_dataloader, ckpt_path=ckpt_path)
+        
+        # For bool_symbolic_cbm, the model already has the symbolic predictor in memory
+        # and the checkpoint was saved manually (not by Lightning), so skip ckpt loading
+        if self.cfg.model.metadata.name == 'bool_symbolic_cbm':
+            self.trainer.test(self.model, test_dataloader)
+        else:
+            self.trainer.test(self.model, test_dataloader, ckpt_path=ckpt_path)
 
     def allow_symbolic(self, train_dataloader, val_dataloader):
         """
@@ -254,6 +260,82 @@ class Trainer:
 
             # Run symbolic substitution to create the SymbolicPredictor
             self.model.model.symbolic_substitution(equations)
+
+        elif model_name == 'bool_symbolic_cbm':
+            # Boolean Symbolic CBM: collect data, run PySR with Boolean ops, substitute, NO fine-tuning
+            self.model.eval()
+            self.model = self.model.to(self.cfg.gpus[0])
+            
+            stored_concepts = []
+            stored_targets = []
+            stored_selector_probs = []
+            with torch.no_grad():
+                for batch in tqdm(train_dataloader, desc="Storing training data for Boolean SR"):
+                    x, c, y = self.model.unpack_batch(batch)
+                    if isinstance(x, dict):
+                        x = {k: v.to(self.cfg.gpus[0]) for k, v in x.items()}
+                    else:  
+                        x = x.to(self.cfg.gpus[0])
+                    c = c.to(self.cfg.gpus[0])
+                    y = y.to(self.cfg.gpus[0])
+                    inputs = {'x': x, 'c': c, 'y': y}
+                    output = self.model.model.forward(inputs, store_for_finetuning=True)
+
+                    if self.cfg.disjoint_training:
+                        # Use true concepts and true task labels
+                        concepts_for_sr = c
+                        # One-hot encode for multi-class, then convert to {-1, 1}
+                        if self.model.model.output_size > 1:
+                            y_one_hot = torch.zeros(y.size(0), self.model.model.output_size, device=y.device)
+                            y_one_hot.scatter_(1, y.long().unsqueeze(1), 1.0)
+                            y_targets = 2 * y_one_hot - 1
+                        else:
+                            y_targets = 2 * y.float() - 1
+                            if y_targets.ndim == 1:
+                                y_targets = y_targets.unsqueeze(-1)
+                    else:
+                        # Use predicted concepts and MLP predictions normalized to [-1, 1]
+                        concepts_for_sr = output['c_hat']
+                        y_hat = output['y_hat']
+                        if y_hat.dim() == 3 and y_hat.shape[2] == 1:
+                            y_hat = y_hat.squeeze(2)
+                        y_targets = torch.tanh(y_hat)
+
+                    stored_targets.append(y_targets.detach().cpu())
+                    stored_concepts.append(concepts_for_sr.detach().cpu())
+                    stored_selector_probs.append(output['sampled_memory_idxs'].detach().cpu())
+
+                    del x, c, y, inputs
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+
+            concatenated_concepts = torch.cat(stored_concepts, dim=0)
+            concatenated_targets = torch.cat(stored_targets, dim=0)
+            concatenated_selector_probs = torch.cat(stored_selector_probs, dim=0)
+
+            print("Extracting Boolean symbolic equations from stored data...")
+            equations = symbolic_regression(
+                stored_concepts=concatenated_concepts,
+                stored_targets=concatenated_targets,
+                stored_selector_probs=concatenated_selector_probs,
+                memory_size=self.model.model.memory_size,
+                output_size=self.model.model.output_size,
+                c_names=self.model.model.c_names,
+                y_names=self.model.model.y_names,
+                device=self.cfg.gpus[0],
+                pysr_params=self.model.model.pysr_params,
+                task=self.cfg.dataset.metadata.task,
+                disjoint_training=self.cfg.disjoint_training
+            )
+
+            # Replace BlackBoxPredictor with SymbolicPredictor (Boolean rules)
+            self.model.model.symbolic_substitution(equations)
+
+            # Save checkpoint after substitution so test() can load it (no fine-tuning)
+            checkpoint = {'state_dict': self.model.state_dict()}
+            torch.save(checkpoint, f"{self.checkpoint_dir}/best_model.ckpt")
+            print("Boolean symbolic substitution complete. Skipping fine-tuning.")
+            return f"{self.checkpoint_dir}/best_model.ckpt"
 
         elif model_name in ['memory_cbm', 'linear_symbolic_cbm']:
             print("Cutting parameters of the predictor below the threshold: ", self.model.model.threshold)

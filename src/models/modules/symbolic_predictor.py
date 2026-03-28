@@ -194,6 +194,21 @@ class TrainableEquation(nn.Module):
         elif expr.func == sympy.tanh:
             return torch.tanh(self._sympy_to_torch(expr.args[0], var_dict))
 
+        # Boolean operators (from BooleanSymbolicCBM)
+        elif expr.func.__name__ == 'AND':
+            a = self._sympy_to_torch(expr.args[0], var_dict)
+            b = self._sympy_to_torch(expr.args[1], var_dict)
+            return a * b
+        
+        elif expr.func.__name__ == 'OR':
+            a = self._sympy_to_torch(expr.args[0], var_dict)
+            b = self._sympy_to_torch(expr.args[1], var_dict)
+            return a + b - a * b
+        
+        elif expr.func.__name__ == 'NOT':
+            a = self._sympy_to_torch(expr.args[0], var_dict)
+            return 1.0 - a
+
         elif expr == sympy.E:
             return torch.tensor(np.e, dtype=torch.float32, device=next(iter(var_dict.values())).device)
         
