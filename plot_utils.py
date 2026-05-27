@@ -4311,6 +4311,202 @@ def generate_adaptability_table(performance, datasets, output_path, regression_d
     return result_df
 
 
+def generate_adaptability_memory_complexity_tables(performance, datasets, output_path, base_model='sr_symbolic_cbm'):
+    """
+    Generate separate LaTeX tables for each dataset in the adaptability experiment.
+    Each table shows memory sizes as columns (with MAE and Complexity sub-columns) 
+    and constraint sets as rows.
+    
+    Args:
+        performance: DataFrame with performance data
+        datasets: List of dataset names
+        output_path: Directory to save the tables
+        base_model: Base model name to filter (default: 'sr_symbolic_cbm')
+    
+    Returns:
+        Dictionary mapping dataset names to DataFrames
+    """
+    import pandas as pd
+    import numpy as np
+    
+    os.makedirs(output_path, exist_ok=True)
+    
+    # Filter data for the specified base model
+    # Model names are like "sr_symbolic_cbm_simple", "sr_symbolic_cbm_medium", etc.
+    model_mask = performance['model'].str.startswith(base_model)
+    perf_filtered = performance[model_mask].copy()
+    
+    if perf_filtered.empty:
+        print(f"No data found for base model {base_model}")
+        return {}
+    
+    # Extract constraint set from model name
+    def extract_constraint(model_name):
+        parts = model_name.rsplit('_', 1)
+        if len(parts) == 2:
+            constraint = parts[1]
+            # Map "original" to "complex" if needed, or keep as is
+            return constraint
+        return 'original'
+    
+    perf_filtered['constraint'] = perf_filtered['model'].apply(extract_constraint)
+    
+    # Define constraint order
+    constraint_order = ['simple', 'medium', 'complex']
+    
+    # Process each dataset separately
+    results = {}
+    
+    for dataset in datasets:
+        if dataset not in perf_filtered['dataset'].unique():
+            print(f"Dataset {dataset} not found in data, skipping...")
+            continue
+        
+        dataset_data = perf_filtered[perf_filtered['dataset'] == dataset].copy()
+        
+        # Get unique memory sizes and sort them
+        memory_sizes = sorted(dataset_data['memory_size'].unique())
+        
+        # Get unique constraints
+        constraints_in_data = [c for c in constraint_order if c in dataset_data['constraint'].unique()]
+        
+        if not constraints_in_data or not memory_sizes:
+            print(f"No data for dataset {dataset}, skipping...")
+            continue
+        
+        # Aggregate by constraint and memory_size
+        grouped = dataset_data.groupby(['constraint', 'memory_size']).agg({
+            'task_mae': ['mean', 'std'],
+            'complexity_node_count': ['mean', 'std'],
+        })
+        
+        # Build LaTeX table
+        lines = []
+        
+        # Number of memory sizes
+        n_memory = len(memory_sizes)
+        
+        # Column format: l for constraint name, then 2 columns per memory size (MAE | Complexity)
+        col_format = "l" + "cc" * n_memory
+        
+        lines.append(r"\begin{table}[t]")
+        lines.append(r"\centering")
+        lines.append(r"\caption{Adaptability Results for " + get_df_name(dataset) + 
+                    r" - Sym-M-CBE across constraint sets and memory sizes}")
+        lines.append(r"\label{tab:adaptability_" + dataset + "}")
+        lines.append(r"\setlength{\tabcolsep}{3pt}")
+        lines.append(r"\scriptsize")
+        lines.append(r"\begin{tabular}{" + col_format + r"}")
+        lines.append(r"\toprule")
+        
+        # First header row: memory sizes spanning 2 columns each
+        header1_parts = [""]
+        for mem_size in memory_sizes:
+            header1_parts.append(r"\multicolumn{2}{c}{$M=" + str(mem_size) + r"$}")
+        lines.append(" & ".join(header1_parts) + r" \\")
+        
+        # Add cmidrule for each memory size
+        cmidrule_parts = []
+        for i, _ in enumerate(memory_sizes):
+            start_col = 2 + i * 2
+            end_col = start_col + 1
+            cmidrule_parts.append(rf"\cmidrule(lr){{{start_col}-{end_col}}}")
+        lines.append(" ".join(cmidrule_parts))
+        
+        # Second header row: MAE | Complexity for each memory size
+        header2_parts = ["Constraint"]
+        for _ in memory_sizes:
+            header2_parts.append("MAE")
+            header2_parts.append("Complexity")
+        lines.append(" & ".join(header2_parts) + r" \\")
+        lines.append(r"\midrule")
+        
+        # Constraint display names
+        constraint_display = {
+            'simple': 'Simple',
+            'medium': 'Medium',
+            'complex': 'Complex',
+            'original': 'Original'
+        }
+        
+        # Data rows
+        csv_data = []
+        for constraint in constraints_in_data:
+            constraint_name = constraint_display.get(constraint, constraint.title())
+            row_parts = [constraint_name]
+            
+            row_dict = {'Constraint': constraint_name}
+            
+            for mem_size in memory_sizes:
+                try:
+                    if (constraint, mem_size) in grouped.index:
+                        constraint_mem = grouped.loc[(constraint, mem_size)]
+                        
+                        # MAE
+                        mae_mean = constraint_mem[('task_mae', 'mean')]
+                        mae_std = constraint_mem[('task_mae', 'std')]
+                        if pd.notna(mae_mean):
+                            if pd.notna(mae_std) and mae_std >= 0.01:
+                                mae_cell = rf"{mae_mean:.2f} {{\tiny $\pm$ {mae_std:.2f}}}"
+                            else:
+                                mae_cell = rf"{mae_mean:.2f} {{\tiny $\pm \leq$ 0.01}}"
+                            row_dict[f'M{mem_size}_MAE'] = f"{mae_mean:.3f} ± {mae_std:.3f}"
+                        else:
+                            mae_cell = "--"
+                            row_dict[f'M{mem_size}_MAE'] = "N/A"
+                        
+                        # Complexity (node_count)
+                        complexity_mean = constraint_mem[('complexity_node_count', 'mean')]
+                        complexity_std = constraint_mem[('complexity_node_count', 'std')]
+                        if pd.notna(complexity_mean):
+                            if pd.notna(complexity_std) and complexity_std >= 0.01:
+                                complexity_cell = rf"{complexity_mean:.1f} {{\tiny $\pm$ {complexity_std:.1f}}}"
+                            else:
+                                complexity_cell = rf"{complexity_mean:.1f} {{\tiny $\pm \leq$ 0.01}}"
+                            row_dict[f'M{mem_size}_Complexity'] = f"{complexity_mean:.2f} ± {complexity_std:.2f}"
+                        else:
+                            complexity_cell = "--"
+                            row_dict[f'M{mem_size}_Complexity'] = "N/A"
+                    else:
+                        mae_cell = "--"
+                        complexity_cell = "--"
+                        row_dict[f'M{mem_size}_MAE'] = "N/A"
+                        row_dict[f'M{mem_size}_Complexity'] = "N/A"
+                except Exception as e:
+                    print(f"Warning: Error processing constraint={constraint}, mem_size={mem_size}: {e}")
+                    mae_cell = "--"
+                    complexity_cell = "--"
+                    row_dict[f'M{mem_size}_MAE'] = "N/A"
+                    row_dict[f'M{mem_size}_Complexity'] = "N/A"
+                
+                row_parts.append(mae_cell)
+                row_parts.append(complexity_cell)
+            
+            lines.append(" & ".join(row_parts) + r" \\")
+            csv_data.append(row_dict)
+        
+        lines.append(r"\bottomrule")
+        lines.append(r"\end{tabular}")
+        lines.append(r"\end{table}")
+        
+        # Save LaTeX table
+        table_latex = "\n".join(lines)
+        latex_path = os.path.join(output_path, f'adaptability_{dataset}_memory_complexity.tex')
+        with open(latex_path, 'w') as f:
+            f.write(table_latex)
+        print(f"LaTeX table for {dataset} saved to {latex_path}")
+        
+        # Save CSV
+        result_df = pd.DataFrame(csv_data)
+        csv_path = os.path.join(output_path, f'adaptability_{dataset}_memory_complexity.csv')
+        result_df.to_csv(csv_path, index=False)
+        print(f"CSV table for {dataset} saved to {csv_path}")
+        
+        results[dataset] = result_df
+    
+    return results
+
+
 def extract_equation_examples(paths, output_path='results/tabs/equation_examples', 
                                 n_examples=5, fixed_class=None, fixed_memory=None):
     """
@@ -4769,6 +4965,409 @@ def generate_intervention_delta_table(
             with open(tex_path, 'w') as f:
                 f.write(regression_table)
             print(f"Saved regression LaTeX table to {tex_path}")
+    
+    return df_results
+
+
+def generate_sr_ablation_intervention_table(
+    performance,
+    custom_order,
+    model_styles,
+    output_path,
+    models_to_include=None,
+    datasets_to_include=None,
+    noise_levels_to_include=None
+):
+    """
+    Generate a table showing MAE at different p_int values for different noise levels
+    for the symbolic regression ablation experiments.
+    
+    Table structure:
+    - Columns: Dataset (noise level) with sub-columns for each model
+    - Rows: Different p_int values
+    - Each cell: MAE (mean ± 95% CI)
+    
+    Args:
+        performance: DataFrame with intervention data (from get_intervention_from_path)
+        custom_order: List of datasets in desired order
+        model_styles: Dictionary with model styling information
+        output_path: Directory path to save the table
+        models_to_include: List of model names to include (None = all models)
+        datasets_to_include: List of dataset names to include (None = all datasets)
+        noise_levels_to_include: List of noise levels to include (None = all noise levels)
+    """
+    import os
+    import pandas as pd
+    import numpy as np
+    
+    os.makedirs(output_path, exist_ok=True)
+    
+    perf_filtered = performance.copy()
+    
+    # Apply filters
+    if models_to_include:
+        perf_filtered = perf_filtered[perf_filtered['model'].isin(models_to_include)]
+    if datasets_to_include:
+        perf_filtered = perf_filtered[perf_filtered['dataset'].isin(datasets_to_include)]
+    else:
+        perf_filtered = perf_filtered[perf_filtered['dataset'].isin(custom_order)]
+    
+    if noise_levels_to_include is not None:
+        perf_filtered = perf_filtered[perf_filtered['noise'].isin(noise_levels_to_include)]
+    
+    if perf_filtered.empty:
+        print("No data after filtering")
+        return None
+    
+    # Get unique p_int values and sort them
+    p_int_values = sorted(perf_filtered['p_int'].unique())
+    
+    # Get unique noise levels and sort them
+    noise_levels = sorted(perf_filtered['noise'].unique())
+    
+    # Get datasets in order
+    datasets = [d for d in custom_order if d in perf_filtered['dataset'].unique()]
+    if not datasets:
+        print("No datasets found in data")
+        return None
+    
+    # Get models in order
+    if models_to_include:
+        models = [m for m in models_order if m in models_to_include and m in perf_filtered['model'].unique()]
+    else:
+        models = [m for m in models_order if m in perf_filtered['model'].unique()]
+    
+    # Aggregate data by dataset, model, noise, and p_int
+    results = []
+    for dataset in datasets:
+        for noise in noise_levels:
+            for model in models:
+                for p_int in p_int_values:
+                    data = perf_filtered[
+                        (perf_filtered['dataset'] == dataset) & 
+                        (perf_filtered['model'] == model) &
+                        (perf_filtered['noise'] == noise) &
+                        (perf_filtered['p_int'] == p_int)
+                    ]['mae']
+                    
+                    if len(data) > 0:
+                        mean_val = data.mean()
+                        std_val = data.std()
+                        n_seeds = len(data)
+                        ci95 = 1.96 * std_val / (n_seeds ** 0.5) if n_seeds > 0 else 0
+                        
+                        results.append({
+                            'dataset': dataset,
+                            'model': model,
+                            'noise': noise,
+                            'p_int': p_int,
+                            'mae_mean': mean_val,
+                            'mae_ci95': ci95,
+                            'n_seeds': n_seeds
+                        })
+    
+    if not results:
+        print("No results to generate table")
+        return None
+    
+    df_results = pd.DataFrame(results)
+    
+    # Save CSV
+    csv_path = os.path.join(output_path, 'sr_ablation_intervention_pint.csv')
+    df_results.to_csv(csv_path, index=False)
+    print(f"Saved SR ablation intervention results to {csv_path}")
+    
+    # Generate LaTeX table
+    latex_lines = []
+    latex_lines.append(r"\begin{table*}[htbp]")
+    latex_lines.append(r"\centering")
+    latex_lines.append(r"\scriptsize")
+    latex_lines.append(r"\setlength{\tabcolsep}{3pt}")
+    
+    # Build column specification: p_int + (dataset × noise × model) combinations
+    n_cols = len(datasets) * len(noise_levels) * len(models)
+    col_spec = "l" + "c" * n_cols
+    latex_lines.append(f"\\begin{{tabular}}{{{col_spec}}}")
+    latex_lines.append(r"\toprule")
+    
+    # Header row 1: Dataset names with multicolumn
+    header1 = "$p_{\\text{int}}$"
+    for dataset in datasets:
+        n_cols_per_dataset = len(noise_levels) * len(models)
+        header1 += f" & \\multicolumn{{{n_cols_per_dataset}}}{{c}}{{\\textbf{{{get_df_name(dataset)}}}}}"
+    header1 += " \\\\"
+    latex_lines.append(header1)
+    
+    # Header row 2: Noise levels with multicolumn
+    header2 = ""
+    for dataset in datasets:
+        for noise in noise_levels:
+            n_cols_per_noise = len(models)
+            if noise == 0.0:
+                noise_label = f"noise=0"
+            else:
+                noise_label = f"noise={noise:.1f}"
+            header2 += f" & \\multicolumn{{{n_cols_per_noise}}}{{c}}{{{noise_label}}}"
+    header2 += " \\\\"
+    latex_lines.append(header2)
+    
+    # Header row 3: Model names
+    header3 = ""
+    for dataset in datasets:
+        for noise in noise_levels:
+            for model in models:
+                model_display = model_styles[model]['name'] if model in model_styles else model
+                header3 += f" & {model_display}"
+    header3 += " \\\\"
+    latex_lines.append(header3)
+    latex_lines.append(r"\midrule")
+    
+    # Data rows - one row per p_int value
+    for p_int in p_int_values:
+        line = f"{p_int:.1f}"
+        
+        for dataset in datasets:
+            for noise in noise_levels:
+                for model in models:
+                    row = df_results[
+                        (df_results['dataset'] == dataset) & 
+                        (df_results['model'] == model) &
+                        (df_results['noise'] == noise) &
+                        (df_results['p_int'] == p_int)
+                    ]
+                    
+                    if not row.empty:
+                        mae_mean = row.iloc[0]['mae_mean']
+                        mae_ci95 = row.iloc[0]['mae_ci95']
+                        
+                        # Format with tiny font for CI
+                        if mae_ci95 < 0.01:
+                            cell = f"{mae_mean:.2f} {{\\tiny $\\pm \\leq$ 0.01}}"
+                        else:
+                            cell = f"{mae_mean:.2f} {{\\tiny $\\pm$ {mae_ci95:.2f}}}"
+                    else:
+                        cell = "-"
+                    
+                    line += f" & {cell}"
+        
+        line += " \\\\"
+        latex_lines.append(line)
+    
+    latex_lines.append(r"\bottomrule")
+    latex_lines.append(r"\end{tabular}")
+    latex_lines.append(r"\caption{MAE at different intervention probabilities ($p_{\text{int}}$) for different noise levels " +
+                      r"in the symbolic regression ablation. Values shown as mean $\pm$ 95\% CI.}")
+    latex_lines.append(r"\label{tab:sr_ablation_intervention}")
+    latex_lines.append(r"\end{table*}")
+    
+    # Save LaTeX table
+    tex_path = os.path.join(output_path, 'sr_ablation_intervention_pint.tex')
+    with open(tex_path, 'w') as f:
+        f.write('\n'.join(latex_lines))
+    print(f"Saved LaTeX table to {tex_path}")
+    
+    return df_results
+
+
+def generate_intervention_pint_table(
+    performance,
+    model_styles,
+    output_path,
+    models_to_include,
+    datasets_to_include,
+    noise_level=0.0,
+    memory_size=None
+):
+    """
+    Generate a table showing accuracy/MAE at different p_int values for specific models and datasets.
+    
+    Table structure:
+    - Rows: p_int values (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+    - Columns: Datasets
+    - Each cell: Accuracy for classification or MAE for regression (mean ± 95% CI)
+    - Separate sub-tables for each model
+    
+    Args:
+        performance: DataFrame with intervention data (from get_intervention_from_path)
+        model_styles: Dictionary with model styling information
+        output_path: Directory path to save the table
+        models_to_include: List of model names to include
+        datasets_to_include: List of dataset names to include
+        noise_level: Noise level to filter on (default 0.0)
+        memory_size: Memory size to filter on (default None, no filtering)
+    """
+    import os
+    import pandas as pd
+    import numpy as np
+    
+    os.makedirs(output_path, exist_ok=True)
+    
+    # Filter for specified noise level
+    perf_filtered = performance[performance['noise'] == noise_level].copy()
+    
+    # Apply filters
+    perf_filtered = perf_filtered[
+        perf_filtered['model'].isin(models_to_include) &
+        perf_filtered['dataset'].isin(datasets_to_include)
+    ]
+    
+    # Filter by memory size if specified
+    if memory_size is not None:
+        if 'memory_size' in perf_filtered.columns:
+            perf_filtered = perf_filtered[perf_filtered['memory_size'] == memory_size]
+        else:
+            print(f"Warning: memory_size column not found in performance data")
+    
+    if perf_filtered.empty:
+        print(f"No intervention data found for specified models and datasets at noise level {noise_level}")
+        return None
+    
+    # Get unique p_int values and sort them
+    p_int_values = sorted(perf_filtered['p_int'].unique())
+    
+    # Determine if datasets are classification or regression
+    dataset_metrics = {}
+    for dataset in datasets_to_include:
+        is_regression = dataset in regression_datasets
+        dataset_metrics[dataset] = 'mae' if is_regression else 'accuracy'
+    
+    # Aggregate data by dataset, model, and p_int
+    results = []
+    for dataset in datasets_to_include:
+        if dataset not in perf_filtered['dataset'].unique():
+            continue
+            
+        metric = dataset_metrics[dataset]
+        
+        for model in models_to_include:
+            if model not in perf_filtered['model'].unique():
+                continue
+                
+            for p_int in p_int_values:
+                data = perf_filtered[
+                    (perf_filtered['dataset'] == dataset) & 
+                    (perf_filtered['model'] == model) &
+                    (perf_filtered['p_int'] == p_int)
+                ][metric]
+                
+                if len(data) > 0:
+                    mean_val = data.mean()
+                    std_val = data.std()
+                    n_seeds = len(data)
+                    ci95 = 1.96 * std_val / (n_seeds ** 0.5) if n_seeds > 0 else 0
+                    
+                    # Multiply by 100 if metric is accuracy
+                    if metric == 'accuracy':
+                        mean_val = mean_val * 100
+                        ci95 = ci95 * 100
+                    
+                    results.append({
+                        'dataset': dataset,
+                        'model': model,
+                        'p_int': p_int,
+                        'metric': metric,
+                        'value_mean': mean_val,
+                        'value_ci95': ci95,
+                        'n_seeds': n_seeds
+                    })
+    
+    if not results:
+        print("No results to generate table")
+        return None
+    
+    df_results = pd.DataFrame(results)
+    
+    # Save CSV
+    csv_path = os.path.join(output_path, f'intervention_pint_noise_{noise_level}.csv')
+    df_results.to_csv(csv_path, index=False)
+    print(f"Saved intervention p_int results to {csv_path}")
+    
+    # Generate LaTeX table
+    latex_lines = []
+    latex_lines.append(r"\begin{table}[t]")
+    latex_lines.append(r"\centering")
+    latex_lines.append(r"\scriptsize")
+    latex_lines.append(r"\setlength{\tabcolsep}{3pt}")
+    
+    # Build column specification: p_int + datasets
+    datasets_present = [d for d in datasets_to_include if d in df_results['dataset'].unique()]
+    n_datasets = len(datasets_present)
+    col_spec = "l" + "c" * n_datasets
+    latex_lines.append(f"\\begin{{tabular}}{{{col_spec}}}")
+    latex_lines.append(r"\toprule")
+    
+    # Header row with dataset names
+    header = "$p_{\\text{int}}$"
+    for dataset in datasets_present:
+        header += f" & \\textbf{{{get_df_name(dataset)}}}"
+    header += " \\\\"
+    latex_lines.append(header)
+    latex_lines.append(r"\midrule")
+    
+    # Data rows - separate section for each model
+    for i, model in enumerate(models_to_include):
+        if model not in df_results['model'].unique():
+            continue
+            
+        model_display = model_styles[model]['name'] if model in model_styles else model
+        
+        # Add model name as a section header
+        latex_lines.append(f"\\multicolumn{{{n_datasets + 1}}}{{l}}{{\\textit{{{model_display}}}}} \\\\")
+        
+        # Add rows for each p_int value
+        for p_int in p_int_values:
+            line = f"{p_int:.1f}"
+            
+            for dataset in datasets_present:
+                row = df_results[
+                    (df_results['dataset'] == dataset) & 
+                    (df_results['model'] == model) &
+                    (df_results['p_int'] == p_int)
+                ]
+                
+                if not row.empty:
+                    value_mean = row.iloc[0]['value_mean']
+                    value_ci95 = row.iloc[0]['value_ci95']
+                    
+                    # Format with tiny font for CI
+                    if value_ci95 < 0.01:
+                        cell = f"{value_mean:.2f} {{\\tiny $\\pm \\leq$ 0.01}}"
+                    else:
+                        cell = f"{value_mean:.2f} {{\\tiny $\\pm$ {value_ci95:.2f}}}"
+                else:
+                    cell = "-"
+                
+                line += f" & {cell}"
+            
+            line += " \\\\"
+            latex_lines.append(line)
+        
+        # Add midrule between models (except after last model)
+        if i < len(models_to_include) - 1:
+            latex_lines.append(r"\midrule")
+    
+    latex_lines.append(r"\bottomrule")
+    latex_lines.append(r"\end{tabular}")
+    
+    # Build caption describing metrics
+    metric_descriptions = []
+    for dataset in datasets_present:
+        metric = dataset_metrics[dataset]
+        metric_label = "Accuracy" if metric == 'accuracy' else "MAE"
+        metric_descriptions.append(f"{get_df_name(dataset)}: {metric_label}")
+    
+    latex_lines.append(r"\caption{Performance at different intervention probabilities ($p_{\text{int}}$) " +
+                      f"for noise level {noise_level}. " +
+                      "Metrics: " + ", ".join(metric_descriptions) + ". " +
+                      r"Values shown as mean $\pm$ 95\% CI.}")
+    latex_lines.append(r"\label{tab:intervention_pint}")
+    latex_lines.append(r"\end{table}")
+    
+    # Save LaTeX table
+    tex_path = os.path.join(output_path, f'intervention_pint_noise_{noise_level}.tex')
+    with open(tex_path, 'w') as f:
+        f.write('\n'.join(latex_lines))
+    print(f"Saved LaTeX table to {tex_path}")
     
     return df_results
 

@@ -96,9 +96,10 @@ model_styles = {
     'memory_cbm': {'marker': '*', 'name': 'MLP-M-CBE', 'color': 'tab:blue', 'size': marker_size, 'fillstyle': 'none'},
     'prior_symbolic_cbm': {'marker': '*', 'name': 'Prior-M-CBE', 'color': 'lightcyan', 'size': marker_size, 'fillstyle': 'none'},
 
-    'kan_symbolic_cbm': {'marker': 's', 'name': 'Kan-M-CBE', 'color': 'darkmagenta', 'size': marker_size, 'fillstyle': 'none'},
+    # 'kan_symbolic_cbm': {'marker': 's', 'name': 'Kan-M-CBE', 'color': 'darkmagenta', 'size': marker_size, 'fillstyle': 'none'},
     'linear_symbolic_cbm': {'marker': 'h', 'name': 'Lin-M-CBE', 'color': 'limegreen', 'size': marker_size, 'fillstyle': 'none'},
     'sr_symbolic_cbm': {'marker': 'o', 'name': 'Sym-M-CBE', 'color': 'tab:green', 'size': marker_size, 'fillstyle': 'none'},
+    'bool_symbolic_cbm': {'marker': 'D', 'name': 'Bool-M-CBE', 'color': 'cyan', 'size': marker_size, 'fillstyle': 'none'},
 }
 
 models_order = [
@@ -112,7 +113,8 @@ models_order = [
     'prior_symbolic_cbm', 
     'kan_symbolic_cbm', 
     'linear_symbolic_cbm', 
-    'sr_symbolic_cbm'
+    'sr_symbolic_cbm',
+    'bool_symbolic_cbm',
 ]
 
 
@@ -263,6 +265,34 @@ def main():
                 relative_accuracy=False,
                 out_dir=f'{result_figs}/sr_ablation'
             )
+        
+        # Generate SR ablation intervention table (MAE at p_int=0.0)
+        print("\nGenerating SR ablation intervention table...")
+        sr_ablation_intervention_path = os.path.join(table_path, 'sr_ablation')
+        
+        # Filter datasets to only include MAWPS
+        sr_datasets = ['mawps']
+        
+        # Filter models - you can customize this list
+        sr_models = ['licem', 'linear_symbolic_cbm', 'sr_symbolic_cbm', "cem"]
+        
+        # Specify noise levels to include
+        sr_noise_levels = [0.0, 0.3]
+        
+        sr_intervention_results = generate_sr_ablation_intervention_table(
+            performance,
+            custom_order,
+            model_styles,
+            sr_ablation_intervention_path,
+            models_to_include=sr_models,
+            datasets_to_include=sr_datasets,
+            noise_levels_to_include=sr_noise_levels
+        )
+        
+        if sr_intervention_results is not None:
+            print(f"✓ SR ablation intervention table generated successfully!")
+        else:
+            print("Failed to generate SR ablation intervention table")
 
     except Exception as e:
         print(f"Error occurred while plotting Symbolic Regression ablation results: {e}")
@@ -401,14 +431,14 @@ def main():
     ############## Global verifiability ##############
     ##################################################
 
-    # global_verifiability_plot(
-    #     paths, 
-    #     dataset='cub_incomplete',  # Change dataset here
-    #     memory_size=4,     # Change memory size here
-    #     label_font=label_font, 
-    #     tick_font=tick_font, 
-    #     legend_font=legend_font
-    # )
+    global_verifiability_plot(
+        paths, 
+        dataset='cub_incomplete',  # Change dataset here
+        memory_size=4,     # Change memory size here
+        label_font=label_font, 
+        tick_font=tick_font, 
+        legend_font=legend_font
+    )
 
 
     ##################################################
@@ -538,6 +568,22 @@ def main():
             print(f"\n✓ Adaptability experiment results processed successfully!")
             print(f"\nTable preview:")
             print(result_table.to_string(index=False))
+            
+            # Generate memory-complexity tables (one per dataset)
+            print("\nGenerating memory-complexity tables for each dataset...")
+            memory_complexity_results = generate_adaptability_memory_complexity_tables(
+                performance,
+                datasets_to_show,
+                adaptability_output_path,
+                base_model='sr_symbolic_cbm'
+            )
+            
+            if memory_complexity_results:
+                print(f"\n✓ Generated {len(memory_complexity_results)} memory-complexity tables!")
+                for dataset, df in memory_complexity_results.items():
+                    print(f"  - {dataset}: {len(df)} constraint sets")
+            else:
+                print("No memory-complexity tables generated")
         else:
             print("No adaptability experiment results found.")
             
@@ -656,48 +702,48 @@ def main():
         traceback.print_exc()
 
 
-    ##################################################
-    ########## Extract Equation Examples #############
-    ##################################################
+    #################################################
+    ######### Extract Equation Examples #############
+    #################################################
 
-    # print("\n" + "="*70)
-    # print("EXTRACTING EQUATION EXAMPLES")
-    # print("="*70)
+    print("\n" + "="*70)
+    print("EXTRACTING EQUATION EXAMPLES")
+    print("="*70)
 
-    # # Define paths to extract from
-    # equation_example_paths = [
-    #     f"{output_path}/sr_ablation",
-    #     f"{output_path}/prior_reg",
-    #     f"{output_path}/memory_cls",
-    #     f"{output_path}/memory_less_cls",
-    #     f"{output_path}/memory_reg",
-    #     f"{output_path}/memory_less_reg",
-    # ]
+    # Define paths to extract from
+    equation_example_paths = [
+        f"{output_path}/sr_ablation",
+        f"{output_path}/prior_reg",
+        f"{output_path}/memory_cls",
+        f"{output_path}/memory_less_cls",
+        f"{output_path}/memory_reg",
+        f"{output_path}/memory_less_reg",
+    ]
 
-    # # Define fixed class for classification datasets
-    # # Using class 0 for all classification datasets as default
-    # fixed_class_map = {
-    #     'awa2': 0,
-    #     'awa2_incomplete': 0,
-    #     'cub': 0,
-    #     'cub_incomplete': 0,
-    #     'cifar10': 0,
-    # }
+    # Define fixed class for classification datasets
+    # Using class 0 for all classification datasets as default
+    fixed_class_map = {
+        'awa2': 0,
+        'awa2_incomplete': 0,
+        'cub': 0,
+        'cub_incomplete': 0,
+        'cifar10': 0,
+    }
 
-    # try:
-    #     from plot_utils import extract_equation_examples
-    #     extract_equation_examples(
-    #         paths=equation_example_paths,
-    #         output_path=os.path.join(table_path, 'equation_examples'),
-    #         n_examples=5,
-    #         fixed_class=fixed_class_map,
-    #         fixed_memory=fixed_memory
-    #     )
-    #     print("\n✓ Equation examples extracted successfully!")
-    # except Exception as e:
-    #     print(f"Error occurred while extracting equation examples: {e}")
-    #     import traceback
-    #     traceback.print_exc()
+    try:
+        from plot_utils import extract_equation_examples
+        extract_equation_examples(
+            paths=equation_example_paths,
+            output_path=os.path.join(table_path, 'equation_examples'),
+            n_examples=5,
+            fixed_class=fixed_class_map,
+            fixed_memory=fixed_memory
+        )
+        print("\n✓ Equation examples extracted successfully!")
+    except Exception as e:
+        print(f"Error occurred while extracting equation examples: {e}")
+        import traceback
+        traceback.print_exc()
 
 
     ##################################################
@@ -752,6 +798,65 @@ def main():
             print("No explanation robustness results found.")
     except Exception as e:
         print(f"Error occurred while processing explanation robustness results: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+    ####################################################################
+    #### Intervention p_int Table (CUB200, etc.) for boolean models ####
+    ####################################################################
+    
+    print("\n" + "="*70)
+    print("INTERVENTION P_INT TABLE")
+    print("="*70)
+    
+    paths = [
+        f"{output_path}/memory_less_cls",
+        f"{output_path}/memory_cls",
+        f"{output_path}/boolean_m_cbe",
+    ]
+    
+    try:
+        # Load intervention data
+        performance = get_intervention_from_path(paths)
+        
+        if not performance.empty:
+            # Filter the performance dataframe to keep only the models in model_styles 
+            # and datasets in custom_order
+            performance = performance[performance['model'].isin(model_styles.keys()) & 
+                                    performance['dataset'].isin(custom_order)]
+            
+            # Define models and datasets to include
+            models_to_include = ['dcr', 'cmr', 'bool_symbolic_cbm']
+            datasets_to_include = ['cub']
+            memory_size_to_include = 1
+            
+            # Generate intervention p_int table
+            intervention_pint_output = os.path.join(table_path, 'intervention_pint')
+            os.makedirs(intervention_pint_output, exist_ok=True)
+            
+            pint_results = generate_intervention_pint_table(
+                performance,
+                model_styles,
+                intervention_pint_output,
+                models_to_include=models_to_include,
+                datasets_to_include=datasets_to_include,
+                noise_level=0.0,
+                memory_size=memory_size_to_include
+            )
+            
+            if pint_results is not None:
+                print(f"\n✓ Intervention p_int table generated successfully!")
+                print(f"\nSummary:")
+                print(f"Models: {models_to_include}")
+                print(f"Datasets: {datasets_to_include}")
+            else:
+                print("Failed to generate intervention p_int table")
+        else:
+            print("No intervention data found")
+            
+    except Exception as e:
+        print(f"Error occurred while generating intervention p_int table: {e}")
         import traceback
         traceback.print_exc()
 
