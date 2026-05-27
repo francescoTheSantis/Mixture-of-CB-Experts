@@ -16,6 +16,10 @@ from datetime import datetime
 import os
 import yaml
 
+# Make CUDA errors synchronous and enable segfault tracebacks
+os.environ.setdefault('CUDA_LAUNCH_BLOCKING', '1')
+os.environ.setdefault('PYTHONFAULTHANDLER', '1')
+
 if len(sys.argv) < 2:
     print("Usage: python run_sweep.py <config_name>")
     print("Example: python run_sweep.py debugging")

@@ -1,7 +1,7 @@
 """
 General utils for training, evaluation and data loading
 
-Heavily adapted from https://github.com/xmed-lab/ECBM/blob/main/data/awa2.py and
+Adapted from https://github.com/xmed-lab/ECBM/blob/main/data/awa2.py and
 https://github.com/mateoespinosa/cem/blob/mateo/probcbm/cem/data/awa2_loader.py
 
 Credit goes to Xinyue Xu, Yi Qin, Lu Mi, Hao Wang, and Xiaomeng Li

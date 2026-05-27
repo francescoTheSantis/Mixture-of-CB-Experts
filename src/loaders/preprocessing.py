@@ -61,6 +61,10 @@ class EmbeddingExtractor:
         self.model = self.model.to(self.device)
         self.model.eval()
 
+        # Number of images sent to the GPU at once during feature extraction.
+        # Kept small to avoid OOM regardless of the training batch size.
+        self.extraction_batch_size = 16
+
     def _extract_embeddings(self, loader):
         """Helper function to extract embeddings for a given DataLoader."""
         embeddings = []
@@ -74,27 +78,26 @@ class EmbeddingExtractor:
                 targets = batch['y']
                 
                 if self.extract_embeddings and not self.cfg.dataset.metadata.name=='xor':
-                    images = images.to(self.device)
-                    # If the tensor has not the correct shape 
+                    # Resize / channel-fix on CPU before chunking
                     if images.shape[-1] != 224:
-                        images = F.interpolate(images, 
-                                                size=(224, 224), 
-                                                mode='bilinear', 
-                                                align_corners=False)
+                        images = F.interpolate(images,
+                                               size=(224, 224),
+                                               mode='bilinear',
+                                               align_corners=False)
                     if images.shape[1] == 1:
-                        # Repeat the single channel 3 times to simulate RGB
                         images = images.repeat(1, 3, 1, 1)  # (N, 3, H, W)
 
-                    # Extract embeddings
-                    outputs = self.model(images)
-
-                    if 'vit' in self.cfg.img_backbone_name or 'dino' in self.cfg.img_backbone_name:
-                        outputs = outputs.last_hidden_state[:, 0, :]  # Shape: (batch_size, hidden_size)
-                    else:
-                        outputs = outputs.flatten(start_dim=1)
-                    
-                    # Move to CPU immediately to free GPU memory for next batch
-                    embeddings.append(outputs.cpu())
+                    # Process in small chunks to avoid GPU OOM
+                    chunk_outputs = []
+                    for i in range(0, images.shape[0], self.extraction_batch_size):
+                        chunk = images[i:i + self.extraction_batch_size].to(self.device)
+                        out = self.model(chunk)
+                        if 'vit' in self.cfg.img_backbone_name or 'dino' in self.cfg.img_backbone_name:
+                            out = out.last_hidden_state[:, 0, :]  # CLS token
+                        else:
+                            out = out.flatten(start_dim=1)
+                        chunk_outputs.append(out.cpu())
+                    embeddings.append(torch.cat(chunk_outputs, dim=0))
                 else:
                     # If embeddings are not extracted, just append the images (already on CPU)
                     embeddings.append(images)
@@ -137,11 +140,50 @@ class EmbeddingExtractor:
         decimal_values = (binary_matrix * powers_of_two).sum(dim=1).long()
         return decimal_values
     
+    @staticmethod
+    def _extraction_collate_fn(batch):
+        """Collate for extraction DataLoaders.
+
+        Handles both dict batches (already preprocessed loaders) and the raw
+        tuple format (img, concepts, label) returned by most Dataset.__getitem__.
+        """
+        if isinstance(batch[0], dict):
+            return {k: torch.stack([b[k] for b in batch]) for k in batch[0]}
+        # Tuple format: (img, concepts, label)
+        x = torch.stack([b[0] for b in batch])
+        c = torch.stack([b[1] for b in batch])
+        y_0 = batch[0][2]
+        y = torch.stack([b[2] for b in batch]) if isinstance(y_0, torch.Tensor) \
+            else torch.tensor([b[2] for b in batch])
+        return {'x': x, 'c': c, 'y': y}
+
+    def _make_extraction_loader(self, original_loader):
+        """Wrap a dataset in a lightweight loader for GPU feature extraction.
+
+        Uses a small batch size and disables pin_memory / worker prefetching to
+        prevent the OS from killing the process due to excessive pinned-memory
+        usage when the training batch size is large.
+        """
+        return DataLoader(
+            original_loader.dataset,
+            batch_size=self.extraction_batch_size,
+            shuffle=False,
+            num_workers=0,
+            pin_memory=False,
+            collate_fn=self._extraction_collate_fn,
+        )
+
     def produce_loaders(self, selected_concepts=None, task_names=None):
         """Produces new DataLoaders with embeddings instead of raw images."""
-        train_embeddings, train_concepts, train_labels = self._extract_embeddings(self.train_loader)
-        val_embeddings, val_concepts, val_labels = self._extract_embeddings(self.val_loader)
-        test_embeddings, test_concepts, test_labels = self._extract_embeddings(self.test_loader)
+        train_embeddings, train_concepts, train_labels = self._extract_embeddings(
+            self._make_extraction_loader(self.train_loader)
+        )
+        val_embeddings, val_concepts, val_labels = self._extract_embeddings(
+            self._make_extraction_loader(self.val_loader)
+        )
+        test_embeddings, test_concepts, test_labels = self._extract_embeddings(
+            self._make_extraction_loader(self.test_loader)
+        )
 
         batch_size = self.train_loader.batch_size
 

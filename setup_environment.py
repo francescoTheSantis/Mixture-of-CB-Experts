@@ -60,14 +60,14 @@ def main():
         sys.exit(1)
     
     print("="*60)
-    print("Linear Memory Reasoner - Environment Setup")
+    print("Mixture of Concept Bottleneck Experts (M-CBEs) - Environment Setup")
     print("="*60)
     
     # Get conda executable
     conda_exe = get_conda_executable()
     
     # Read environment name from environment.yml
-    env_name = "lmr"  # Default name
+    env_name = "m_cbe"  # Default name
     try:
         with open(env_file) as f:
             for line in f:
@@ -87,12 +87,45 @@ def main():
     )
     
     # Step 2: Install pytorch_concepts from GitHub
-    run_command(
-        [conda_exe, 'run', '-n', env_name, 'pip', 'install', '--no-build-isolation', 
-         'git+https://github.com/pyc-team/pytorch_concepts.git@models'],
-        "Step 2/3: Installing pytorch_concepts from GitHub",
-        shell=False
-    )
+    # The package's shared.py imports pkg_resources at build time (a bug in the package),
+    # which is unavailable in some Python 3.12 environments. We clone the repo, patch that
+    # one import, and install locally to work around it.
+    import tempfile
+    import shutil
+    tmp_dir = Path(tempfile.mkdtemp())
+    pc_dir = tmp_dir / "pytorch_concepts"
+    try:
+        print(f"\n{'='*60}")
+        print("Step 2/3: Installing pytorch_concepts from GitHub")
+        print(f"{'='*60}")
+        print("Cloning pytorch_concepts@models...")
+        subprocess.run(
+            ['git', 'clone', '--branch', 'models', '--depth', '1',
+             'https://github.com/pyc-team/pytorch_concepts.git', str(pc_dir)],
+            check=True
+        )
+        # Patch shared.py: replace pkg_resources with pathlib (pkg_resources is
+        # not available at build time in Python 3.12 conda environments)
+        shared_py = pc_dir / 'torch_concepts' / 'data' / 'traffic_construction' / 'shared.py'
+        patched = (
+            '"""\nShared global variables for this dataset generation.\n"""\n'
+            'from pathlib import Path\n\n'
+            '# Directory where all the useful sprites are stored\n'
+            'SPRITES_DIRECTORY = lambda x: str(\n'
+            '    Path(__file__).parent.parent.parent / "assets" / x\n'
+            ')\n'
+        )
+        shared_py.write_text(patched)
+        print("✓ Patched shared.py (replaced pkg_resources with pathlib)")
+
+        run_command(
+            [conda_exe, 'run', '-n', env_name, 'pip', 'install',
+             '--no-build-isolation', str(pc_dir)],
+            "Step 2/3: Installing pytorch_concepts from local clone",
+            shell=False
+        )
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
     
     # Step 3: Pre-initialize Julia/PySR packages
     pysr_init_script = """
