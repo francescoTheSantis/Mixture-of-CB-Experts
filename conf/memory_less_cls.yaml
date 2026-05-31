@@ -19,14 +19,14 @@ hydra:
         - awa2
         - awa2_incomplete
         - cifar10
-        # - cifar100
+        - cifar100
       img_backbone_name: 
         - facebook/dinov2-base
         - facebook/dinov2-base
         - facebook/dinov2-base
         - facebook/dinov2-base
         - resnet18
-        # - resnet18
+        - resnet18
 
 disjoint_training: False 
 hard_concepts: False

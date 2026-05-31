@@ -37,14 +37,6 @@ if not os.path.exists(config_path):
 with open(config_path, 'r') as f:
     config = yaml.safe_load(f)
 
-# Determine which script to run based on config
-if config.get('multi_constraint_experiment', False):
-    MAIN_SCRIPT = 'adaptability_experiment.py'
-    print(f"Detected multi_constraint_experiment flag - using {MAIN_SCRIPT}")
-else:
-    MAIN_SCRIPT = 'main.py'
-    print(f"Using standard experiment script: {MAIN_SCRIPT}")
-
 # Extract sweep parameters from the config
 if 'hydra' not in config or 'sweeper' not in config['hydra']:
     print(f"Error: Config file {config_path} does not contain hydra.sweeper")
@@ -222,7 +214,7 @@ for i, combination in enumerate(all_combinations, 1):
     # Build command to run the experiment
     cmd = [
         sys.executable,  # Use the same Python interpreter as the one running this script
-        MAIN_SCRIPT,  # Will be 'main.py' or 'adaptability_experiment.py'
+        'main.py',
         f'--config-name={CONFIG_NAME}'
     ] + all_overrides
     

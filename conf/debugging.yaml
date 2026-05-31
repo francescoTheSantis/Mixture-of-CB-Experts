@@ -9,10 +9,9 @@ hydra:
       dir: output/concept_size_ablation/${now:%Y-%m-%d_%H-%M-%S} 
   sweeper:
     grid_params:
-      seed: 1 #, 2, 3
-      concept_percentage: 0.2 #, 0.4, 0.6, 0.8, 1.0
-      model: 
-        - cbm_linear
+      seed: 1 
+      model: sr_sym_cbm
+      memory_size: 1, 2
         
     list_params:
       dataset: 
@@ -20,7 +19,6 @@ hydra:
       img_backbone_name: 
         - facebook/dinov2-base
 
-memory_size: 2
 disjoint_training: true
 hard_concepts: True
 

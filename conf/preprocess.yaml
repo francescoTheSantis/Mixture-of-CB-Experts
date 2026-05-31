@@ -8,6 +8,9 @@ defaults:
 hydra:
   mode: MULTIRUN
   sweep:
+      # The experiment will instantiate a directory even though the preprocessed
+      # datasets will be stored in cache.
+      # Eliminate directory after preprocessing if you want to save memory.
       dir: preprocess/${now:%Y-%m-%d_%H-%M-%S} 
   sweeper:
     grid_params:

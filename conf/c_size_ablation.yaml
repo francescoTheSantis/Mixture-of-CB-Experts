@@ -18,15 +18,15 @@ hydra:
         - lin_sym_cbm
         - cbm_linear
         - cmr
-        # - sr_sym_cbm
+        - sr_sym_cbm
         
     list_params:
       dataset: 
         - cub
-        # - cifar10
+        - cifar10
       img_backbone_name: 
         - facebook/dinov2-base
-        # - resnet18
+        - resnet18
 
 memory_size: 2
 disjoint_training: true
