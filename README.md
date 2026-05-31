@@ -16,9 +16,23 @@ Both models achieve a better trade-off between accuracy and interpretability com
 
 The figure above shows the two instantiations (Lin-M-CBE and Sym-M-CBE) on a textual input containing questions about physics. The two models share architectural similarities. First, the input is processed by a **Concept Encoder** — which extracts interpretable physical concepts (e.g., $x_0$, $v_0$, $\beta$, $t$). Then, the **Selector** picks the most suitable function (expert) from a pool of $M$ candidate functions $f_1, \ldots, f_M$, which is then evaluated on the predicted concepts to yield the final output $y=f_m(x_0,v_0,\beta, t)$. The linear and symbolic approaches differ in how these functions are built:
 
-**Lin-M-CBE**: each function is a parametric linear function with its own weights $\theta_m$ learned during training. The structure is fixed (linear), and only the weights vary across experts.
+## Implemented M-CBEs
 
-**Sym-M-CBE**: each function is a symbolic expression whose operators are constrained by the user. For example, the user might set $\mathcal{W}=\{+, \times, \cos, (\cdot)^2\}$ and the model will learn symbolic functions whose only operators are drawn from $\mathcal{W}$. Unlike the linear case, the model discovers both the structure of the expression and its parameters — e.g., $x_0 + v_0 \cos(\beta) \cdot t$.
+**Lin-M-CBE**: described above.
+
+**Sym-M-CBE**: described above. The operator vocabulary is defined at the top of [src/models/sr_sym_cbm.py](src/models/sr_sym_cbm.py) via the `binary_operators`, `unary_operators`, and `extra_functions` variables. Edit these lists to restrict or expand the set of allowed operators before running an experiment. PySR parameters — including complexity-related settings such as expression depth, number of nodes, and number of iterations — can be tuned via the `pysr_params` field in [conf/model/sr_sym_cbm.yaml](conf/model/sr_sym_cbm.yaml). This is especially useful to control the complexity and readability of the discovered expressions.
+
+**Bool-M-CBE**: a variant of Sym-M-CBE designed for binary concept inputs and classification tasks. Each expert is a Boolean logic rule over the predicted concepts, yielding human-readable logical sentences. The allowed operators are defined at the top of [src/models/bool_sym_cbm.py](src/models/bool_sym_cbm.py) via the `boolean_binary_operators` and `boolean_unary_operators` variables. As with Sym-M-CBE, PySR parameters can be configured via the `pysr_params` field in [conf/model/bool_sym_cbm.yaml](conf/model/bool_sym_cbm.yaml).
+
+**Prior-M-CBE**: instead of discovering symbolic expressions from data, this model is provided with a set of known equations upfront. The Selector learns to route each input to the correct pre-specified expert while the symbolic parameters remain frozen. Equations are specified in the dataset config file under the `equations` key as a list of sympy-compatible strings, where concepts are referenced by index (`c0`, `c1`, ...):
+
+```yaml
+equations:
+  - "c0 + c1 * cos(c2)"
+  - "c0 ** 2 - c1"
+```
+
+Each entry corresponds to one expert (memory slot).
 
 ## Setup
 

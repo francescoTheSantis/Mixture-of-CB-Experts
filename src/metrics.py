@@ -2,7 +2,6 @@ import torch
 from sympy import sympify, symbols
 from torchmetrics import Metric
 from sklearn.metrics import f1_score, accuracy_score
-from torchmetrics.classification import BinaryAUROC, BinaryF1Score
 
 class MAE(Metric):
     """
@@ -86,56 +85,6 @@ def f1_acc_metrics(y_true, y_pred):
     return f1, accuracy
 
 
-'''
-class GenAccuracy(Metric):
-    """
-    Generation accuracy metric of the pytorch_lightning model.
-    """
-    def __init__(self, dist_sync_on_step=False):
-        super().__init__(dist_sync_on_step=dist_sync_on_step)
-        self.add_state("correct", default=torch.tensor(0.0), dist_reduce_fx="sum")
-        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
-
-    def update(self, preds: torch.Tensor, target: torch.Tensor):
-        # remove invalid predictions associated with padding
-        mask = target[:, 0] != -100
-        preds = preds[mask]
-        target = target[mask]
-
-        preds = preds.long()
-        target = target.squeeze().long()
-
-        preds = torch.argmax(preds, dim=1)
-        target = torch.argmax(target, dim=-1)
-
-        assert preds.shape == target.shape
-
-        self.correct += torch.sum(preds == target)
-        self.total += target.numel()
-
-    def compute(self):
-        return self.correct.float() / self.total
-
-class LogitBinaryAUROC(BinaryAUROC):
-    """
-    AUROC metric from pytorch metrics working with logits.
-    """
-    def update(self, preds: torch.Tensor, target: torch.Tensor):
-        preds = torch.sigmoid(preds)
-        super().update(preds, target)
-
-class LogitBinaryF1Score(BinaryF1Score):
-    """
-    F1 score metric from pytorch metrics working with logits.
-    """
-    def update(self, preds: torch.Tensor, target: torch.Tensor):
-        preds = torch.sigmoid(preds)
-        super().update(preds, target)
-'''
-
-
-
-""""""
 if __name__ == '__main__':
     metric = ClassAccuracy()
     output = torch.tensor([[1,0,1],
@@ -164,22 +113,6 @@ if __name__ == '__main__':
     T_true = sympy_to_tree(f_true, canonicalize_commutative=True)
     print("True:    ", f_true)
     
-    """
-    How to tune it
-    --------------
-
-    - Bias sensitivity
-    Lower weight_num_leaf (e.g., 0.1–0.3) to make adding/removing a constant (bias) cheap. Set higher if you want bias edits to count more.
-
-    - Coefficient tolerance
-    Increase num_tol_rel (e.g., 1e-2) to ignore small relative coefficient changes. The replacement cost scales with relative difference and is capped by num_replace_cap.
-
-    - Global scale/shift invariance
-    Turn Option B on (the affine alignment step). Choose an input grid that reflects your domain of interest; in higher dimensions, pass multiple variables via symbols_order and add them to grid.
-
-    - Operator vs. numeric emphasis
-    Change op_rename_cost and sym_rename_cost to emphasize structural edits over numeric tweaks (or vice versa).
-    """
     node_weight, rename_cost = make_costs(
         # Treat small relative coefficient differences as “no change”
         num_tol_abs=1e-8,      # tiny absolute floor

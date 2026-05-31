@@ -37,6 +37,7 @@ boolean_unary_operators = [
     "NOT(x) = one(x) - x",
 ]
 
+# Mapping for PySR to use the correct sympy functions
 boolean_extra_sympy_mappings = {
     "AND": AND,
     "OR": OR,
