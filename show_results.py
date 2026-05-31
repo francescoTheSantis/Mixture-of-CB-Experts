@@ -1,11 +1,8 @@
-import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import scienceplots
 import warnings
 import os
-import yaml
-import hashlib
 from plot_utils import *
 
 # I used scienceplots for the style of the plots, but you can use any other style you want.
@@ -139,11 +136,6 @@ def main():
     try:
         performance = get_exp_from_path_cached(paths, cache_name='memory_ablation', output_path=output_path)
 
-        # Count number of seeds
-        seeds_count = performance.groupby(['dataset', 'model', 'memory_size'])['seed'].nunique().reset_index()
-        # Save in csv file
-        seeds_count.to_csv(os.path.join(result_figs, 'seeds_count_memory_ablation.csv'), index=False)
-
         # remove feynman datasets custom order
         refined_custom_order = [d for d in custom_order if not d.startswith('feynman')]
 
@@ -203,9 +195,12 @@ def main():
             plot_intervention_results(
                 performance, 
                 metric='accuracy', 
-                # unique_noises=[noise], 
+
+                # NOTE: set the noise for the classification and regression datasets
+                # that you want to plot.
                 classification_noise=[noise],
                 regression_noise=[noise],
+
                 title_font=title_font, 
                 label_font=label_font, 
                 tick_font=tick_font, 
@@ -215,6 +210,8 @@ def main():
                 relative_accuracy=False,
                 out_dir=f'{result_figs}',
             
+                # NOTE: set the ranges for the classification and regression datasets that you want to plot.
+                # If you want to set default range, just comment the two parameters below.
                 ranges=[
                     [[0, 5],[55,101]], # awa2
                     [[0,4],[22,27]], # awa2 incomplete
