@@ -3,7 +3,7 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.kan_sym_cbm.KANSymbolicCBM"
+  _target_: "src.models.prior_m_cbe.PriorMCBE"
   task_penalty: ${task_penalty}
   concept_penalty: ${concept_penalty}
   int_prob: ${int_prob}
@@ -12,4 +12,4 @@ params:
   mc_approx: 1
 
 metadata:
-  name: kan_symbolic_cbm
+  name: prior_m_cbe

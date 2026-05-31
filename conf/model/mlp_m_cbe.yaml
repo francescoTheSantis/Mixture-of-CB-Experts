@@ -3,13 +3,16 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.prior_sym_cbm.PriorSymbolicCBM"
+  _target_: "src.models.mlp_m_cbe.MLPMCBE"
   task_penalty: ${task_penalty}
   concept_penalty: ${concept_penalty}
   int_prob: ${int_prob}
   memory_size: ${memory_size}
-  embedding_size: ${embedding_size}
   mc_approx: 1
+  selector_model: 'linear'  
+  decay_rate: 'cosine'  
+  l1_coeff: ${L1_coeff}
+  threshold: ${threshold}
 
 metadata:
-  name: prior_symbolic_cbm
+  name: mlp_m_cbe

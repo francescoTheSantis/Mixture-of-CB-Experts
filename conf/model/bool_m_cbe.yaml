@@ -3,14 +3,13 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.sr_sym_cbm.SymbolicRegressorCBM"
+  _target_: "src.models.bool_m_cbe.BoolMCBE"
   task_penalty: ${task_penalty}
   concept_penalty: ${concept_penalty}
   int_prob: ${int_prob}
   memory_size: ${memory_size}
   embedding_size: ${embedding_size}
   mc_approx: 1
-  use_affine_parameters: False
   # Update PySR parameters as needed
   # pysr_params:
   #   niterations: 1
@@ -19,4 +18,4 @@ params:
   #   ncycles_per_iteration: ...
 
 metadata:
-  name: sr_symbolic_cbm
+  name: bool_m_cbe

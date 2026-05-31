@@ -3,13 +3,14 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.bool_sym_cbm.BooleanSymbolicCBM"
+  _target_: "src.models.sym_m_cbe.SymMCBE"
   task_penalty: ${task_penalty}
   concept_penalty: ${concept_penalty}
   int_prob: ${int_prob}
   memory_size: ${memory_size}
   embedding_size: ${embedding_size}
   mc_approx: 1
+  use_affine_parameters: False
   # Update PySR parameters as needed
   # pysr_params:
   #   niterations: 1
@@ -18,4 +19,4 @@ params:
   #   ncycles_per_iteration: ...
 
 metadata:
-  name: bool_symbolic_cbm
+  name: sym_m_cbe

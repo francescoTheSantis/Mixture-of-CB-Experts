@@ -32,7 +32,7 @@ extra_functions = {
     #"sgn": lambda x: 1 if x > 0 else (-1 if x < 0 else 0),
 }
 
-class SymbolicRegressorCBM(BaseModel):
+class SymMCBE(BaseModel):
     def __init__(self, 
                  output_size,
                  c_names,

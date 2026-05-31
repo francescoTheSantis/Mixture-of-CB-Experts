@@ -3,16 +3,16 @@ defaults:
   - _self_
   
 params:
-  _target_: "src.models.memory_cbm.MemoryCBM"
+  _target_: "src.models.lin_m_cbe.LinMCBE"
   task_penalty: ${task_penalty}
   concept_penalty: ${concept_penalty}
   int_prob: ${int_prob}
   memory_size: ${memory_size}
+  embedding_size: ${embedding_size}
   mc_approx: 1
-  selector_model: 'linear'  
-  decay_rate: 'cosine'  
-  l1_coeff: ${L1_coeff}
+  weight_reg: ${L1_coeff}
   threshold: ${threshold}
+  bias: local
 
 metadata:
-  name: memory_cbm
+  name: lin_m_cbe

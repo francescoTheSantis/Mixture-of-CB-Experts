@@ -8,7 +8,7 @@ from src.models.modules.linear_predictor import LinearPredictor
 import os
 import sympy as sp
 
-class LinearSymbolicCBM(BaseModel):
+class LinMCBE(BaseModel):
     def __init__(self, 
                  output_size,
                  c_names,

@@ -8,7 +8,7 @@ hydra:
       dir: output/memory_reg/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     params:
-      model: lin_sym_cbm, sr_sym_cbm, memory_cbm
+      model: lin_m_cbe, sym_m_cbe, mlp_m_cbe
       memory_size: 1, 2, 3, 4, 5
       dataset: dsprites_simple, pendulum, dsprites_complex, mnist_arithmetic, mawps
       seed: 1, 2, 3, 4, 5

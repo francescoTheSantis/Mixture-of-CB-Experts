@@ -10,7 +10,7 @@ hydra:
   sweeper:
     grid_params:
       seed: 1, 2, 3
-      model: lin_sym_cbm, memory_cbm
+      model: lin_m_cbe, mlp_m_cbe
       L1_coeff: 0.0, 0.0001, 0.001, 0.01, 0.1, 1.0, 10
 
     list_params:

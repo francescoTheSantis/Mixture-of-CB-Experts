@@ -9,7 +9,7 @@ hydra:
       dir: output/sr_ablation/${now:%Y-%m-%d_%H-%M-%S}
   sweeper:
     grid_params:
-      model: kan_sym_cbm, lin_sym_cbm, blackbox, cem, licem, sr_sym_cbm, memory_cbm
+      model: kan_sym_cbm, lin_m_cbe, blackbox, cem, licem, sym_m_cbe, mlp_m_cbe
       seed: 1, 2, 3, 4, 5
     
     # The additional list sweeper is used to pair each dataset with its specific number of mechanisms. 

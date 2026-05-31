@@ -10,16 +10,17 @@ hydra:
   sweeper:
     grid_params:
       seed: 1 
-      model: sr_sym_cbm
-      memory_size: 1, 2
+      model: sym_m_cbe, lin_m_cbe, prior_m_cbe, mlp_m_cbe
+      memory_size: 2
         
     list_params:
       dataset: 
-        - cub
-      img_backbone_name: 
-        - facebook/dinov2-base
+        - dsprites_simple
+      # img_backbone_name: 
+      #   - facebook/dinov2-base
 
 disjoint_training: true
 hard_concepts: True
 
-gpus: [1]
+max_epochs: 1
+gpus: [0]

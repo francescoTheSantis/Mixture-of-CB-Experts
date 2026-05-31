@@ -6,7 +6,7 @@ from src.models.modules.blackbox_predictor import BlackBoxPredictor
 import torch
 
 
-class MemoryCBM(BaseModel):
+class MLPMCBE(BaseModel):
     """Standard Concept Bottleneck Model with a memory-augmented black box predictor."""
     def __init__(self, 
                  output_size,

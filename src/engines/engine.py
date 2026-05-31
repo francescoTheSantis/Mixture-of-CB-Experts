@@ -240,7 +240,7 @@ class Engine(pl.LightningModule):
                 print(f"✗ Error extracting equations: {str(e)}")
                 self.cached_equations = {0: f"Error extracting equation: {str(e)}"}
                 self.cached_parsed_equations = {(0, y_name): f"Error extracting equation: {str(e)}" for y_name in self.y_name}
-        elif self.model_name in ['KANSymbolicCBM', 'LinearSymbolicCBM', 'PriorSymbolicCBM', 'SymbolicRegressorCBM', 'MemoryCBM', 'BooleanSymbolicCBM']:
+        elif self.model_name in ['LinMCBE', 'PriorMCBE', 'SymMCBE', 'MLPMCBE', 'BoolMCBE']:
             # For memory-based models, extract and parse equations once
             self.cached_equations = extract_memory_equations(self.model, self.model_name)
             self.cached_parsed_equations = parse_memory_equations(self.cached_equations, self.y_name)
@@ -277,12 +277,6 @@ class Engine(pl.LightningModule):
             return tensor * self.model.y_std + self.model.y_mean
         else:
             return tensor
-
-    def on_train_epoch_end(self):
-        if self.model_name == 'KANSymbolicCBM' and not self.model.symbolic_predictors:
-            # Update the KAN grid (self.grid_inputs is already scaled from trainer)
-            if self.current_epoch % 10 == 0 :
-                self.model.setup_kan_grid(self.grid_inputs)
 
     def _collect_test_sample_data(self, batch, batch_idx, model_output, y_hat_metrics, c_hat_metrics):
         """

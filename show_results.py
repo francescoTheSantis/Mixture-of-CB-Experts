@@ -13,7 +13,7 @@ plt.style.use(['science', 'ieee', 'no-latex'])
 output_path = 'output'
 
 ######### Paths to save results #########
-result_figs = "results/figs"
+result_figs = "results"
 
 ######### Dataset and model styles #########
 
@@ -48,9 +48,8 @@ regression_datasets = [
 marker_size = 18
 
 # Define complexity order
-# models = list(reversed(['blackbox', 'cem', 'kan_symbolic_cbm', 'licem', 'linear_symbolic_cbm', 'dcr', 'cmr']))
 
-MEMORY_MODELS_LIST = ['cmr', 'linear_symbolic_cbm', 'sr_symbolic_cbm', 'prior_symbolic_cbm', 'memory_cbm']
+MEMORY_MODELS_LIST = ['cmr', 'lin_m_cbe', 'sym_m_cbe', 'prior_m_cbe', 'mlp_m_cbe']
 
 COMPLEXITY_METRICS_LIST = ['node_count', 'depth', 'visitation_length', 'total_variables', 'total_operations', 'weighted_node_count']
 
@@ -76,13 +75,12 @@ model_styles = {
     'cbm_linear': {'marker': 'X', 'name': 'CBM', 'color': 'tab:orange', 'size': marker_size, 'fillstyle': 'none'},
     'cmr': {'marker': 'P', 'name': 'CMR', 'color': 'gold', 'size': marker_size, 'fillstyle': 'none'},
 
-    'memory_cbm': {'marker': '*', 'name': 'MLP-M-CBE', 'color': 'tab:blue', 'size': marker_size, 'fillstyle': 'none'},
-    'prior_symbolic_cbm': {'marker': '*', 'name': 'Prior-M-CBE', 'color': 'lightcyan', 'size': marker_size, 'fillstyle': 'none'},
+    'mlp_m_cbe': {'marker': '*', 'name': 'MLP-M-CBE', 'color': 'tab:blue', 'size': marker_size, 'fillstyle': 'none'},
+    'prior_m_cbe': {'marker': '*', 'name': 'Prior-M-CBE', 'color': 'lightcyan', 'size': marker_size, 'fillstyle': 'none'},
 
-    'kan_symbolic_cbm': {'marker': 's', 'name': 'Kan-M-CBE', 'color': 'darkmagenta', 'size': marker_size, 'fillstyle': 'none'},
-    'linear_symbolic_cbm': {'marker': 'h', 'name': 'Lin-M-CBE', 'color': 'limegreen', 'size': marker_size, 'fillstyle': 'none'},
-    'sr_symbolic_cbm': {'marker': 'o', 'name': 'Sym-M-CBE', 'color': 'tab:green', 'size': marker_size, 'fillstyle': 'none'},
-    'bool_symbolic_cbm': {'marker': 'D', 'name': 'Bool-M-CBE', 'color': 'cyan', 'size': marker_size, 'fillstyle': 'none'},
+    'lin_m_cbe': {'marker': 'h', 'name': 'Lin-M-CBE', 'color': 'limegreen', 'size': marker_size, 'fillstyle': 'none'},
+    'sym_m_cbe': {'marker': 'o', 'name': 'Sym-M-CBE', 'color': 'tab:green', 'size': marker_size, 'fillstyle': 'none'},
+    'bool_m_cbe': {'marker': 'D', 'name': 'Bool-M-CBE', 'color': 'cyan', 'size': marker_size, 'fillstyle': 'none'},
 }
 
 models_order = [
@@ -92,12 +90,11 @@ models_order = [
     'dcr', 
     'cbm_linear', 
     'cmr', 
-    'memory_cbm', 
-    'prior_symbolic_cbm', 
-    'kan_symbolic_cbm', 
-    'linear_symbolic_cbm', 
-    'sr_symbolic_cbm',
-    'bool_symbolic_cbm',
+    'mlp_m_cbe', 
+    'prior_m_cbe', 
+    'lin_m_cbe', 
+    'sym_m_cbe',
+    'bool_m_cbe',
 ]
 
 

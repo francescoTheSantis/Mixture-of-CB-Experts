@@ -93,7 +93,7 @@ def main(cfg: DictConfig) -> None:
     trainer.train(loaded_train, loaded_val)
 
     ###### Fine-tuning for symbolic models ######
-    if cfg.model.metadata.name in ['kan_symbolic_cbm', 'sr_symbolic_cbm', 'memory_cbm', 'linear_symbolic_cbm', 'bool_symbolic_cbm']:
+    if cfg.model.metadata.name in ['sym_m_cbe', 'mlp_m_cbe', 'lin_m_cbe', 'bool_m_cbe']:
         # Phase 1: Allow symbolic execution
         print("\n" + "="*70)
         print("PHASE 1: Allow symbolic execution")
@@ -101,18 +101,6 @@ def main(cfg: DictConfig) -> None:
         trainer.allow_symbolic(
             loaded_train, 
             loaded_val
-        )
-
-    if cfg.model.metadata.name == 'kan_symbolic_cbm':
-        # Phase 2: Fine-tuning with symbolic expressions
-        # This phase is needed just for the model using KAN layers as task predictors
-        print("\n" + "="*70)
-        print("PHASE 2: Fine-tuning with symbolic expressions")
-        print("="*70)
-        trainer.fine_tune(
-            loaded_train, 
-            loaded_val,
-            log_dir=log_dir,  # where equations are stored
         )
 
     ###### Testing ######

@@ -15,10 +15,10 @@ hydra:
         - dcr
         - licem
         - cem
-        - lin_sym_cbm
+        - lin_m_cbe
         - cbm_linear
         - cmr
-        - sr_sym_cbm
+        - sym_m_cbe
         
     list_params:
       dataset: 

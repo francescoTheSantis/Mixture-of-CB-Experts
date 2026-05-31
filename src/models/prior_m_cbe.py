@@ -7,7 +7,7 @@ from src.utils.expression_utils import store_eq
 import sympy as sp
 import os
 
-class PriorSymbolicCBM(BaseModel):
+class PriorMCBE(BaseModel):
     def __init__(self, 
                  output_size,
                  c_names,

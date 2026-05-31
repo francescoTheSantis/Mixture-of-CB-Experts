@@ -45,7 +45,7 @@ boolean_extra_sympy_mappings = {
 }
 
 
-class BooleanSymbolicCBM(BaseModel):
+class BoolMCBE(BaseModel):
     def __init__(self, 
                  output_size,
                  c_names,

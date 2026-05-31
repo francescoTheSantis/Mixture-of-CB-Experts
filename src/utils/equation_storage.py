@@ -172,29 +172,7 @@ def extract_memory_equations(model, model_name):
     """
     equations = {}
     
-    if model_name == 'KANSymbolicCBM':
-        # Extract from KAN predictor or SymbolicPredictor
-        predictor = model.predictor
-        if hasattr(predictor, 'trainable_equations'):
-            # SymbolicPredictor with learned equations
-            trainable_eqs = predictor.trainable_equations
-            eq_names = predictor.equation_names
-            sorted_keys = sorted(trainable_eqs.keys())
-            
-            for mem_idx, set_name in enumerate(tqdm(sorted_keys, desc="Extracting KAN equations", leave=False)):
-                # Build list of equation strings more efficiently
-                eq_strs = [f"{eq_name}: {trainable_eqs[set_name][eq_name].get_equation_string()}"
-                          for eq_name in eq_names[set_name]]
-                equations[mem_idx] = "; ".join(eq_strs)
-        elif hasattr(predictor, 'kans'):
-            # KANPredictor - abstract representation
-            widths_str = str(model.widths)
-            equations = {mem_idx: f"KAN{mem_idx}[{widths_str}]"
-                        for mem_idx in range(len(predictor.kans))}
-        else:
-            equations[0] = "No equations available"
-    
-    elif model_name == 'LinearSymbolicCBM':
+    if model_name == 'LinMCBE':
         # Extract linear equations from memory
         try:
             # Cache attribute lookups
@@ -254,7 +232,7 @@ def extract_memory_equations(model, model_name):
             error_msg = f"Error extracting equation: {str(e)}"
             equations = {mem_idx: error_msg for mem_idx in range(getattr(model, 'memory_size', 1))}
     
-    elif model_name == 'PriorSymbolicCBM':
+    elif model_name == 'PriorMCBE':
         # Extract from prior_predictor
         predictor = model.prior_predictor
         if hasattr(predictor, 'trainable_equations'):
@@ -269,7 +247,7 @@ def extract_memory_equations(model, model_name):
         else:
             equations[0] = "No equations available"
     
-    elif model_name in ['SymbolicRegressorCBM', 'BooleanSymbolicCBM']:
+    elif model_name in ['SymMCBE', 'BoolMCBE']:
         # Extract from predictor
         predictor = model.predictor
         if hasattr(predictor, 'trainable_equations'):
@@ -310,7 +288,7 @@ def extract_memory_equations(model, model_name):
                     y_name = y_names[0] if isinstance(y_names, list) else y_names
                     equations[mem_idx] = f"{y_name}: {eq_result}"
 
-    elif model_name == 'MemoryCBM':
+    elif model_name == 'MLPMCBE':
         # Get the symbolic equivalent of each blackbox predictor
         memory_size = model.memory_size
         y_names = model.y_names
