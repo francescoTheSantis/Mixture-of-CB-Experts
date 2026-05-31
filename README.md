@@ -45,12 +45,7 @@ Download the Animals with Attributes 2 dataset from the [official page](https://
 
 ### CUB-200
 
-Download the pre-processed CUB-200 dataset following one of two options:
-
-- **Option 1 (recommended)**: Download the pre-processed version from Koh et al.'s [CodaLab worksheet](https://worksheets.codalab.org/worksheets/0x362911581fcd4e048ddfd84f47203fd2). You need both the [original CUB bundle](https://worksheets.codalab.org/bundles/0xd013a7ba2e88481bbc07e787f73109f5) and the [CUB_preprocessed bundle](https://worksheets.codalab.org/bundles/0x5b9d528d2101418b87212db92fea6683).
-- **Option 2**: Follow the download and preprocessing instructions in [Koh et al.'s repository](https://github.com/yewsiang/ConceptBottleneck/blob/master/CUB/).
-
-Place the resulting files under `{DATA_PATH}/CUB_200_2011/`.
+Download the [CUB_preprocessed bundle](https://worksheets.codalab.org/bundles/0x5b9d528d2101418b87212db92fea6683). Place the resulting files under `{DATA_PATH}/CUB_200_2011/`.
 
 ### CIFAR-10 / CIFAR-100
 
@@ -89,6 +84,16 @@ Experimental settings are defined in `conf/`:
 * `encoder/` – input encoder configs
 * `engine/` – training loop settings
 * `common.yaml` – shared defaults
+
+To enable Weights & Biases (W&B) logging, set your entity and project in the config:
+
+```yaml
+wandb:
+  entity: <your_entity>
+  project: <your_project>
+```
+
+When both fields are provided, training metrics are automatically logged to W&B.
 
 ## Citation
 
