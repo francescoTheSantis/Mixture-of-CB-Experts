@@ -35,22 +35,14 @@ This script creates the environment, installs dependencies, and pre-initializes 
 * `DATA_PATH` - Path to load datasets
 * `PROJECT_NAME` (optional) - Project identifier for logging
 
-## Datasets
-
+## Datasets 
 Regression datasets (MNIST-Arithm, dSprites-Exp, Pendulum, MAWPS) are generated or downloaded automatically. Classification datasets require manual setup as described below.
 
-### AWA2
+**AWA2.** Download the Animals with Attributes 2 dataset from the [official page](https://cvml.ista.ac.at/AwA2/) and extract it under `{DATA_PATH}/AwA2/`.
 
-Download the Animals with Attributes 2 dataset from the [official page](https://cvml.ista.ac.at/AwA2/) and extract it under `{DATA_PATH}/AwA2/`.
+**CUB-200.** Download the [CUB_preprocessed bundle](https://worksheets.codalab.org/bundles/0x5b9d528d2101418b87212db92fea6683). Place the resulting files under `{DATA_PATH}/CUB_200_2011/`.
 
-### CUB-200
-
-Download the [CUB_preprocessed bundle](https://worksheets.codalab.org/bundles/0x5b9d528d2101418b87212db92fea6683). Place the resulting files under `{DATA_PATH}/CUB_200_2011/`.
-
-### CIFAR-10 / CIFAR-100
-
-The image data is downloaded automatically. However, the concept annotation files must be obtained manually from the [Label-free-CBM repository](https://github.com/Trustworthy-ML-Lab/Label-free-CBM/tree/main):
-
+**CIFAR-10 / CIFAR-100.** The image data is downloaded automatically. However, the concept annotation files must be obtained manually from the [Label-free-CBM repository](https://github.com/Trustworthy-ML-Lab/Label-free-CBM/tree/main):
 * Download `cifar10_filtered.txt` and `cifar10_classes.txt` and place them in `{DATA_PATH}/cifar10/`
 * Download the analogous files for CIFAR-100 and place them in `{DATA_PATH}/cifar100/`
 
