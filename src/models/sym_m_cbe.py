@@ -12,6 +12,15 @@ import random
 from sympy import Symbol, Add, simplify, sympify
 import tqdm
 
+# NOTE: for classification tasks, given the simplicity of the datasets we teste, 
+# we used linear blackbox predictors and a limited set of operators for symbolic regression,
+# which encourages the discovery of simpler equations.
+# If you want to use more complex predictors and operators set change the following lines of code:
+#   1. line 132: eliminate the "if self.task == 'classification'" statement such that the operators 
+#      defined below will be used also for classification tasks.
+#   2. line 160: set linear=False when instantiating the BlackBoxPredictor, 
+#      such that it will use a non-linear MLP predictor even for classification tasks.
+
 binary_operators = ["*", "+", "-", "/"]
 unary_operators = ["sin", "cos", "exp", "log", "tan", "tanh"]
 # Added in order to have the same functions of the kan model
