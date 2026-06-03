@@ -18,13 +18,13 @@ The figure above shows the two instantiations Lin-M-CBE and Sym-M-CBE on a textu
 
 ## Implemented M-CBEs
 
-<span style="color:limegreen">**Lin-M-CBE**</span>: described above.
+${\color{lightgreen}\text{Lin-M-CBE}}$: described above.
 
-<span style="color:limegreen">**Sym-M-CBE**</span>: described above. The operator vocabulary is defined at the top of [src/models/sym_m_cbe.py](src/models/sym_m_cbe.py) via the `binary_operators`, `unary_operators`, and `extra_functions` variables. Edit these lists to restrict or expand the set of allowed operators before running an experiment. PySR parameters — including complexity-related settings such as expression depth and number of nodes — can be tuned via the `pysr_params` field in [conf/model/sym_m_cbe.yaml](conf/model/sym_m_cbe.yaml). This is especially useful to control the complexity and readability of the discovered expressions.
+${\color{lightgreen}\text{Sym-M-CBE}}$: described above. The operator vocabulary is defined at the top of [src/models/sym_m_cbe.py](src/models/sym_m_cbe.py) via the `binary_operators`, `unary_operators`, and `extra_functions` variables. Edit these lists to restrict or expand the set of allowed operators before running an experiment. PySR parameters — including complexity-related settings such as expression depth and number of nodes — can be tuned via the `pysr_params` field in [conf/model/sym_m_cbe.yaml](conf/model/sym_m_cbe.yaml). This is especially useful to control the complexity and readability of the discovered expressions.
 
-<span style="color:limegreen">**Bool-M-CBE**</span>: a variant of Sym-M-CBE designed for binary concept inputs and classification tasks. Each expert is a Boolean logic rule over the predicted concepts. The allowed operators are defined at the top of [src/models/bool_m_cbe.py](src/models/bool_m_cbe.py) via the `boolean_binary_operators` and `boolean_unary_operators` variables. As with Sym-M-CBE, PySR parameters can be configured via the `pysr_params` field in [conf/model/bool_m_cbe.yaml](conf/model/bool_m_cbe.yaml).
+${\color{lightgreen}\text{Bool-M-CBE}}$: a variant of Sym-M-CBE designed for binary concept inputs and classification tasks. Each expert is a Boolean logic rule over the predicted concepts. The allowed operators are defined at the top of [src/models/bool_m_cbe.py](src/models/bool_m_cbe.py) via the `boolean_binary_operators` and `boolean_unary_operators` variables. As with Sym-M-CBE, PySR parameters can be configured via the `pysr_params` field in [conf/model/bool_m_cbe.yaml](conf/model/bool_m_cbe.yaml).
 
-<span style="color:limegreen">**Prior-M-CBE**</span> instead of discovering symbolic expressions from data, this model uses a set of known concept-to-task functions. Only the paramerters of the Selector and Concpet encoder are updated during training. Equations are specified in the dataset config file under the `equations` key as a list of sympy-compatible strings, where concepts are referenced by index (`c0`, `c1`, ...):
+${\color{lightgreen}\text{Prior-M-CBE}}$: instead of discovering symbolic expressions from data, this model uses a set of known concept-to-task functions. Only the paramerters of the Selector and Concpet encoder are updated during training. Equations are specified in the dataset config file under the `equations` key as a list of sympy-compatible strings, where concepts are referenced by index (`c0`, `c1`, ...):
 
 ```yaml
 equations:
