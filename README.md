@@ -14,7 +14,7 @@ The figure above shows the two instantiations Lin-M-CBE and Sym-M-CBE on a textu
 
 **Lin-M-CBE**: each function is a parametric linear function with its own weights $\theta_m$ learned during training. The structure is fixed (linear), and only the weights vary across experts.
 
-**Sym-M-CBE**: each function is a symbolic expression whose operators are constrained by the user. For example, the user might set $\mathcal{W}=\{+, \times, \cos, (\cdot)^2\}$ and the model will learn symbolic functions whose only operators are drawn from $\mathcal{W}$. Unlike the linear case, the model discovers both the structure of the expression and its parameters — e.g., $x_0 + v_0 \cos(\beta) \cdot t$.
+**Sym-M-CBE**: each function is a symbolic expression whose operators are constrained by the user. Unlike the linear case, the model discovers both the structure of the expression and its parameters — e.g., $x_0 + v_0 \cos(\beta) \cdot t$.
 
 ## Implemented M-CBEs
 
