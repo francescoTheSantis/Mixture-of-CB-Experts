@@ -100,7 +100,7 @@ If you find this work useful, please cite:
 ```bibtex
 @article{de2026mixture,
   title={Mixture of Concept Bottleneck Experts},
-  author={De Santis, Francesco and Ciravegna, Gabriele and De Felice, Giovanni and Casanova, Arianna and Giannini, Francesco and Diligenti, Michelangelo and Zarlenga, Mateo Espinosa and Barbiero, Pietro and Schneider, Johannes and Giordano, Danilo},
+  author={De Santis, Francesco and Ciravegna, Gabriele and De Felice, Giovanni and Casanova, Arianna and Giannini, Francesco and Diligenti, Michelangelo and Schneider, Johannes and Giordano, Danilo and Zarlenga, Mateo Espinosa and Barbiero, Pietro},
   journal={arXiv preprint arXiv:2602.02886},
   year={2026}
 }
